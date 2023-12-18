@@ -1,0 +1,103 @@
+
+name: increment-version
+
+on:
+  workflow_call:
+    outputs:
+      version:
+        description: "The next semantic version"
+        value: ${{ jobs.increment-version.outputs.version }}
+    secrets:
+      git-token:
+        required: true
+    inputs:
+      dry-run:
+        type: boolean
+        required: false
+        default: false
+      generate-minor:
+        type: boolean
+        required: false
+        default: true
+      override:
+        type: string
+        required: false
+        default: ""
+
+jobs:
+  increment-version:
+    name: increment-version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.setversion.outputs.patch }}
+      
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        fetch-depth: 0  
+    - name: Configure Git
+      run: |
+        git config user.name "$GITHUB_ACTOR"
+        git config user.email "$GITHUB_ACTOR@users.noreply.github.com"    
+        
+    - name: Get Previous tag
+      id: previoustag
+      shell: bash
+      run: |
+        git tag | sort -r --version-sort | head -n1 
+        echo "tag=$(git tag | sort -r --version-sort | head -n1)" >> "$GITHUB_OUTPUT" 
+      env:
+        GITHUB_TOKEN: ${{ secrets.git-token }}
+
+    - name: get previous version from tag
+      id: previousversion
+      shell: bash
+      run: |
+        echo "version=$(echo ${{ steps.previoustag.outputs.tag }} | cut -d'v' -f 2)" >> "$GITHUB_OUTPUT"
+
+    - name: Get next minor version
+      id: semvers
+      uses: "WyriHaximus/github-action-next-semvers@v1"
+      with:
+        version: ${{ inputs.override != ""  && inputs.override || steps.previousversion.outputs.version }} 
+
+    - name: Set bumped version in output
+      id: setversion
+      shell: bash
+      run: |
+        echo "patch=${{ steps.semvers.outputs.patch }}" >> "$GITHUB_OUTPUT"
+        echo "minor=${{ steps.semvers.outputs.patch }}" | cut -d. -f1,2 >> "$GITHUB_OUTPUT"
+        echo "major=${{ steps.semvers.outputs.patch }}" | cut -d. -f1 >> "$GITHUB_OUTPUT"
+        
+
+    - name: Show the tags
+      shell: bash
+      run: |
+        echo "generate the following tags"
+        echo "version=${{ steps.setversion.outputs.patch }}"
+        echo "minor=${{ steps.setversion.outputs.minor }}"
+        echo "major=${{ steps.setversion.outputs.major }}"
+
+    - name: Create major tag
+      uses: coreeng/action-create-tag@v1
+      if: inputs.dry-run == false
+      with:
+        tag: v${{ steps.setversion.outputs.major }}
+        tag_exists_error: false
+        force_push_tag: true
+
+    - name: Create minor tag
+      uses: coreeng/action-create-tag@v1
+      if: inputs.dry-run == false
+      with:
+        tag: v${{ steps.setversion.outputs.minor }}
+        tag_exists_error: false
+        force_push_tag: true
+
+    - name: Create version tag
+      uses: coreeng/action-create-tag@v1
+      if: inputs.dry-run == false && inputs.generate-minor
+      with:
+        tag: v${{ steps.setversion.outputs.patch }}
+        tag_exists_error: true
+

@@ -1,4 +1,3 @@
-
 name: increment-version
 
 on:
@@ -11,6 +10,10 @@ on:
       git-token:
         required: true
     inputs:
+      main-branch:
+        required: false
+        type: string
+        default: 'refs/heads/main'
       dry-run:
         type: boolean
         required: false
@@ -31,13 +34,15 @@ jobs:
       run: |
         git config user.name "$GITHUB_ACTOR"
         git config user.email "$GITHUB_ACTOR@users.noreply.github.com"    
-        
+
     - name: Get Previous tag
       id: previoustag
-      uses: "WyriHaximus/github-action-get-previous-tag@v1"
-      with:
-        prefix: v
-        fallback: v0.0.0
+      shell: bash
+      run: |
+        git tag | sort -r --version-sort | head -n1 
+        PREVIOUS_VERSION=$(git tag | sort -r --version-sort | head -n1 )
+        [ -z "$PREVIOUS_VERSION" ] && PREVIOUS_VERSION=v0.0.0
+        echo "tag=$PREVIOUS_VERSION" >> "$GITHUB_OUTPUT" 
       env:
         GITHUB_TOKEN: ${{ secrets.git-token }}
 
@@ -55,7 +60,7 @@ jobs:
 
     - name: Create tag
       uses: rickstaa/action-create-tag@v1
-      if: inputs.dry-run == false
+      if: success() && (github.ref == inputs.main-branch && inputs.dry-run == false)
       id: create_tag
       with:
         tag: v${{ steps.semvers.outputs.minor }}
@@ -65,4 +70,13 @@ jobs:
       id: setversion
       shell: bash
       run: |
-        echo "version=${{ steps.semvers.outputs.minor }}" >> "$GITHUB_OUTPUT"
+        set -x
+        if [ "${{ inputs.main-branch }}" = "${{ github.ref }}" ]; then
+          echo "On main branch, setting next version"
+          echo "version=${{ steps.semvers.outputs.minor }}" >> "$GITHUB_OUTPUT"
+        else
+          echo "Not on main branch, setting previous version + hash"
+          HASH=$(git rev-parse --short HEAD)
+          echo "version=${{ steps.previousversion.outputs.version }}-$HASH" >> "$GITHUB_OUTPUT"
+        fi
+

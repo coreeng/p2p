@@ -1,0 +1,29 @@
+name: CD
+
+on:
+  push:
+    branches:
+      - main
+      - p2p-testing
+
+concurrency: cd-main
+
+jobs:
+  increment-version:
+    uses: ./.github/workflows/internal-version.yaml
+    secrets:
+      git-token: ${{ secrets.GITHUB_TOKEN }}
+    with:
+      override: "0.0.0"
+      generate-minor: false
+  trigger-p2p-build:
+    runs-on: ubuntu-latest
+    env:
+      ACCESS_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+    steps:
+      - name: Send trigger result
+        run: |
+          curl -v -X POST https://api.github.com/repos/coreeng/p2p-testing/dispatches \
+          -H 'Accept: application/vnd.github.everest-preview+json' \
+          -u ${ACCESS_TOKEN} \
+          --data '{"event_type": "trigger", "client_payload": { "action": "trigger" }}'

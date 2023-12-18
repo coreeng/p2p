@@ -1,0 +1,99 @@
+
+on:
+  workflow_call:
+    secrets:
+      env_vars:
+        required: false
+    inputs:
+      dry-run:
+        required: false
+        type: boolean
+        default: false
+      main-branch:
+        required: false
+        type: string
+        default: 'refs/heads/main'
+      version: 
+        required: true
+        type: string
+      region:
+        required: false
+        type: string
+        default: europe-west2
+      working-directory:
+        required: false
+        type: string
+        default: '.'
+    outputs:
+      version:
+        value: ${{ inputs.version }}
+
+
+env:
+  REGION: ${{ inputs.region }} 
+
+jobs:
+  build:
+    uses: ./.github/workflows/p2p-execute-command.yaml
+    secrets:
+      env_vars: ${{ secrets.env_vars }}
+    strategy:
+      matrix: ${{ fromJSON(vars.FAST_FEEDBACK) }}
+      fail-fast: false
+    with:
+      command: p2p-build
+      github_env: ${{ matrix.deploy_env }}
+      version: ${{ inputs.version }}
+      dry-run: ${{ inputs.dry-run }}
+      working-directory: ${{ inputs.working-directory }}
+
+  functional-test:
+    needs: [build]
+    uses: ./.github/workflows/p2p-execute-command.yaml
+    secrets:
+      env_vars: ${{ secrets.env_vars }}
+    strategy:
+      matrix: ${{ fromJSON(vars.FAST_FEEDBACK) }}
+      fail-fast: false
+    with:
+      command: p2p-functional
+      github_env: ${{ matrix.deploy_env }}
+      version: ${{ inputs.version }}
+      dry-run: ${{ inputs.dry-run }}
+      working-directory: ${{ inputs.working-directory }}
+
+
+  nft-test:
+    needs: [functional-test]
+    uses: ./.github/workflows/p2p-execute-command.yaml
+    secrets:
+      env_vars: ${{ secrets.env_vars }}
+    strategy:
+      matrix: ${{ fromJSON(vars.FAST_FEEDBACK) }}
+      fail-fast: false
+    with:
+      command: p2p-nft
+      github_env: ${{ matrix.deploy_env }}
+      version: ${{ inputs.version }}
+      dry-run: ${{ inputs.dry-run }}
+      working-directory: ${{ inputs.working-directory }}
+
+  promote:
+    name: promote
+    needs: [nft-test, functional-test]
+    if: success() && github.ref == inputs.main-branch
+    secrets:
+      env_vars: ${{ secrets.env_vars }}
+    uses: ./.github/workflows/p2p-promote-image.yaml
+    strategy:
+      matrix: ${{ fromJSON(vars.EXTENDED_TEST) }}
+      fail-fast: false
+    with:
+      source_matrix: ${{ vars.FAST_FEEDBACK }}
+      dest_github_env: ${{ matrix.deploy_env }}
+      promotion-stage: extended-test
+      version: ${{ inputs.version }}
+      dry-run: ${{ inputs.dry-run }}
+      working-directory: ${{ inputs.working-directory }}
+
+

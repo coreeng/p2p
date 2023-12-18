@@ -1,0 +1,71 @@
+
+on:
+  workflow_call:
+    secrets:
+      env_vars:
+        required: false
+    inputs:
+      source:
+        required: false
+        type: string
+        default: ${{ vars.EXTENDED_TEST }}
+      destination:
+        required: false
+        type: string
+        default: ${{ vars.PROD }}
+      dry-run:
+        required: false
+        type: boolean
+        default: false
+      version:
+        required: false
+        type: string
+        default: ''
+      region:
+        required: false
+        type: string
+        default: europe-west2
+      main-branch:
+        required: false
+        type: string
+        default: 'refs/heads/main'
+      working-directory:
+        required: false
+        type: string
+        default: '.'
+
+env:
+  REGION: ${{ inputs.region }} 
+
+jobs:
+  run-tests:
+    uses: ./.github/workflows/p2p-execute-command.yaml
+    if: success() && (github.ref == inputs.main-branch && inputs.dry-run == false)
+    secrets:
+      env_vars: ${{ secrets.env_vars }}
+    strategy:
+      matrix: ${{ fromJSON(inputs.source ) }}
+      fail-fast: false
+    with:
+      command: p2p-extended-test
+      github_env: ${{ matrix.deploy_env }}
+      version: ${{ inputs.version }}
+      dry-run: ${{ inputs.dry-run }}
+      working-directory: ${{ inputs.working-directory }}
+
+  promote:
+    uses: ./.github/workflows/p2p-promote-image.yaml
+    if: success() && (github.ref == inputs.main-branch && inputs.dry-run == false)
+    needs: [run-tests]
+    secrets:
+      env_vars: ${{ secrets.env_vars }}
+    strategy:
+      matrix: ${{ fromJSON(inputs.destination) }}
+      fail-fast: false
+    with:
+      source_matrix: ${{ inputs.source }}
+      dest_github_env: ${{ matrix.deploy_env }}
+      promotion-stage: prod
+      version: ${{ inputs.version }}
+      dry-run: ${{ inputs.dry-run }}
+      working-directory: ${{ inputs.working-directory }}

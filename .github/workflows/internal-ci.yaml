@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  increment-version:
+    uses: ./.github/workflows/internal-version.yaml
+    secrets:
+      git-token: ${{ secrets.GITHUB_TOKEN }}
+    with:
+      dry-run: true
+
+  print-version:
+    runs-on: ubuntu-latest
+    needs: increment-version
+    steps:
+      - env:
+          VERSION: ${{needs.increment-version.outputs.version}}
+        id: step1
+        run: echo "The Next Version is $VERSION"
+
+  test_version:
+    uses: ./.github/workflows/p2p-version.yaml
+    secrets:
+      git-token: ${{ secrets.GITHUB_TOKEN }}
+    with:
+      dry-run: true
+
+  test_execute_command:
+    needs: [test_version]
+    uses: ./.github/workflows/p2p-execute-command.yaml
+    secrets:
+      env_vars: |
+        TEST_VARIABLE=value
+    with:
+      command: test-var-print
+      dry-run: true
+      version: ${{ needs.test_version.outputs.version }}
+
+  test_fastfeedback:
+    needs: [test_version]
+    uses: ./.github/workflows/p2p-workflow-fastfeedback.yaml
+    secrets:
+      env_vars: |
+        TEST_VARIABLE=value
+    with:
+      dry-run: true
+      version: ${{ needs.test_version.outputs.version }}
+
+  test_extended_test:
+    needs: [test_version]
+    uses: ./.github/workflows/p2p-workflow-extended-test.yaml
+    secrets:
+      env_vars: |
+        TEST_VARIABLE=value
+    with:
+      dry-run: true
+      version: ${{ needs.test_version.outputs.version }}
+
+  test_prod:
+    needs: [test_version]
+    uses: ./.github/workflows/p2p-workflow-prod.yaml
+    secrets:
+      env_vars: |
+        TEST_VARIABLE=value
+    with:
+      dry-run: true
+      version: ${{ needs.test_version.outputs.version }}

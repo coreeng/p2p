@@ -1,0 +1,122 @@
+name: p2p-command
+
+on:
+  workflow_call:
+    secrets:
+      env_vars:
+        required: false
+    inputs:
+      promotion-stage:
+        required: true
+        type: string
+      dry-run:
+        required: false
+        type: boolean
+        default: false
+      source_matrix:
+        required: true
+        type: string
+      dest_github_env:
+        required: true
+        type: string
+      version:
+        required: false
+        type: string
+        default: ''
+      region:
+        required: false
+        type: string
+        default: europe-west2
+      working-directory:
+        required: false
+        type: string
+        default: '.'
+
+
+jobs:
+  lookup:
+    runs-on: ubuntu-latest
+    environment: ${{ fromJson(inputs.source_matrix).include[0]['deploy_env'] }}
+    env:
+      REGISTRY: ${{ inputs.region }}-docker.pkg.dev/${{ vars.PROJECT_ID }}/tenant
+      SERVICE_ACCOUNT: p2p-${{ vars.TENANT_NAME }}@${{ vars.PROJECT_ID }}.iam.gserviceaccount.com
+      WORKLOAD_IDENTITY_PROVIDER: projects/${{ vars.PROJECT_NUMBER }}/locations/global/workloadIdentityPools/p2p-${{ vars.TENANT_NAME }}/providers/p2p-${{ vars.TENANT_NAME }}
+    outputs:
+      source_registry: ${{ env.REGISTRY }}
+      source_service_account: ${{ env.SERVICE_ACCOUNT }}
+      source_workflow_identity_provider: ${{ env.WORKLOAD_IDENTITY_PROVIDER }}
+    steps:
+      - name: print env context
+        run: |
+          yq -p=json -C <<EOT
+          ${{ toJSON(env) }}
+          EOT
+
+  promote-image:
+    name: promote-to-${{ inputs.promotion-stage }}
+    runs-on: ubuntu-latest
+    needs: [lookup]
+    environment: ${{ inputs.dest_github_env }}
+    env:
+      BASE_DOMAIN: ${{ vars.BASE_DOMAIN }}
+      DEST_GITHUB_ENV: ${{ inputs.dest_github_env }}
+      DPLATFORM: ${{ vars.DPLATFORM }}
+      PROJECT_ID: ${{ vars.PROJECT_ID }}
+      PROJECT_NUMBER: ${{ vars.PROJECT_NUMBER }}
+      REGION: ${{ inputs.region }}
+      REGISTRY: ${{ inputs.region }}-docker.pkg.dev/${{ vars.PROJECT_ID }}/tenant
+      SERVICE_ACCOUNT: p2p-${{ vars.TENANT_NAME }}@${{ vars.PROJECT_ID }}.iam.gserviceaccount.com
+      VERSION: ${{ inputs.version }}
+      SOURCE_GITHUB_ENV: ${{ fromJson(inputs.source_matrix).include[0]['deploy_env'] }}
+      SOURCE_REGISTRY: ${{ needs.lookup.outputs.source_registry }}
+      SOURCE_SERVICE_ACCOUNT: ${{ needs.lookup.outputs.source_service_account }}
+      SOURCE_WORKLOAD_IDENTITY_PROVIDER: ${{ needs.lookup.outputs.source_workflow_identity_provider }}
+      TENANT_NAME: ${{ vars.TENANT_NAME }}
+      WORKLOAD_IDENTITY_PROVIDER: projects/${{ vars.PROJECT_NUMBER }}/locations/global/workloadIdentityPools/p2p-${{ vars.TENANT_NAME }}/providers/p2p-${{ vars.TENANT_NAME }}
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: print env context
+        run: |
+          yq -p=json -C <<EOT
+          ${{ toJSON(env) }}
+          EOT
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Authenticate to Google Cloud (Source)
+        id: auth-source
+        if: inputs.dry-run == false
+        uses: google-github-actions/auth@v1
+        with:
+          export_environment_variables: false
+          workload_identity_provider: ${{ env.SOURCE_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ env.SOURCE_SERVICE_ACCOUNT }}
+          token_format: access_token
+          access_token_lifetime: 600s
+
+
+      - name: Authenticate to Google Cloud (Dest)
+        id: auth-dest
+        if: inputs.dry-run == false
+        uses: google-github-actions/auth@v1
+        with:
+          export_environment_variables: false
+          workload_identity_provider: ${{ env.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ env.SERVICE_ACCOUNT }}
+          token_format: access_token
+          access_token_lifetime: 600s
+
+      - name: Promote
+        id: run-promotion
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          SOURCE_AUTH_OVERRIDE: ${{ steps.auth-source.outputs.credentials_file_path }}
+          SOURCE_ACCESS_TOKEN: ${{ steps.auth-source.outputs.access_token }}
+          DEST_AUTH_OVERRIDE: ${{ steps.auth-dest.outputs.credentials_file_path }}
+          DEST_ACCESS_TOKEN: ${{ steps.auth-dest.outputs.access_token }}
+        run: |
+            make p2p-promote-to-${{ inputs.promotion-stage }}
+

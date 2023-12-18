@@ -1,0 +1,20 @@
+name: CD
+
+on:
+  repository_dispatch:
+
+concurrency: cd-main
+
+jobs:
+  increment-version:
+    if: github.event.action == 'success'
+    uses: ./.github/workflows/internal-version.yaml
+    secrets:
+      git-token: ${{ secrets.GITHUB_TOKEN }}
+  fail:
+    if: github.event.action == 'failure'
+    steps:
+      - name: Exit with error
+        run: |
+          echo "Received 'failure' event from p2p-testing."
+          exit 1

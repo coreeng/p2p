@@ -1,5 +1,3 @@
-name: p2p-command
-
 on:
   workflow_call:
     secrets:
@@ -9,18 +7,10 @@ on:
       command:
         required: true
         type: string
-      project-id:
-        required: true
+      github_env:
+        required: false
         type: string
-      env-name:
-        required: true
-        type: string
-      workload-identity-provider:
-        required: true
-        type: string
-      service-account:
-        required: true
-        type: string
+        default: ''
       dry-run:
         required: false
         type: boolean
@@ -29,6 +19,9 @@ on:
         required: false
         type: string
         default: europe-west2
+      version:
+        required: true
+        type: string
       zone:
         required: false
         type: string
@@ -45,22 +38,35 @@ on:
         required: false
         type: string
         default: ''
-env:
-  REGISTRY: ${{ inputs.region }}-docker.pkg.dev/${{ inputs.project-id }}/tenant
+      working-directory:
+        required: false
+        type: string
+        default: '.'
+
 
 jobs:
-  p2p:
-    name: ${{ inputs.command }}
+  exec:
+    name: '${{ inputs.command }} (${{ inputs.github_env }})'
     runs-on: ubuntu-latest
-
-    permissions:
-      contents: read
-      id-token: write
-
+    environment: ${{ inputs.github_env }}
     env:
       env_vars: ${{ secrets.env_vars }}
-
+      BASE_DOMAIN: ${{ vars.BASE_DOMAIN }}
+      DPLATFORM: ${{ vars.DPLATFORM }}
+      PROJECT_ID: ${{ vars.PROJECT_ID }}
+      PROJECT_NUMBER: ${{ vars.PROJECT_NUMBER }}
+      REGION: ${{ inputs.region }}
+      REGISTRY: ${{ inputs.region }}-docker.pkg.dev/${{ vars.PROJECT_ID }}/tenant
+      VERSION: ${{ inputs.version }}
+      SERVICE_ACCOUNT: p2p-${{ vars.TENANT_NAME }}@${{ vars.PROJECT_ID }}.iam.gserviceaccount.com
+      TENANT_NAME: ${{ vars.TENANT_NAME }}
+      WORKLOAD_IDENTITY_PROVIDER: projects/${{ vars.PROJECT_NUMBER }}/locations/global/workloadIdentityPools/p2p-${{ vars.TENANT_NAME }}/providers/p2p-${{ vars.TENANT_NAME }}
     steps:
+      - name: print env context
+        run: |
+          yq -p=json -C <<EOT
+          ${{ toJSON(env) }}
+          EOT
       - name: Checkout
         uses: actions/checkout@v3
 
@@ -69,8 +75,8 @@ jobs:
         if: inputs.dry-run == false
         uses: google-github-actions/auth@v1
         with:
-          workload_identity_provider: ${{ inputs.workload-identity-provider }}
-          service_account: ${{ inputs.service-account }}
+          workload_identity_provider: ${{ env.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ env.SERVICE_ACCOUNT }}
           token_format: access_token
           access_token_lifetime: 600s
 
@@ -88,27 +94,13 @@ jobs:
         # https://cloud.google.com/iap/docs/using-tcp-forwarding#increasing_the_tcp_upload_bandwidth
         run: $(gcloud info --format="value(basic.python_location)") -m pip install numpy
 
-      - name: Setup IAP tunnel
-        id: setup-iap-tunnel
-        if: inputs.dry-run == false
-        shell: bash
-        run: |
-          nohup sh -c "while true ; do gcloud compute start-iap-tunnel ${{ inputs.env-name }}-bastion 3128 --local-host-port localhost:57755 --project ${{ inputs.project-id }}  --zone ${{ inputs.zone }}  ; done" &
-          sleep 4
-
       - name: Setup kubeconfig
         id: setup-kubeconfig
         if: inputs.dry-run == false
         shell: bash
         run: |
-          gcloud container clusters get-credentials --project ${{ inputs.project-id }} --zone ${{ inputs.region }} --internal-ip ${{ inputs.env-name }}
-          kubectl config set clusters.gke_${{ inputs.project-id }}_${{ inputs.region }}_${{ inputs.env-name }}.proxy-url http://localhost:57755
-
-      - name: Test kubectl
-        id: test-kubectl
-        if: inputs.dry-run == false
-        shell: bash
-        run: kubectl cluster-info
+          gcloud container clusters get-credentials --project $PROJECT_ID --zone $REGION --internal-ip ${{ env.DPLATFORM }}
+          kubectl config set clusters.gke_${{ env.PROJECT_ID }}_${{ inputs.region }}_${{ env.DPLATFORM }}.proxy-url http://localhost:57755
 
       - name: Login to Artifact Registry
         uses: docker/login-action@v2
@@ -126,17 +118,12 @@ jobs:
             printf '%s\n' $i >> $GITHUB_ENV
           done
 
-      - name: Pre-targets
-        if: inputs.pre-targets != ''
-        run: |
-          make ${{ inputs.pre-targets }}
-
       - name: Run Command
         id: run-command
+        if: inputs.dry-run == false
+        working-directory: ${{ inputs.working-directory }}
         run: |
+          nohup sh -c "while true ; do gcloud compute start-iap-tunnel ${{ env.DPLATFORM }}-bastion 3128 --local-host-port localhost:57755 --project ${{ env.PROJECT_ID }}  --zone ${{ inputs.zone }}  ; done" &
+          sleep 4
+          kubectl cluster-info
           make ${{ inputs.command }}
-
-      - name: Post-targets
-        if: inputs.post-targets != ''
-        run: |
-          make ${{ inputs.post-targets }}
