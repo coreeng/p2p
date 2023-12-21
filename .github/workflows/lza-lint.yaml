@@ -1,0 +1,26 @@
+name: LZA Lint
+on:
+  workflow_call:
+    inputs:
+      lint_target:
+        type: string
+        required: false
+        default: "lint"
+
+jobs:
+  lza-lint:
+    name: LZA Lint
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: Docker build
+        run: docker-compose build python3-slim
+      - name: Lint LZA configuration files
+        id: lint
+        shell: bash
+        run: make ${{ inputs.lint_target }}
+
