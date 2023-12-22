@@ -51,11 +51,11 @@ jobs:
         id: codecommit-sync
         shell: bash
         run: |
-          set +x                    
+          set +x
           git config --global credential.helper '!aws codecommit credential-helper $@'
-          git config --global credential.UseHttpPath true          
+          git config --global credential.UseHttpPath true
           git remote add codecommit ${{ inputs.aws_codecommit_url }}
-          echo "Pulling CodeCommit: ${{ inputs.aws_codecommit_url }} to validate existing commits match" 
+          echo "Pulling CodeCommit: ${{ inputs.aws_codecommit_url }} to validate existing commits match"
           git pull codecommit ${{ inputs.aws_codecommit_branch }}
           git push codecommit --mirror
 
@@ -65,7 +65,7 @@ jobs:
       - git-sync
     runs-on: ubuntu-latest
     outputs:
-      pipeline_exec_id: ${{ steps.codepipeline-start.outputs.pipeline_exec_id }}
+      aws_pipeline_execution_id: ${{ steps.codepipeline-start.outputs.aws_pipeline_execution_id }}
     steps:
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -75,12 +75,15 @@ jobs:
       - name: Kick-off CodePipeline
         id: codepipeline-start
         shell: bash
+        env:
+          AWS_CODE_PIPELINE_NAME: ${{ inputs.aws_codepipeline_name }}
+          AWS_REGION: ${{ inputs.aws_region }}
         run: |
-          set +xe          
-          aws codepipeline start-pipeline-execution --name ${{ vars.AWS_CODE_PIPELINE_NAME }} | tee output.json
-          pipeline_exec_id=$(jq -r .pipelineExecutionId output.json)
-          echo "Pipeline started, url: https://${{ vars.AWS_REGION }}.console.aws.amazon.com/codesuite/codepipeline/pipelines/${{ vars.AWS_CODE_PIPELINE_NAME }}/executions/$pipeline_exec_id/visualization?region=${{ vars.AWS_REGION }}"
-          echo "pipeline_exec_id=$pipeline_exec_id" >> "$GITHUB_OUTPUT"
+          set +xe
+          aws codepipeline start-pipeline-execution --name "${AWS_CODE_PIPELINE_NAME}" | tee output.json
+          AWS_PIPELINE_EXECUTION_ID=$(jq -r .pipelineExecutionId output.json)
+          echo "Pipeline started, url: https://${AWS_REGION}.console.aws.amazon.com/codesuite/codepipeline/pipelines/${AWS_CODE_PIPELINE_NAME}/executions/${AWS_PIPELINE_EXECUTION_ID}/visualization?region=${AWS_REGION}"
+          echo "aws_pipeline_execution_id=${AWS_PIPELINE_EXECUTION_ID}" >> "$GITHUB_OUTPUT"
 
 
   poll-pipeline-execution:
@@ -90,33 +93,47 @@ jobs:
     runs-on: ubuntu-latest
     steps:
 
-      - name: Configure AWS Credentials
+      - id: aws-auth
+        name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ inputs.aws_role_arn }}
           aws-region: ${{ inputs.aws_region }}
 
-      - name: Wait for CodePipeline to Complete
-        id: wait-codepipeline-to-complete
+      - id: wait-codepipeline-to-complete
+        name: Wait for CodePipeline to Complete
         timeout-minutes: ${{ inputs.gh_codepipeline_poll_timeout_minutes }}
         shell: bash
         env:
-          PIPELINE_EXEC_ID: ${{ needs.start-pipeline-execution.outputs.pipeline_exec_id }}
+          AWS_PIPELINE_EXECUTION_ID: ${{ needs.start-pipeline-execution.outputs.aws_pipeline_execution_id}}
           AWS_CODE_PIPELINE_NAME: ${{ inputs.aws_codepipeline_name }}
           AWS_REGION: ${{ inputs.aws_region }}
           GH_CODE_PIPELINE_POLL_INTERVAL_SECONDS: ${{ inputs.gh_codepipeline_poll_interval_sec }}
         run: |
-          set +x   
-          list_executions() {
-            aws codepipeline list-pipeline-executions --pipeline-name "${AWS_CODE_PIPELINE_NAME}" --query "pipelineExecutionSummaries[?pipelineExecutionId == '${PIPELINE_EXEC_ID}']" | jq -r '.[0].status'
-          }
-          status=$(list_executions)
-          while [[ "$status" == 'null' || "$status" == 'InProgress' || "$status" == 'Stopping' ]]
-          do
-            echo "Waiting for pipeline to complete...(https://${AWS_REGION}.console.aws.amazon.com/codesuite/codepipeline/pipelines/${AWS_CODE_PIPELINE_NAME}/executions/${PIPELINE_EXEC_ID}/visualization?region=${AWS_REGION})"
-            status=$(list_executions)
-            echo "Current status: $status, refresh in ${GH_CODE_PIPELINE_POLL_INTERVAL_SECONDS}s..."
-            sleep "${GH_CODE_PIPELINE_POLL_INTERVAL_SECONDS}"
+          set +x
+          echo "Pipeline execution: https://${AWS_REGION}.console.aws.amazon.com/codesuite/codepipeline/pipelines/${AWS_CODE_PIPELINE_NAME}/executions/${AWS_PIPELINE_EXECUTION_ID}/visualization?region=${AWS_REGION}"
+          while true ; do
+                STATUS=$(aws codepipeline list-pipeline-executions --pipeline-name "${AWS_CODE_PIPELINE_NAME}" --query "pipelineExecutionSummaries[?pipelineExecutionId == '${AWS_PIPELINE_EXECUTION_ID}']" | jq -r '.[0].status')
+                if [[ "${STATUS}" != 'null' && "${STATUS}" != 'InProgress' && "${STATUS}" != 'Stopping' ]] ; then
+                        break;
+                fi
+                echo "Pipeline status: ${STATUS}s, refresh in ${GH_CODE_PIPELINE_POLL_INTERVAL_SECONDS}s..."
+                sleep "${GH_CODE_PIPELINE_POLL_INTERVAL_SECONDS}"
           done
-          echo "Pipeline completed with status: $status"
-          if [ "$status" != 'Succeeded' ];then exit 1;fi
+          echo "Pipeline completed with status: ${STATUS}"
+          while read -r JSONL ; do
+                echo ""
+                echo "Stage: $(echo "${JSONL}" | jq -r .stageName)"
+                echo "Action: $(echo "${JSONL}" | jq -r .actionName)"
+                echo "Summary: $(echo "${JSONL}" | jq -r .executionResult.externalExecutionSummary)"
+                echo ""
+                echo "-----BEGIN LOGS-----"
+                aws logs get-log-events \
+                        --log-group-name "/aws/codebuild/$(echo "${JSONL}" | jq -r .executionResult.externalExecutionId | cut -f1 -d:)" \
+                        --log-stream-name "$(echo "${JSONL}" | jq -r .executionResult.externalExecutionId | cut -f2 -d:)" | jq '.events[].message' | sed -e 's/^"//' -e 's/\\n"$//'
+                echo "-----END LOGS-----"
+          done < <(aws codepipeline list-action-executions --pipeline-name "${AWS_CODE_PIPELINE_NAME}" --filter pipelineExecutionId="${AWS_PIPELINE_EXECUTION_ID}" | \
+                jq -c '.actionExecutionDetails[] | select(.status!="Succeeded") | {stageName:.stageName,actionName:.actionName,executionResult:.output.executionResult}')
+          if [ "${STATUS}" != 'Succeeded' ] ; then
+                exit 1
+          fi
