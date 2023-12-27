@@ -34,6 +34,12 @@ jobs:
           role-to-assume: ${{ inputs.aws_role_arn }}
           aws-region: ${{ inputs.aws_region }}
 
+      - name: Clone LZA Repository and Install Dependencies
+        run: |
+          git clone https://github.com/awslabs/landing-zone-accelerator-on-aws.git lza
+          cd lza/source/packages
+          yarn install
+
       - name: Docker build
         run: docker-compose build aws-cli
 
