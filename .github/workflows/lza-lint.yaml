@@ -49,3 +49,10 @@ jobs:
         shell: bash
         run: make ${{ inputs.lint_target }}
 
+      - name: Validate LZA configuration files
+        id: validate
+        working-directory: ./lza/source/packages
+        env:
+          CODEBUILD_SRC_DIR_Config: ${{ github.workspace }}
+        run: yarn validate-config $CODEBUILD_SRC_DIR_Config
+
