@@ -35,11 +35,11 @@ jobs:
           aws-region: ${{ inputs.aws_region }}
 
       - name: Clone LZA Repository and Install Dependencies
-        working-directory: ./lza-solution
         run: |
           git clone https://github.com/awslabs/landing-zone-accelerator-on-aws.git lza
           cd lza/source/packages
           yarn install
+          cd ../..
 
       - name: Docker build
         run: docker-compose build aws-cli
