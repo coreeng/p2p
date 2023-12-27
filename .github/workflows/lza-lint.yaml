@@ -23,10 +23,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
 
+      - name: Create config directory
+        run: mkdir -p aws-lza-config
+
       - name: Checkout
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
+          path: aws-lza-config
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -39,13 +43,14 @@ jobs:
           git clone https://github.com/awslabs/landing-zone-accelerator-on-aws.git lza
           cd lza/source/packages
           yarn install
-          cd ../..
 
       - name: Docker build
+        working-directory: aws-lza-config
         run: docker-compose build aws-cli
 
       - name: Lint LZA configuration files
         id: lint
+        working-directory: aws-lza-config
         shell: bash
         run: make ${{ inputs.lint_target }}
 
