@@ -34,9 +34,6 @@ jobs:
           role-to-assume: ${{ inputs.aws_role_arn }}
           aws-region: ${{ inputs.aws_region }}
 
-      - name: Docker build
-        run: docker-compose build aws-cli
-
       - name: Lint LZA configuration files
         id: lint
         shell: bash
