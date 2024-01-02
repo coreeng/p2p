@@ -32,6 +32,7 @@ jobs:
           DPLATFORM: ${{ vars.DPLATFORM }}
           PROJECT_ID: ${{ vars.PROJECT_ID }}
           PROJECT_NUMBER: ${{ vars.PROJECT_NUMBER }}
+          ENVIRONMENT: ${{ matrix.deploy_env }}
         run: |
           declare -i EXIT=0
           [ -z $BASE_DOMAIN ] && echo "'BASE_DOMAIN' env var is not present in environment '$ENVIRONMENT'" && EXIT=1
