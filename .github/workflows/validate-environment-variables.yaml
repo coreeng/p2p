@@ -6,7 +6,6 @@ on:
       environment:
         required: true
         type: string
-
 jobs:
   validate-environment:
     name: validate-environmental-vars
@@ -27,13 +26,19 @@ jobs:
       matrix: ${{ fromJSON(inputs.environment) }}
     environment: ${{ matrix.deploy_env }}
     steps:
-      - name: start
-        run: |
-          echo "Validating environment"
       - name: validate required fields
-        if: vars.BASE_DOMAIN  == '' || vars.PROJECT_ID == '' || vars.DPLATFORM == '' || vars.PROJECT_NUMBER == ''
+        env:
+          BASE_DOMAIN: ${{ vars.BASE_DOMAIN }}
+          DPLATFORM: ${{ vars.DPLATFORM }}
+          PROJECT_ID: ${{ vars.PROJECT_ID }}
+          PROJECT_NUMBER: ${{ vars.PROJECT_NUMBER }}
         run: |
-          echo "Some required fields are missing, please validate your environment and repository variables."
-          exit 1
+          declare -i EXIT=0
+          [ -z $BASE_DOMAIN ] && echo "'BASE_DOMAIN' env var is not present in environment '$ENVIRONMENT'" && EXIT=1
+          [ -z $PROJECT_ID ] && echo "'PROJECT_ID' env var is not present in environment '$ENVIRONMENT'" && EXIT=1
+          [ -z $DPLATFORM ] && echo "'DPLATFORM' env var is not present in environment '$ENVIRONMENT'" && EXIT=1
+          [ -z $PROJECT_NUMBER ] && echo "'PROJECT_NUMBER' env var is not present in environment '$ENVIRONMENT'" && EXIT=1
+          exit $EXIT
+
 
 
