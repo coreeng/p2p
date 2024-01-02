@@ -20,19 +20,19 @@ jobs:
         run: |
           echo "Defined environment seems to be empty. Please check if the defined environment variable exists"
           exit 1
-    validate-env:
-      name: validate-required-fields
-      runs-on: ubuntu-latest
-      strategy:
-        matrix: ${{ fromJSON(inputs.environment) }}
-      steps:
-        - name: start
-          run: |
-            echo "Validating input"
-        - name: validate required fields
-          if: vars.BASE_DOMAIN  == '' || vars.PROJECT_ID == '' || vars.DPLATFORM == '' || vars.PROJECT_NUMBER == ''
-          run: |
-            echo "Some required fields are missing, please validate your environment and repository variables."
-            exit 1
+  validate-env:
+    name: validate-required-fields
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ fromJSON(inputs.environment) }}
+    steps:
+      - name: start
+        run: |
+          echo "Validating input"
+      - name: validate required fields
+        if: vars.BASE_DOMAIN  == '' || vars.PROJECT_ID == '' || vars.DPLATFORM == '' || vars.PROJECT_NUMBER == ''
+        run: |
+          echo "Some required fields are missing, please validate your environment and repository variables."
+          exit 1
 
 
