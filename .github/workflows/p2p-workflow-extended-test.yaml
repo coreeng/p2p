@@ -43,13 +43,13 @@ env:
 jobs:
   validate-vars-source:
     name: validate-vars
-    uses: ./.github/workflows/validate-inputs.yaml
+    uses: ./.github/workflows/validate-environment-variables.yaml
     with:
       environment: ${{ inputs.source }}
 
   validate-vars-destination:
     name: validate-vars
-    uses: ./.github/workflows/validate-inputs.yaml
+    uses: ./.github/workflows/validate-environment-variables.yaml
     with:
       environment: ${{ inputs.destination }}
 
