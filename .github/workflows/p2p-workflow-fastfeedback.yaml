@@ -5,6 +5,14 @@ on:
       env_vars:
         required: false
     inputs:
+      source:
+        required: false
+        type: string
+        default: ${{ vars.FAST_FEEDBACK }}
+      destination:
+        required: false
+        type: string
+        default: ${{ vars.EXTENDED_TEST }}
       dry-run:
         required: false
         type: boolean
@@ -33,12 +41,25 @@ env:
   REGION: ${{ inputs.region }} 
 
 jobs:
+  validate-vars-source:
+    name: validate-vars
+    uses: ./.github/workflows/validate-inputs.yaml
+    with:
+      environment: ${{ inputs.source }}
+
+  validate-vars-destination:
+    name: validate-vars
+    uses: ./.github/workflows/validate-inputs.yaml
+    with:
+      environment: ${{ inputs.destination }}
+
   build:
     uses: ./.github/workflows/p2p-execute-command.yaml
+    needs: [validate-vars-source, validate-vars-destination]
     secrets:
       env_vars: ${{ secrets.env_vars }}
     strategy:
-      matrix: ${{ fromJSON(vars.FAST_FEEDBACK) }}
+      matrix: ${{ fromJSON(inputs.source) }}
       fail-fast: false
     with:
       command: p2p-build
@@ -53,7 +74,7 @@ jobs:
     secrets:
       env_vars: ${{ secrets.env_vars }}
     strategy:
-      matrix: ${{ fromJSON(vars.FAST_FEEDBACK) }}
+      matrix: ${{ fromJSON(inputs.source) }}
       fail-fast: false
     with:
       command: p2p-functional
@@ -69,7 +90,7 @@ jobs:
     secrets:
       env_vars: ${{ secrets.env_vars }}
     strategy:
-      matrix: ${{ fromJSON(vars.FAST_FEEDBACK) }}
+      matrix: ${{ fromJSON(inputs.source) }}
       fail-fast: false
     with:
       command: p2p-nft
@@ -86,7 +107,7 @@ jobs:
       env_vars: ${{ secrets.env_vars }}
     uses: ./.github/workflows/p2p-promote-image.yaml
     strategy:
-      matrix: ${{ fromJSON(vars.EXTENDED_TEST) }}
+      matrix: ${{ fromJSON(inputs.destination) }}
       fail-fast: false
     with:
       source_matrix: ${{ vars.FAST_FEEDBACK }}
