@@ -10,6 +10,8 @@ jobs:
   validate-environment:
     name: validate-environmental-vars
     runs-on: ubuntu-latest
+    env:
+          ENVIRONMENT: ${{ inputs.environment }}
     steps:
       - name: start
         run: |
@@ -20,8 +22,6 @@ jobs:
           echo "Defined environment seems to be empty. Please check if the defined environment variable exists"
           exit 1
       - name: Validate json of environment
-        env:
-          ENVIRONMENT: ${{ inputs.environment }}
         run: |
           echo "${ENVIRONMENT}" | jq .
       - name: Install json spec
@@ -30,7 +30,7 @@ jobs:
       - name: validate schema
         run: |
           echo "{\"$schema\": \"http:\/\/json-schema.org\/draft-04\/schema#\",\"type\": \"object\",\"properties\": {\"include\": {\"type\": \"array\",\"items\": [{\"type\": \"object\",\"properties\": {\"deploy_env\": {\"type\": \"string\"}},\"required\": [\"deploy_env\"]}]}},\"required\": [\"include\"]}" > schema.json
-          json validate --schema-file=schema.json --document-json=${{ inputs.environment }}
+          json validate --schema-file=schema.json --document-json="${ENVIRONMENT}"
 
   validate-env:
     name: validate-required-fields
