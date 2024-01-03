@@ -1,14 +1,15 @@
-name: AWS Accelerator Config
+name: AWS LZ CD
+
 on:
   workflow_call:
     inputs:
-      aws_codecommit_url:
+      aws_region:
         type: string
         required: true
       aws_role_arn:
         type: string
         required: true
-      aws_region:
+      aws_codecommit_url:
         type: string
         required: true
       aws_codecommit_branch:
@@ -36,20 +37,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
 
-      - name: Checkout
-        uses: actions/checkout@v3
+      - id: checkout
+        name: Checkout
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Configure AWS Credentials
+      - id: aws-auth
+        name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ inputs.aws_role_arn }}
           aws-region: ${{ inputs.aws_region }}
 
-      - name: Sync to CodeCommit Repository
-        id: codecommit-sync
-        shell: bash
+      - id: codecommit-sync
+        name: Sync to CodeCommit Repository
         run: |
           set +x
           git config --global credential.helper '!aws codecommit credential-helper $@'
@@ -60,31 +62,32 @@ jobs:
           git push codecommit --mirror
 
   start-pipeline-execution:
-    name: Start AWS Pipeline
+    name: Release Change
     needs:
       - git-sync
     runs-on: ubuntu-latest
     outputs:
       aws_pipeline_execution_id: ${{ steps.codepipeline-start.outputs.aws_pipeline_execution_id }}
     steps:
-      - name: Configure AWS Credentials
+
+      - id: aws-auth
+        name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ inputs.aws_role_arn }}
           aws-region: ${{ inputs.aws_region }}
-      - name: Kick-off CodePipeline
-        id: codepipeline-start
-        shell: bash
+
+      - id: codepipeline-start
+        name: Release Change
         env:
-          AWS_CODE_PIPELINE_NAME: ${{ inputs.aws_codepipeline_name }}
+          AWS_CODEPIPELINE_NAME: ${{ inputs.aws_codepipeline_name }}
           AWS_REGION: ${{ inputs.aws_region }}
         run: |
           set +xe
-          aws codepipeline start-pipeline-execution --name "${AWS_CODE_PIPELINE_NAME}" | tee output.json
+          aws codepipeline start-pipeline-execution --name "${AWS_CODEPIPELINE_NAME}" | tee output.json
           AWS_PIPELINE_EXECUTION_ID=$(jq -r .pipelineExecutionId output.json)
-          echo "Pipeline started, url: https://${AWS_REGION}.console.aws.amazon.com/codesuite/codepipeline/pipelines/${AWS_CODE_PIPELINE_NAME}/executions/${AWS_PIPELINE_EXECUTION_ID}/visualization?region=${AWS_REGION}"
+          echo "Pipeline started, url: https://${AWS_REGION}.console.aws.amazon.com/codesuite/codepipeline/pipelines/${AWS_CODEPIPELINE_NAME}/executions/${AWS_PIPELINE_EXECUTION_ID}/visualization?region=${AWS_REGION}"
           echo "aws_pipeline_execution_id=${AWS_PIPELINE_EXECUTION_ID}" >> "$GITHUB_OUTPUT"
-
 
   poll-pipeline-execution:
     name: Poll Pipeline Execution
@@ -104,22 +107,21 @@ jobs:
       - id: wait-codepipeline-to-complete
         name: Wait for CodePipeline to Complete
         timeout-minutes: ${{ inputs.gh_codepipeline_poll_timeout_minutes }}
-        shell: bash
         env:
           AWS_PIPELINE_EXECUTION_ID: ${{ needs.start-pipeline-execution.outputs.aws_pipeline_execution_id}}
-          AWS_CODE_PIPELINE_NAME: ${{ inputs.aws_codepipeline_name }}
+          AWS_CODEPIPELINE_NAME: ${{ inputs.aws_codepipeline_name }}
           AWS_REGION: ${{ inputs.aws_region }}
-          GH_CODE_PIPELINE_POLL_INTERVAL_SECONDS: ${{ inputs.gh_codepipeline_poll_interval_sec }}
+          GH_CODEPIPELINE_POLL_INTERVAL_SEC: ${{ inputs.gh_codepipeline_poll_interval_sec }}
         run: |
           set +x
-          echo "Pipeline execution: https://${AWS_REGION}.console.aws.amazon.com/codesuite/codepipeline/pipelines/${AWS_CODE_PIPELINE_NAME}/executions/${AWS_PIPELINE_EXECUTION_ID}/visualization?region=${AWS_REGION}"
+          echo "Pipeline execution: https://${AWS_REGION}.console.aws.amazon.com/codesuite/codepipeline/pipelines/${AWS_CODEPIPELINE_NAME}/executions/${AWS_PIPELINE_EXECUTION_ID}/visualization?region=${AWS_REGION}"
           while true ; do
-                STATUS=$(aws codepipeline list-pipeline-executions --pipeline-name "${AWS_CODE_PIPELINE_NAME}" --query "pipelineExecutionSummaries[?pipelineExecutionId == '${AWS_PIPELINE_EXECUTION_ID}']" | jq -r '.[0].status')
+                STATUS=$(aws codepipeline list-pipeline-executions --pipeline-name "${AWS_CODEPIPELINE_NAME}" --query "pipelineExecutionSummaries[?pipelineExecutionId == '${AWS_PIPELINE_EXECUTION_ID}']" | jq -r '.[0].status')
                 if [[ "${STATUS}" != 'null' && "${STATUS}" != 'InProgress' && "${STATUS}" != 'Stopping' ]] ; then
                         break;
                 fi
-                echo "Pipeline status: ${STATUS}s, refresh in ${GH_CODE_PIPELINE_POLL_INTERVAL_SECONDS}s..."
-                sleep "${GH_CODE_PIPELINE_POLL_INTERVAL_SECONDS}"
+                echo "Pipeline status: ${STATUS}s, refresh in ${GH_CODEPIPELINE_POLL_INTERVAL_SEC}s..."
+                sleep "${GH_CODEPIPELINE_POLL_INTERVAL_SEC}"
           done
           echo "Pipeline completed with status: ${STATUS}"
           while read -r JSONL ; do
@@ -133,7 +135,7 @@ jobs:
                         --log-group-name "/aws/codebuild/$(echo "${JSONL}" | jq -r .executionResult.externalExecutionId | cut -f1 -d:)" \
                         --log-stream-name "$(echo "${JSONL}" | jq -r .executionResult.externalExecutionId | cut -f2 -d:)" | jq '.events[].message' | sed -e 's/^"//' -e 's/\\n"$//'
                 echo "-----END LOGS-----"
-          done < <(aws codepipeline list-action-executions --pipeline-name "${AWS_CODE_PIPELINE_NAME}" --filter pipelineExecutionId="${AWS_PIPELINE_EXECUTION_ID}" | \
+          done < <(aws codepipeline list-action-executions --pipeline-name "${AWS_CODEPIPELINE_NAME}" --filter pipelineExecutionId="${AWS_PIPELINE_EXECUTION_ID}" | \
                 jq -c '.actionExecutionDetails[] | select(.status!="Succeeded") | {stageName:.stageName,actionName:.actionName,executionResult:.output.executionResult}')
           if [ "${STATUS}" != 'Succeeded' ] ; then
                 exit 1
