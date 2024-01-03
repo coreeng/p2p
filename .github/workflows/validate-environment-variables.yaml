@@ -19,6 +19,17 @@ jobs:
         run: |
           echo "Defined environment seems to be empty. Please check if the defined environment variable exists"
           exit 1
+      - name: Validate json of environment
+        run: |
+          echo ${{ inputs.environment }} | jq
+      - name: Install json spec
+        run: |
+          pip install json-spec
+      - name: validate schema
+        run: |
+          echo "{\"$schema\": \"http:\/\/json-schema.org\/draft-04\/schema#\",\"type\": \"object\",\"properties\": {\"include\": {\"type\": \"array\",\"items\": [{\"type\": \"object\",\"properties\": {\"deploy_env\": {\"type\": \"string\"}},\"required\": [\"deploy_env\"]}]}},\"required\": [\"include\"]}" > schema.json
+          json validate --schema-file=schema.json --document-json=${{ inputs.environment }}
+
   validate-env:
     name: validate-required-fields
     runs-on: ubuntu-latest
