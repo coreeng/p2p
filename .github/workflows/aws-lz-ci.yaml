@@ -1,0 +1,49 @@
+name: AWS LZ CI
+
+on:
+  workflow_call:
+    inputs:
+      aws_region:
+        type: string
+        required: true
+      aws_role_arn:
+        type: string
+        required: true
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+
+      - id: checkout
+        name: Checkout
+        uses: actions/checkout@v4
+
+      - id: lint
+        name: Lint all
+        run: make lint
+
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    steps:
+
+      - id: checkout
+        name: Checkout
+        uses: actions/checkout@v4
+
+      - id: aws-auth
+        name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ inputs.aws_role_arn }}
+          aws-region: ${{ inputs.aws_region }}
+
+      - id: validate
+        name: Validate all
+        run: make validate
