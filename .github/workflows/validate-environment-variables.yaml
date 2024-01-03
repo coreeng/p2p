@@ -20,8 +20,10 @@ jobs:
           echo "Defined environment seems to be empty. Please check if the defined environment variable exists"
           exit 1
       - name: Validate json of environment
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
         run: |
-          echo ${{ inputs.environment }} | jq
+          echo "${ENVIRONMENT}" | jq .
       - name: Install json spec
         run: |
           pip install json-spec
