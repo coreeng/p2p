@@ -97,7 +97,7 @@ jobs:
     name: Poll Pipeline Execution
     needs:
       - start-pipeline-execution
-    if: ${{ inputs.gh_codepipeline_poll == 'true' }}
+    if: ${{ inputs.gh_codepipeline_poll != 'false' }}
     runs-on: ubuntu-latest
     steps:
 
