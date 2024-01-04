@@ -111,7 +111,7 @@ jobs:
 
       - id: wait-codepipeline-to-complete
         name: Wait for CodePipeline to Complete
-        timeout-minutes: ${{ inputs.gh_codepipeline_poll_timeout_minutes }}
+        timeout-minutes: ${{ fromJSON(inputs.gh_codepipeline_poll_timeout_minutes) }}
         env:
           AWS_PIPELINE_EXECUTION_ID: ${{ needs.start-pipeline-execution.outputs.aws_pipeline_execution_id}}
           AWS_CODEPIPELINE_NAME: ${{ inputs.aws_codepipeline_name }}
