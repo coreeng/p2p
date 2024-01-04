@@ -19,17 +19,17 @@ on:
         type: string
         required: true
       gh_codepipeline_poll:
-        type: boolean
+        type: string
         required: false
-        default: true
+        default: 'true'
       gh_codepipeline_poll_interval_sec:
-        type: number
+        type: string
         required: false
-        default: 60
+        default: '60'
       gh_codepipeline_poll_timeout_minutes:
-        type: number
+        type: string
         required: false
-        default: 90
+        default: '90'
 
 permissions:
   id-token: write
@@ -97,7 +97,7 @@ jobs:
     name: Poll Pipeline Execution
     needs:
       - start-pipeline-execution
-    if: ${{ inputs.gh_codepipeline_poll == true }}
+    if: ${{ inputs.gh_codepipeline_poll == 'true' }}
     runs-on: ubuntu-latest
     steps:
 
