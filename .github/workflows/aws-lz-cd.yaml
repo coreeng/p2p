@@ -23,9 +23,9 @@ on:
         required: false
         default: true
       gh_codepipeline_poll_interval_sec:
-        type: string
+        type: number
         required: false
-        default: "60"
+        default: 60
       gh_codepipeline_poll_timeout_minutes:
         type: number
         required: false
