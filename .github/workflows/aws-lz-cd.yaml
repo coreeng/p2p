@@ -18,6 +18,10 @@ on:
       aws_codepipeline_name:
         type: string
         required: true
+      gh_codepipeline_poll:
+        type: boolean
+        required: false
+        default: true
       gh_codepipeline_poll_interval_sec:
         type: string
         required: false
@@ -93,6 +97,7 @@ jobs:
     name: Poll Pipeline Execution
     needs:
       - start-pipeline-execution
+    if: ${{ inputs.gh_codepipeline_poll == true }}
     runs-on: ubuntu-latest
     steps:
 
