@@ -1,3 +1,4 @@
+---
 name: AWS LZ CD
 
 on:
@@ -87,7 +88,7 @@ jobs:
           AWS_CODEPIPELINE_NAME: ${{ inputs.aws_codepipeline_name }}
           AWS_REGION: ${{ inputs.aws_region }}
         run: |
-          set +xe
+          set +xeo pipefail
           aws codepipeline start-pipeline-execution --name "${AWS_CODEPIPELINE_NAME}" | tee output.json
           AWS_PIPELINE_EXECUTION_ID=$(jq -r .pipelineExecutionId output.json)
           echo "Pipeline started, url: https://${AWS_REGION}.console.aws.amazon.com/codesuite/codepipeline/pipelines/${AWS_CODEPIPELINE_NAME}/executions/${AWS_PIPELINE_EXECUTION_ID}/visualization?region=${AWS_REGION}"
