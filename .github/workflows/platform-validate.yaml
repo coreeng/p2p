@@ -1,4 +1,4 @@
-name: Validate
+name: Developer Platform Validate
 
 on:
   workflow_call:
