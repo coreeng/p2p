@@ -1,0 +1,170 @@
+name: Validate
+
+on:
+  workflow_call:
+    inputs:
+      action:
+        required: true
+        type: string
+
+jobs:
+  dockerfiles:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Lint Dockerfiles
+        id: dockerfiles-lint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: Dockerfile
+          recursive: true
+
+  terraform:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        id: setup-terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.5.7"
+
+      - name: Setup Terragrunt
+        id: setup-terragrunt
+        run: |
+          sudo wget -q -O /bin/terragrunt "https://github.com/gruntwork-io/terragrunt/releases/download/v0.51.9/terragrunt_linux_amd64"
+          sudo chmod +x /bin/terragrunt
+          terragrunt -v
+
+      - name: Check Terragrunt format
+        id: tg-hclfmt-check
+        shell: bash
+        run: make tg-hclfmt-check
+
+      - name: Check Terraform format
+        id: tf-fmt-check
+        shell: bash
+        run: make tf-fmt-check
+
+  find-go-modules:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: set-matrix
+        run: |
+          PATHS=$(find . -mindepth 2 -not -path "*/vendor/*" -type f -name go.sum -printf '{"workdir":"%h"},')
+          MATRIX="$(printf '{"include":[%s]}' "${PATHS%?}")"
+          echo "${MATRIX}" | yq -o json
+          echo "matrix=${MATRIX}" >> "${GITHUB_OUTPUT}"
+
+  lint-and-test-go-modules:
+    needs: find-go-modules
+    strategy:
+      matrix: ${{fromJson(needs.find-go-modules.outputs.matrix)}}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.0'
+          cache-dependency-path: ${{ matrix.workdir }}
+      - uses: golangci/golangci-lint-action@v4
+        with:
+          args: --timeout=30m
+          working-directory: ${{ matrix.workdir }}
+      - run: go test ./...
+        if: matrix.workdir != './functional-tests'
+        working-directory: ${{ matrix.workdir }}
+
+  tenants:
+    runs-on: ubuntu-latest
+    needs: lint-and-test-go-modules
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.0'
+      - name: Validate Tenants
+        id: tenants-validate
+        shell: bash
+        run: make tenants-validate
+
+  helm-charts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Helm lint
+        id: helm-lint
+        run: |
+          make helm-lint
+
+  gcp-init:
+    name: check usage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python version
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.11
+
+      - name: Create and start virtual environment
+        run: |
+          python3 -m venv venv
+          source venv/bin/activate
+
+      - name: Install dependencies
+        working-directory: gcp-init
+        run: pip install -r requirements.txt
+
+      - name: Lint (black)
+        uses: psf/black@stable
+        with:
+          src: "./gcp-init"
+          options: "--check --verbose --line-length 120"
+          version: "~= 23.0"
+
+      - name: Print usage
+        working-directory: gcp-init
+        run: |
+          python gcp-init.py --help
+          python gcp-init.py root-init --help
+          python gcp-init.py env-init --help
+
+  multi-tenant-kubernetes-access:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: d3adb5/helm-unittest-action@v2
+        with:
+          helm-version: v3.14.2
+      - name: Test Helm
+        working-directory: ./modules/multi-tenant-kubernetes-access/charts/tenant-provisioner
+        run: |
+          helm unittest -f 'tests/*.yaml' .
+
+  platform-monitoring:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Promtool
+        run: |
+          sudo curl -sSL https://github.com/prometheus/prometheus/releases/download/v2.48.0/prometheus-2.48.0.linux-amd64.tar.gz | tar xvz -C /tmp
+          sudo mv /tmp/prometheus-2.48.0.linux-amd64/promtool /bin/
+          promtool --version
+
+      - name: Test Prometheus alert rules
+        working-directory: ./modules/platform-monitoring/charts/platform-alerting/alert-rules
+        run: |
+          promtool test rules */test/*
