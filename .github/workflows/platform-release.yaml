@@ -12,6 +12,9 @@ on:
       image_description:
         required: true
         type: string
+      docker_file_path:
+        required: true
+        type: string
     outputs:
       version:
         value: ${{ jobs.generate.outputs.version }}
@@ -103,7 +106,7 @@ jobs:
           context: .
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          file: Dockerfile
+          file: ${{ inputs.docker_file_path }}
           push: true
           build-args: |
             SOURCE_DATE_EPOCH=${{ steps.source-date-epoch.outputs.timestamp }}
