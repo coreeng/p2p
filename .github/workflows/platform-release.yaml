@@ -13,8 +13,14 @@ on:
         required: true
         type: string
       docker_file_path:
-        required: true
+        required: false
+        default: "./Dockerfile"
         type: string
+      docker_context:
+        required: false
+        default: "."
+        type: string
+
     outputs:
       version:
         value: ${{ jobs.generate.outputs.version }}
@@ -103,7 +109,7 @@ jobs:
         name: Build and push
         uses: docker/build-push-action@v5
         with:
-          context: .
+          context: ${{ inputs.docker_context }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           file: ${{ inputs.docker_file_path }}
