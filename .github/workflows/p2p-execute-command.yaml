@@ -105,20 +105,16 @@ jobs:
           token_format: access_token
           access_token_lifetime: 600s
 
-      - name: Setup Google Cloud SDK
-        id: setup-gcloud
-        if: ${{ inputs.dry-run == false && env.SKIP == 'false' }}
-        uses: google-github-actions/setup-gcloud@v2
-        with:
-          install_components: gke-gcloud-auth-plugin
-
       - name: Setup kubeconfig
         id: setup-kubeconfig
         if: ${{ inputs.dry-run == false && env.SKIP == 'false' }}
-        shell: bash
-        run: |
-          gcloud container clusters get-credentials --project $PROJECT_ID --zone $REGION --internal-ip ${{ env.DPLATFORM }}
-          kubectl config set clusters.gke_${{ env.PROJECT_ID }}_${{ inputs.region }}_${{ env.DPLATFORM }}.proxy-url http://localhost:57755
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          context_name: gke_${{ env.PROJECT_ID }}_${{ inputs.region }}_${{ env.DPLATFORM }}
+          cluster_name: ${{ env.DPLATFORM }}
+          location: ${{ inputs.region }}
+          project_id: ${{ env.PROJECT_ID }}
+          use_internal_ip: true
 
       - name: Login to Artifact Registry
         uses: docker/login-action@v3
@@ -155,5 +151,6 @@ jobs:
         run: |
           nohup sh -c "iapc --log-level warn to-instance ${{ env.DPLATFORM }}-bastion -p 3128 --listen 127.0.0.1:57755 --project ${{ env.PROJECT_ID }} --zone ${{ inputs.zone }}" &
           sleep 4
+          kubectl config set clusters.${{ env.DPLATFORM }}.proxy-url http://localhost:57755
           kubectl cluster-info
           make ${{ inputs.command }}
