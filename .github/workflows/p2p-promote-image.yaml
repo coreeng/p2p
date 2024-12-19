@@ -128,22 +128,16 @@ jobs:
           token_format: access_token
           access_token_lifetime: 600s
 
-      - name: Setup Google Cloud SDK
-        id: setup-gcloud
-        if: inputs.dry-run == false && inputs.connect-to-k8s == true
-        uses: google-github-actions/setup-gcloud@v2
-        with:
-          install_components: gke-gcloud-auth-plugin
-
       - name: Setup kubeconfig
         id: setup-kubeconfig
         if: inputs.dry-run == false && inputs.connect-to-k8s == true
-        env:
-          CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE: ${{ steps.auth-source.outputs.credentials_file_path }}
-        shell: bash
-        run: |
-          gcloud container clusters get-credentials --project $PROJECT_ID --zone ${{ inputs.region }} --internal-ip ${{ env.DPLATFORM }}
-          kubectl config set clusters.gke_${{ env.PROJECT_ID }}_${{ inputs.region }}_${{ env.DPLATFORM }}.proxy-url http://localhost:57755
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          context_name: gke_${{ env.PROJECT_ID }}_${{ inputs.region }}_${{ env.DPLATFORM }}
+          cluster_name: ${{ env.DPLATFORM }}
+          location: ${{ inputs.region }}
+          project_id: ${{ env.PROJECT_ID }}
+          use_internal_ip: true
 
       - name: Setup corectl
         id: setup-corectl
@@ -182,6 +176,7 @@ jobs:
         run: |
           nohup sh -c "while true ; do gcloud compute start-iap-tunnel ${{ env.DPLATFORM }}-bastion 3128 --local-host-port localhost:57755 --project ${{ env.PROJECT_ID }}  --zone ${{ inputs.zone }}  ; done" &
           sleep 4
+          kubectl config set clusters.${{ env.DPLATFORM }}.proxy-url http://localhost:57755
           kubectl cluster-info
 
       - name: Promote
