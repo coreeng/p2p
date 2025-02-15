@@ -25,6 +25,14 @@ on:
         required: false
         type: string
         default: europe-west2
+      subnamespace:
+        required: false
+        type: string
+        default: ''
+      app-name:
+        required: false
+        type: string
+        default: ''
       version:
         required: true
         type: string
@@ -35,10 +43,6 @@ on:
         required: false
         type: string
         default: europe-west2-a
-      optional:
-        required: false
-        type: boolean
-        default: false
       pre-targets:
         description: |
           Make targets to run before the command
@@ -60,6 +64,7 @@ jobs:
   exec:
     name: '${{ inputs.command }} (${{ inputs.github_env }})'
     runs-on: ubuntu-24.04
+    concurrency: ${{ inputs.github_env }}/${{ vars.TENANT_NAME }}-${{ inputs.app-name }}-${{ inputs.subnamespace }}
     environment: ${{ inputs.github_env }}
     env:
       env_vars: ${{ secrets.env_vars }}
@@ -75,7 +80,6 @@ jobs:
       SERVICE_ACCOUNT: p2p-${{ vars.TENANT_NAME }}@${{ vars.PROJECT_ID }}.iam.gserviceaccount.com
       TENANT_NAME: ${{ vars.TENANT_NAME }}
       WORKLOAD_IDENTITY_PROVIDER: projects/${{ vars.PROJECT_NUMBER }}/locations/global/workloadIdentityPools/p2p-${{ vars.TENANT_NAME }}/providers/p2p-${{ vars.TENANT_NAME }}
-      SKIP: ${{ inputs.optional }}
     steps:
       - name: print env context
         run: |
@@ -88,22 +92,9 @@ jobs:
         with:
           ref: ${{ inputs.dry-run == false && inputs.checkout-version || '' }}
 
-      - name: Skip job when optional and make target not exist
-        if: ${{ inputs.optional == true }}
-        working-directory: ${{ inputs.working-directory }}
-        id: is_optional
-        run: |
-          declare -r optional_target=${{ inputs.command }}
-          # match target in format: `.PHONY: <target_name>`, skip if commented out
-          if grep "^[^#]*.PHONY.*${optional_target}.*" ./Makefile; then
-            echo "SKIP=false" >> $GITHUB_ENV
-          else
-            echo "WARNING: No Makefile target [$optional_target], skipping job"
-          fi
-
       - name: Authenticate to Google Cloud
         id: auth
-        if: ${{ inputs.dry-run == false && env.SKIP == 'false' }}
+        if: ${{ inputs.dry-run == false }}
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ env.WORKLOAD_IDENTITY_PROVIDER }}
@@ -114,14 +105,14 @@ jobs:
 
       - name: Setup Google Cloud SDK
         id: setup-gcloud
-        if: ${{ inputs.dry-run == false && env.SKIP == 'false' }}
+        if: ${{ inputs.dry-run == false }}
         uses: google-github-actions/setup-gcloud@v2
         with:
           skip_install: true
 
       - name: Setup kubeconfig
         id: setup-kubeconfig
-        if: ${{ inputs.dry-run == false && env.SKIP == 'false' }}
+        if: ${{ inputs.dry-run == false }}
         uses: google-github-actions/get-gke-credentials@v2
         with:
           context_name: gke_${{ env.PROJECT_ID }}_${{ inputs.region }}_${{ env.DPLATFORM }}
@@ -132,39 +123,99 @@ jobs:
 
       - name: Test kubeconfig
         id: test-kubeconfig
-        if: ${{ inputs.dry-run == false && env.SKIP == 'false' }}
+        if: ${{ inputs.dry-run == false }}
         run: |
           kubectl cluster-info
 
+      - name: Setup Docker Buildx
+        id: setup-docker-buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            default-load=true
+
+      - name: Expose GitHub Runtime
+        id: expose-github-runtime
+        uses: crazy-max/ghaction-github-runtime@v3
+
       - name: Login to Artifact Registry
         uses: docker/login-action@v3
-        if: ${{ inputs.dry-run == false && env.SKIP == 'false' }}
+        if: ${{ inputs.dry-run == false }}
         with:
           registry: europe-west2-docker.pkg.dev
           username: oauth2accesstoken
           password: ${{ steps.auth.outputs.access_token }}
-
-      - name: Decode environment variables
-        if:  ${{ env.SKIP == 'false' }}
-        run: |
-          for i in $env_vars; do
-            i=$(echo $i | sed 's/=.*//g')=$(echo ${i#*=})
-            echo ::add-mask::${i#*=}
-            printf '%s\n' $i >> $GITHUB_ENV
-          done
 
       - name: Login to tenant provided registry
         env:
           REGISTRY_USER: ${{ secrets.container_registry_user }}
           REGISTRY_PAT: ${{ secrets.container_registry_pat }}
           REGISTRY_URL: ${{ secrets.container_registry_url }}
-        if:  ${{ env.SKIP == 'false' && env.REGISTRY_USER && env.REGISTRY_PAT }}
+        if:  ${{ env.REGISTRY_USER && env.REGISTRY_PAT }}
         run: |
           echo ${{ env.REGISTRY_PAT }} | docker login ${{ env.REGISTRY_URL }} -u ${{ env.REGISTRY_USER }} --password-stdin
 
-      - name: Run Command
+      - name: ${{ inputs.subnamespace == '' && 'Setup subnamespace' || format('Setup subnamespace {0}', inputs.app-name != vars.TENANT_NAME && format('{0}-{1}-{2}', vars.TENANT_NAME, inputs.app-name, inputs.subnamespace) || format('{0}-{1}', vars.TENANT_NAME, inputs.subnamespace)) }}
+        id: setup-subnamespace
+        if: ${{ inputs.dry-run == false && inputs.app-name != '' && inputs.subnamespace != '' }}
+        run: |
+          if [[ "${{ vars.TENANT_NAME }}" == "${{ inputs.app-name }}" ]]; then
+            SUBNAMESPACE="${{ vars.TENANT_NAME }}-${{ inputs.subnamespace }}"
+          else
+            SUBNAMESPACE="${{ vars.TENANT_NAME }}-${{ inputs.app-name }}-${{ inputs.subnamespace }}"
+          fi
+          set -euo pipefail
+          cat <<EOF | kubectl apply -n "${{ vars.TENANT_NAME }}" -f -
+          apiVersion: hnc.x-k8s.io/v1alpha2
+          kind: SubnamespaceAnchor
+          metadata:
+            name: ${SUBNAMESPACE}
+          EOF
+          until [ "$(kubectl -n "${{ vars.TENANT_NAME }}" get subnamespaceanchor "${SUBNAMESPACE}" -o jsonpath='{.status.status}' 2>/dev/null)" = "Ok" ]; do
+            echo "Waiting for subnamespace ${SUBNAMESPACE} to be ready..."
+            sleep 2
+          done
+          kubectl config set-context --current --namespace="${SUBNAMESPACE}"
+          echo ""
+          kubectl get ns "${SUBNAMESPACE}"
+
+      - name: Decode environment variables
+        run: |
+          for i in $env_vars; do
+            i=$(echo $i | sed 's/=.*//g')=$(echo ${i#*=})
+            echo ::add-mask::${i#*=}
+            printf '%s\n' $i >> "${GITHUB_ENV}"
+          done
+
+      - name: Set p2p variables
+        id: setup-p2p-variables
+        run: |
+          env | grep "^P2P_" | sort
+          export P2P_TENANT_NAME=${{ vars.TENANT_NAME }}
+          export P2P_APP_NAME=${{ inputs.app-name }}
+          export P2P_VERSION=${{ inputs.version }}
+          export P2P_REGISTRY=${{ inputs.region }}-docker.pkg.dev/${{ vars.PROJECT_ID }}/tenant/${{ vars.TENANT_NAME }}
+          export P2P_REGISTRY_FAST_FEEDBACK_PATH=fast-feedback
+          export P2P_REGISTRY_EXTENDED_TEST_PATH=extended-test
+          export P2P_REGISTRY_PROD_PATH=prod
+          export P2P_REGISTRY_FAST_FEEDBACK=${P2P_REGISTRY}/${P2P_REGISTRY_FAST_FEEDBACK_PATH}
+          export P2P_REGISTRY_EXTENDED_TEST=${P2P_REGISTRY}/${P2P_REGISTRY_EXTENDED_TEST_PATH}
+          export P2P_REGISTRY_PROD=${P2P_REGISTRY}/${P2P_REGISTRY_PROD_PATH}
+          if [[ "${{ vars.TENANT_NAME }}" == "${{ inputs.app-name }}" ]]; then
+            P2P_NAMESPACE="${{ vars.TENANT_NAME }}"
+          else
+            P2P_NAMESPACE="${{ vars.TENANT_NAME }}-${{ inputs.app-name }}"
+          fi
+          export P2P_NAMESPACE_FUNCTIONAL=${P2P_NAMESPACE}-functional
+          export P2P_NAMESPACE_NFT=${P2P_NAMESPACE}-nft
+          export P2P_NAMESPACE_INTEGRATION=${P2P_NAMESPACE}-integration
+          export P2P_NAMESPACE_EXTENDED=${P2P_NAMESPACE}-extended
+          export P2P_NAMESPACE_PROD=${P2P_NAMESPACE}-prod
+          env | grep "^P2P_" | sort | tee "${GITHUB_ENV}"
+
+      - name: Run make ${{ inputs.command }}
         id: run-command
-        if: ${{ inputs.dry-run == false && env.SKIP == 'false' }}
+        if: ${{ inputs.dry-run == false }}
         working-directory: ${{ inputs.working-directory }}
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ steps.auth.outputs.credentials_file_path }}

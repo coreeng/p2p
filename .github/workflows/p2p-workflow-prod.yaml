@@ -30,6 +30,10 @@ on:
         required: false
         type: string
         default: europe-west2
+      app-name:
+        required: false
+        type: string
+        default: ''
       version:
         required: false
         type: string
@@ -54,8 +58,10 @@ jobs:
       fail-fast: false
     with:
       command: p2p-prod
+      subnamespace: prod
       region: ${{ inputs.region }}
       github_env: ${{ matrix.deploy_env }}
+      app-name: ${{ inputs.app-name }}
       version: ${{ inputs.version }}
       dry-run: ${{ inputs.dry-run }}
       working-directory: ${{ inputs.working-directory }}

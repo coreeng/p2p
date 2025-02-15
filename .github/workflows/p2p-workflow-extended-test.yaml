@@ -34,6 +34,10 @@ on:
         required: false
         type: string
         default: '.'
+      app-name:
+        required: false
+        type: string
+        default: ''
       version:
         required: true
         type: string
@@ -59,7 +63,9 @@ jobs:
       fail-fast: false
     with:
       command: p2p-extended-test
+      subnamespace: extended
       github_env: ${{ matrix.deploy_env }}
+      app-name: ${{ inputs.app-name }}
       version: ${{ inputs.version }}
       dry-run: ${{ inputs.dry-run }}
       working-directory: ${{ inputs.working-directory }}
@@ -78,6 +84,7 @@ jobs:
       source_matrix: ${{ inputs.source }}
       dest_github_env: ${{ matrix.deploy_env }}
       promotion-stage: prod
+      app-name: ${{ inputs.app-name }}
       version: ${{ inputs.version  }}
       dry-run: ${{ inputs.dry-run }}
       working-directory: ${{ inputs.working-directory }}
