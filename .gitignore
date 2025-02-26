@@ -1,3 +1,4 @@
+*.swp
 .idea/
 .history/
 .vscode/

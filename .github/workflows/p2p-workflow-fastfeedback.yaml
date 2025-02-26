@@ -22,6 +22,10 @@ on:
         required: false
         type: string
         default: ''
+      app-name:
+        required: false
+        type: string
+        default: ''
       version:
         required: true
         type: string
@@ -62,6 +66,7 @@ jobs:
     with:
       command: p2p-build
       github_env: ${{ matrix.deploy_env }}
+      app-name: ${{ inputs.app-name }}
       version: ${{ inputs.version }}
       checkout-version: ${{ inputs.checkout-version }}
       dry-run: ${{ inputs.dry-run }}
@@ -81,8 +86,10 @@ jobs:
       fail-fast: false
     with:
       command: p2p-functional
+      subnamespace: functional
       region: ${{ inputs.region }}
       github_env: ${{ matrix.deploy_env }}
+      app-name: ${{ inputs.app-name }}
       version: ${{ inputs.version }}
       checkout-version: ${{ inputs.checkout-version }}
       dry-run: ${{ inputs.dry-run }}
@@ -101,8 +108,10 @@ jobs:
       fail-fast: false
     with:
       command: p2p-nft
+      subnamespace: nft
       region: ${{ inputs.region }}
       github_env: ${{ matrix.deploy_env }}
+      app-name: ${{ inputs.app-name }}
       version: ${{ inputs.version }}
       checkout-version: ${{ inputs.checkout-version }}
       dry-run: ${{ inputs.dry-run }}
@@ -121,9 +130,10 @@ jobs:
       fail-fast: false
     with:
       command: p2p-integration
-      optional: true
+      subnamespace: integration
       region: ${{ inputs.region }}
       github_env: ${{ matrix.deploy_env }}
+      app-name: ${{ inputs.app-name }}
       version: ${{ inputs.version }}
       checkout-version: ${{ inputs.checkout-version }}
       dry-run: ${{ inputs.dry-run }}
@@ -144,6 +154,7 @@ jobs:
       dest_github_env: ${{ matrix.deploy_env }}
       region: ${{ inputs.region }}
       promotion-stage: extended-test
+      app-name: ${{ inputs.app-name }}
       version: ${{ inputs.version }}
       checkout-version: ${{ inputs.checkout-version }}
       dry-run: ${{ inputs.dry-run }}
