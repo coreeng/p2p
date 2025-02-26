@@ -4,7 +4,7 @@ This is a reusable Github Actions P2P for CECG's Core Platform
 
 ## Version 1
 
-Supported quality dates:
+Supported quality gates:
 * fastfeedback
 
 
@@ -86,7 +86,7 @@ By default, version will be created and used assuming `v` prefix, such as `v0.25
  
 ### Application Versioning
 
-The `p2p-version` workflow has the following behavior:
+The `p2p-version` workflow has the following behaviour:
 
 * When on the main branch:
   * If no versions exist, it starts with v0.0.0
@@ -141,7 +141,7 @@ Every task will have kubectl access as your tenant
 #### p2p-nft
 #### p2p-promote-to-extended-test
 
-If you want to execute task after the `extended-test` or `prod` promotion, you can, by setting a depedency on your promotion task, for example:
+If you want to execute task after the `extended-test` or `prod` promotion, you can, by setting a dependency on your promotion task, for example:
 ```
 .PHONY: p2p-promote-to-extended-test
 p2p-promote-to-extended-test: promote-image-to-extended-tests deploy-to-dev
