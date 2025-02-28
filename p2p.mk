@@ -30,6 +30,14 @@ p2p-help:
 %: p2p_app_name = $(P2P_APP_NAME)
 %: p2p_version = $(P2P_VERSION)
 
+.PHONY: p2p-image
+p2p-image:
+	@echo $(P2P_IMAGE_NAMES) | awk '{ print $1 }'
+
+.PHONY: p2p-images
+p2p-images:
+	@echo $(P2P_IMAGE_NAMES)
+
 .PHONY: p2p-build ## Build the app
 %-app: p2p_registry=$(P2P_REGISTRY_FAST_FEEDBACK)
 %-app: p2p_image_tag=$(P2P_REGISTRY_FAST_FEEDBACK)/$(if $(filter-out undefined,$(origin 1)),$(1),$(P2P_APP_NAME)):$(P2P_VERSION)
