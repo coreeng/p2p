@@ -64,8 +64,10 @@ jobs:
   exec:
     name: '${{ inputs.command }} (${{ inputs.github_env }})'
     runs-on: ubuntu-24.04
-    concurrency: ${{ inputs.github_env }}/${{ vars.TENANT_NAME }}-${{ inputs.app-name }}-${{ inputs.subnamespace }}
     environment: ${{ inputs.github_env }}
+    concurrency:
+      group: ${{ inputs.github_env }}/${{ vars.TENANT_NAME }}-${{ inputs.app-name }}-${{ inputs.subnamespace }}
+      cancel-in-progress: false
     env:
       env_vars: ${{ secrets.env_vars }}
       BASE_DOMAIN: ${{ vars.BASE_DOMAIN }}
