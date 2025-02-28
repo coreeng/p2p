@@ -36,8 +36,10 @@ jobs:
   core-platform:
     name: ${{ inputs.name }}
     runs-on: ubuntu-24.04
-    concurrency: ${{ inputs.environment }}-${{ github.ref }}
     environment: ${{ inputs.environment }}
+    concurrency:
+      group: ${{ inputs.environment }}-${{ github.ref }}
+      cancel-in-progress: false
 
     env:
       ENV: ${{ inputs.environment }}
