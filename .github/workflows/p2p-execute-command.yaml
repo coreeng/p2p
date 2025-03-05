@@ -220,6 +220,7 @@ jobs:
         if: ${{ inputs.dry-run == false }}
         working-directory: ${{ inputs.working-directory }}
         env:
+          GITHUB_TOKEN: ${{ github.token }}
           GOOGLE_APPLICATION_CREDENTIALS: ${{ steps.auth.outputs.credentials_file_path }}
         run: |
           make ${{ inputs.command }}
