@@ -3,7 +3,7 @@ MAKEFLAGS += --warn-undefined-variables
 # Set p2p variables for local testing
 P2P_TENANT_NAME ?= default-tenant
 P2P_APP_NAME ?= default-app
-P2P_VERSION ?= $(shell git rev-parse --short HEAD)
+P2P_VERSION ?= 0.0.0-$(shell git rev-parse --short HEAD)
 P2P_REGISTRY ?= localhost/local
 P2P_REGISTRY_FAST_FEEDBACK_PATH ?= fast-feedback
 P2P_REGISTRY_EXTENDED_TEST_PATH ?= extended-test
