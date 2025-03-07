@@ -32,7 +32,7 @@ p2p-help:
 
 .PHONY: p2p-image
 p2p-image:
-	@echo $(P2P_IMAGE_NAMES) | awk '{ print $1 }'
+	@echo $(P2P_IMAGE_NAMES) | awk '{ print $$1 }'
 
 .PHONY: p2p-images
 p2p-images:
