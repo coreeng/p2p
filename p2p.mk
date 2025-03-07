@@ -44,21 +44,21 @@ p2p-images:
 %-app: p2p_image_cache=--cache-from=type=gha,scope=$(if $(filter-out undefined,$(origin 1)),$(1),$(P2P_APP_NAME)) --cache-to=type=gha,scope=$(if $(filter-out undefined,$(origin 1)),$(1),$(P2P_APP_NAME)),mode=max
 
 .PHONY: p2p-functional ## Run functional tests
-%-functional: p2p_app_url_suffix=-$(P2P_TENANT_NAME)-functional
+%-functional: p2p_app_url_suffix=-functional
 %-functional: p2p_namespace=$(P2P_NAMESPACE_FUNCTIONAL)
 %-functional: p2p_registry=$(P2P_REGISTRY_FAST_FEEDBACK)
 %-functional: p2p_image_tag=$(P2P_REGISTRY_FAST_FEEDBACK)/$(if $(filter-out undefined,$(origin 1)),$(1),$(P2P_APP_NAME))-functional:$(P2P_VERSION)
 %-functional: p2p_image_cache=--cache-from=type=gha,scope=$(if $(filter-out undefined,$(origin 1)),$(1),$(P2P_APP_NAME))-functional --cache-to=type=gha,scope=$(if $(filter-out undefined,$(origin 1)),$(1),$(P2P_APP_NAME))-functional,mode=max
 
 .PHONY: p2p-nft ## Run NFT tests
-%-nft: p2p_app_url_suffix=-$(P2P_TENANT_NAME)-nft
+%-nft: p2p_app_url_suffix=-nft
 %-nft: p2p_namespace=$(P2P_NAMESPACE_NFT)
 %-nft: p2p_registry=$(P2P_REGISTRY_FAST_FEEDBACK)
 %-nft: p2p_image_tag=$(P2P_REGISTRY_FAST_FEEDBACK)/$(if $(filter-out undefined,$(origin 1)),$(1),$(P2P_APP_NAME))-nft:$(P2P_VERSION)
 %-nft: p2p_image_cache=--cache-from=type=gha,scope=$(if $(filter-out undefined,$(origin 1)),$(1),$(P2P_APP_NAME))-nft --cache-to=type=gha,scope=$(if $(filter-out undefined,$(origin 1)),$(1),$(P2P_APP_NAME))-nft,mode=max
 
 .PHONY: p2p-integration ## Run integration tests
-%-integration: p2p_app_url_suffix=-$(P2P_TENANT_NAME)-integration
+%-integration: p2p_app_url_suffix=-integration
 %-integration: p2p_namespace=$(P2P_NAMESPACE_INTEGRATION)
 %-integration: p2p_registry=$(P2P_REGISTRY_FAST_FEEDBACK)
 %-integration: p2p_image_tag=$(P2P_REGISTRY_FAST_FEEDBACK)/$(if $(filter-out undefined,$(origin 1)),$(1),$(P2P_APP_NAME))-integration:$(P2P_VERSION)
@@ -74,7 +74,7 @@ p2p-promote-to-extended-test:
 	;)
 
 .PHONY: p2p-extended-test ## Run extended tests
-%-extended-test: p2p_app_url_suffix=-$(P2P_TENANT_NAME)-extended
+%-extended-test: p2p_app_url_suffix=-extended
 %-extended-test: p2p_namespace=$(P2P_NAMESPACE_EXTENDED)
 %-extended-test: p2p_registry=$(P2P_REGISTRY_EXTENDED_TEST)
 %-extended-test: p2p_image_tag=$(P2P_REGISTRY_EXTENDED_TEST)/$(if $(filter-out undefined,$(origin 1)),$(1),$(P2P_APP_NAME))-extended:$(P2P_VERSION)
