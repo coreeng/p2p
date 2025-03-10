@@ -42,6 +42,7 @@ jobs:
       cancel-in-progress: false
 
     env:
+      GITHUB_TOKEN: ${{ github.token }}
       ENV: ${{ inputs.environment }}
       PLATFORM: ${{ inputs.platform }}
       TERRAFORM_ARGS: "-auto-approve"
