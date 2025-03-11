@@ -2,6 +2,15 @@ name: Core Platform
 
 on:
   workflow_call:
+    secrets:
+      env_vars:
+        required: false
+      cecg-registry-username:
+        description: 'The username for the GHCR registry to pull the Core Platform image from'
+        required: true
+      cecg-registry-secret:
+        description: 'The secret for the GHCR registry to pull the Core Platform image from'
+        required: true
     inputs:
       name:
         required: true
@@ -24,13 +33,6 @@ on:
         type: string
       post-targets:
         type: string
-    secrets:
-      cecg-registry-username:
-        description: 'The username for the GHCR registry to pull the Core Platform image from'
-        required: true
-      cecg-registry-secret:
-        description: 'The secret for the GHCR registry to pull the Core Platform image from'
-        required: true
 
 jobs:
   core-platform:
@@ -42,6 +44,7 @@ jobs:
       cancel-in-progress: false
 
     env:
+      env_vars: ${{ secrets.env_vars }}
       GITHUB_TOKEN: ${{ github.token }}
       ENV: ${{ inputs.environment }}
       PLATFORM: ${{ inputs.platform }}
@@ -102,6 +105,14 @@ jobs:
         run: |
           mv "${GITHUB_WORKSPACE}/environments" "/app/environments"
           mv "${GITHUB_WORKSPACE}/tenants" "/app/tenants"
+
+      - name: Decode environment variables
+        run: |
+          for i in $env_vars; do
+            i=$(echo $i | sed 's/=.*//g')=$(echo ${i#*=})
+            echo ::add-mask::${i#*=}
+            printf '%s\n' $i >> "${GITHUB_ENV}"
+          done
 
       - id: make-targets
         if: inputs.targets != ''
