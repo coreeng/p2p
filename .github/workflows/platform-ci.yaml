@@ -2,6 +2,13 @@ name: Core Platform CI
 
 on:
   workflow_call:
+    secrets:
+      env_vars:
+        required: false
+      cecg-registry-username:
+        required: true
+      cecg-registry-secret:
+        required: true
     inputs:
       environment:
         type: string
@@ -16,11 +23,6 @@ on:
         type: boolean
         default: false
         required: false
-    secrets:
-      cecg-registry-username:
-        required: true
-      cecg-registry-secret:
-        required: true
 
 jobs:
   changes:
@@ -51,6 +53,7 @@ jobs:
     uses: ./.github/workflows/platform-execute-command.yaml
     if: ${{ inputs.release_build == true || needs.changes.outputs.environments == 'true' }}
     secrets:
+      env_vars: ${{ secrets.env_vars }}
       cecg-registry-username: ${{ secrets.cecg-registry-username }}
       cecg-registry-secret: ${{ secrets.cecg-registry-secret }}
     with:
@@ -67,6 +70,7 @@ jobs:
     uses: ./.github/workflows/platform-execute-command.yaml
     if: ${{ inputs.release_build == true || needs.changes.outputs.environments == 'true' }}
     secrets:
+      env_vars: ${{ secrets.env_vars }}
       cecg-registry-username: ${{ secrets.cecg-registry-username }}
       cecg-registry-secret: ${{ secrets.cecg-registry-secret }}
     with:
@@ -91,6 +95,7 @@ jobs:
     needs: [changes, environments-validate, matrix]
     if: ${{ inputs.release_build == true || needs.changes.outputs.environments == 'true' }}
     secrets:
+      env_vars: ${{ secrets.env_vars }}
       cecg-registry-username: ${{ secrets.cecg-registry-username }}
       cecg-registry-secret: ${{ secrets.cecg-registry-secret }}
     strategy:
@@ -111,6 +116,7 @@ jobs:
     needs: [changes]
     if: ${{ inputs.release_build == false && needs.changes.outputs.environments != 'true' && needs.changes.outputs.tenants == 'true' }}
     secrets:
+      env_vars: ${{ secrets.env_vars }}
       cecg-registry-username: ${{ secrets.cecg-registry-username }}
       cecg-registry-secret: ${{ secrets.cecg-registry-secret }}
     with:
