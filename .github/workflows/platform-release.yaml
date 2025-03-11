@@ -48,6 +48,9 @@ jobs:
       contents: read
       packages: write
 
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+
     steps:
       - id: checkout
         name: Checkout
