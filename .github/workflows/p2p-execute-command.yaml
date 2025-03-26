@@ -144,7 +144,7 @@ jobs:
         uses: docker/login-action@v3
         if: ${{ inputs.dry-run == false }}
         with:
-          registry: europe-west2-docker.pkg.dev
+          registry: ${{ inputs.region }}-docker.pkg.dev
           username: oauth2accesstoken
           password: ${{ steps.auth.outputs.access_token }}
 
