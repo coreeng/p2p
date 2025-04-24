@@ -118,7 +118,7 @@ jobs:
       working-directory: ${{ inputs.working-directory }}
 
   integration-test:
-    needs: [build]
+    needs: [functional-test, nft-test]
     uses: ./.github/workflows/p2p-execute-command.yaml
     secrets:
       env_vars: ${{ secrets.env_vars }}
@@ -141,7 +141,7 @@ jobs:
 
   promote:
     name: promote
-    needs: [nft-test, functional-test, integration-test]
+    needs: [integration-test]
     if: success() && ( github.ref == inputs.main-branch || github.ref_type == 'tag' )
     secrets:
       env_vars: ${{ secrets.env_vars }}
