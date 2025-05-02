@@ -64,6 +64,7 @@ jobs:
     with:
       command: p2p-extended-test
       subnamespace: extended
+      region: ${{ inputs.region }}
       github_env: ${{ matrix.deploy_env }}
       app-name: ${{ inputs.app-name }}
       version: ${{ inputs.version }}
@@ -83,6 +84,7 @@ jobs:
     with:
       source_matrix: ${{ inputs.source }}
       dest_github_env: ${{ matrix.deploy_env }}
+      region: ${{ inputs.region }}
       promotion-stage: prod
       app-name: ${{ inputs.app-name }}
       version: ${{ inputs.version  }}

@@ -31,6 +31,10 @@ on:
       image-name:
         required: true
         type: string
+      region:
+        required: false
+        type: string
+        default: europe-west2
 
 jobs:
   get-latest-version:
@@ -47,3 +51,4 @@ jobs:
       image-name: ${{ inputs.image-name }}
       dry-run: ${{ inputs.dry-run }}
       working-directory: ${{ inputs.working-directory }}
+      region: ${{ inputs.region }}
