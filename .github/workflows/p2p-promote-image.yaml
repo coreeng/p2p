@@ -122,7 +122,7 @@ jobs:
           service_account: ${{ env.SOURCE_SERVICE_ACCOUNT }}
           project_id: ${{ env.SOURCE_PROJECT_ID }}
           token_format: access_token
-          access_token_lifetime: 600s
+          access_token_lifetime: 3600s
 
 
       - name: Authenticate to Google Cloud (Dest)
@@ -135,7 +135,7 @@ jobs:
           service_account: ${{ env.SERVICE_ACCOUNT }}
           project_id: ${{ env.PROJECT_ID }}
           token_format: access_token
-          access_token_lifetime: 600s
+          access_token_lifetime: 3600s
 
       - name: Setup Google Cloud SDK
         id: setup-gcloud

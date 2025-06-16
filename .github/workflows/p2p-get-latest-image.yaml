@@ -75,7 +75,7 @@ jobs:
           service_account: ${{ env.SERVICE_ACCOUNT }}
           project_id: ${{ env.PROJECT_ID }}
           token_format: access_token
-          access_token_lifetime: 600s
+          access_token_lifetime: 3600s
 
       - name: Get latest image
         id: get-latest-image
