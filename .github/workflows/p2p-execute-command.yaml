@@ -85,7 +85,7 @@ jobs:
     steps:
       - name: print env context
         run: |
-          yq -p=json -C <<EOT
+          yq 'del(.env_vars)' -p=json -C <<EOT
           ${{ toJSON(env) }}
           EOT
 
