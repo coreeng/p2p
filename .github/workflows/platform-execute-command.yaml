@@ -110,9 +110,9 @@ jobs:
         run: |
           IFS=$'\n'
           for i in $env_vars; do
-            i=$(echo "$i" | sed 's/=.*//g')="${i#*=}"
+            i="${i%%=*}"="${i#*=}"
             echo "::add-mask::${i#*=}"
-            printf '%s\n' "$i" >> "${GITHUB_ENV}"
+            printf '%s\n' "${i//\\/\\\\}" >> "${GITHUB_ENV}"
           done
 
       - id: make-targets
