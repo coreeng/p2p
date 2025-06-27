@@ -180,11 +180,13 @@ jobs:
           corectl version
 
       - name: Decode environment variables
+        shell: bash
         run: |
+          IFS=$'\n'
           for i in $env_vars; do
-            i=$(echo $i | sed 's/=.*//g')=$(echo ${i#*=})
-            echo ::add-mask::${i#*=}
-            printf '%s\n' $i >> "${GITHUB_ENV}"
+            i="${i%%=*}"="${i#*=}"
+            echo "::add-mask::${i#*=}"
+            printf '%s\n' "${i//\\/\\\\}" >> "${GITHUB_ENV}"
           done
 
       - name: Set p2p variables

@@ -107,6 +107,7 @@ jobs:
           mv "${GITHUB_WORKSPACE}/tenants" "/app/tenants"
 
       - name: Decode environment variables
+        shell: bash
         run: |
           IFS=$'\n'
           for i in $env_vars; do
