@@ -1,0 +1,58 @@
+name: validate env variables
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+jobs:
+  validate-environment:
+    name: validate-environmental-vars
+    runs-on: ubuntu-latest
+    env:
+          ENVIRONMENT: ${{ inputs.environment }}
+    steps:
+      - name: start
+        run: |
+          echo "Validating input ${{ inputs.environment }}"
+      - name: validate required environment
+        if: inputs.environment == '' 
+        run: |
+          echo "Defined environment seems to be empty. Please check if the defined environment variable exists"
+          exit 1
+      - name: Validate json of environment
+        run: |
+          echo "${ENVIRONMENT}" | jq .
+      - name: Install json spec
+        run: |
+          pip install json-spec
+      - name: validate schema
+        run: |
+          echo "{\"$schema\": \"http:\/\/json-schema.org\/draft-04\/schema#\",\"type\": \"object\",\"properties\": {\"include\": {\"type\": \"array\",\"items\": [{\"type\": \"object\",\"properties\": {\"deploy_env\": {\"type\": \"string\"}},\"required\": [\"deploy_env\"]}]}},\"required\": [\"include\"]}" > schema.json
+          json validate --schema-file=schema.json --document-json="${ENVIRONMENT}"
+
+  validate-env:
+    name: validate-required-fields
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ fromJSON(inputs.environment) }}
+    environment: ${{ matrix.deploy_env }}
+    steps:
+      - name: validate required fields
+        env:
+          BASE_DOMAIN: ${{ vars.BASE_DOMAIN }}
+          DPLATFORM: ${{ vars.DPLATFORM }}
+          PROJECT_ID: ${{ vars.PROJECT_ID }}
+          PROJECT_NUMBER: ${{ vars.PROJECT_NUMBER }}
+          ENVIRONMENT: ${{ matrix.deploy_env }}
+        run: |
+          declare -i EXIT=0
+          [ -z $BASE_DOMAIN ] && echo "'BASE_DOMAIN' env var is not present in environment '$ENVIRONMENT'" && EXIT=1
+          [ -z $PROJECT_ID ] && echo "'PROJECT_ID' env var is not present in environment '$ENVIRONMENT'" && EXIT=1
+          [ -z $DPLATFORM ] && echo "'DPLATFORM' env var is not present in environment '$ENVIRONMENT'" && EXIT=1
+          [ -z $PROJECT_NUMBER ] && echo "'PROJECT_NUMBER' env var is not present in environment '$ENVIRONMENT'" && EXIT=1
+          exit $EXIT
+
+
+
