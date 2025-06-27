@@ -182,6 +182,7 @@ jobs:
           kubectl get ns "${SUBNAMESPACE}"
 
       - name: Decode environment variables
+        shell: bash
         run: |
           IFS=$'\n'
           for i in $env_vars; do
