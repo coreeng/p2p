@@ -1,4 +1,6 @@
+# Avoid surprises
 MAKEFLAGS += --warn-undefined-variables
+SHELL := /bin/bash
 
 # Set p2p variables for local testing
 P2P_TENANT_NAME ?= default-tenant
@@ -40,6 +42,7 @@ p2p-images:
 
 .PHONY: p2p-build ## Build the app
 %-app: p2p_registry=$(P2P_REGISTRY_FAST_FEEDBACK)
+%-app: p2p_image=$(P2P_REGISTRY_FAST_FEEDBACK)/$(if $(filter-out undefined,$(origin 1)),$(1),$(P2P_APP_NAME))
 %-app: p2p_image_tag=$(P2P_REGISTRY_FAST_FEEDBACK)/$(if $(filter-out undefined,$(origin 1)),$(1),$(P2P_APP_NAME)):$(P2P_VERSION)
 %-app: p2p_image_cache=--cache-from=type=gha,scope=$(if $(filter-out undefined,$(origin 1)),$(1),$(P2P_APP_NAME)) --cache-to=type=gha,scope=$(if $(filter-out undefined,$(origin 1)),$(1),$(P2P_APP_NAME)),mode=max
 
@@ -47,6 +50,7 @@ p2p-images:
 %-functional: p2p_app_url_suffix=-functional
 %-functional: p2p_namespace=$(P2P_NAMESPACE_FUNCTIONAL)
 %-functional: p2p_registry=$(P2P_REGISTRY_FAST_FEEDBACK)
+%-functional: p2p_image=$(P2P_REGISTRY_FAST_FEEDBACK)/$(if $(filter-out undefined,$(origin 1)),$(1),$(P2P_APP_NAME))-functional
 %-functional: p2p_image_tag=$(P2P_REGISTRY_FAST_FEEDBACK)/$(if $(filter-out undefined,$(origin 1)),$(1),$(P2P_APP_NAME))-functional:$(P2P_VERSION)
 %-functional: p2p_image_cache=--cache-from=type=gha,scope=$(if $(filter-out undefined,$(origin 1)),$(1),$(P2P_APP_NAME))-functional --cache-to=type=gha,scope=$(if $(filter-out undefined,$(origin 1)),$(1),$(P2P_APP_NAME))-functional,mode=max
 
@@ -54,6 +58,7 @@ p2p-images:
 %-nft: p2p_app_url_suffix=-nft
 %-nft: p2p_namespace=$(P2P_NAMESPACE_NFT)
 %-nft: p2p_registry=$(P2P_REGISTRY_FAST_FEEDBACK)
+%-nft: p2p_image=$(P2P_REGISTRY_FAST_FEEDBACK)/$(if $(filter-out undefined,$(origin 1)),$(1),$(P2P_APP_NAME))-nft
 %-nft: p2p_image_tag=$(P2P_REGISTRY_FAST_FEEDBACK)/$(if $(filter-out undefined,$(origin 1)),$(1),$(P2P_APP_NAME))-nft:$(P2P_VERSION)
 %-nft: p2p_image_cache=--cache-from=type=gha,scope=$(if $(filter-out undefined,$(origin 1)),$(1),$(P2P_APP_NAME))-nft --cache-to=type=gha,scope=$(if $(filter-out undefined,$(origin 1)),$(1),$(P2P_APP_NAME))-nft,mode=max
 
@@ -61,6 +66,7 @@ p2p-images:
 %-integration: p2p_app_url_suffix=-integration
 %-integration: p2p_namespace=$(P2P_NAMESPACE_INTEGRATION)
 %-integration: p2p_registry=$(P2P_REGISTRY_FAST_FEEDBACK)
+%-integration: p2p_image=$(P2P_REGISTRY_FAST_FEEDBACK)/$(if $(filter-out undefined,$(origin 1)),$(1),$(P2P_APP_NAME))-integration
 %-integration: p2p_image_tag=$(P2P_REGISTRY_FAST_FEEDBACK)/$(if $(filter-out undefined,$(origin 1)),$(1),$(P2P_APP_NAME))-integration:$(P2P_VERSION)
 %-integration: p2p_image_cache=--cache-from=type=gha,scope=$(if $(filter-out undefined,$(origin 1)),$(1),$(P2P_APP_NAME))-integration --cache-to=type=gha,scope=$(if $(filter-out undefined,$(origin 1)),$(1),$(P2P_APP_NAME))-integration,mode=max
 
@@ -77,6 +83,7 @@ p2p-promote-to-extended-test:
 %-extended-test: p2p_app_url_suffix=-extended
 %-extended-test: p2p_namespace=$(P2P_NAMESPACE_EXTENDED)
 %-extended-test: p2p_registry=$(P2P_REGISTRY_EXTENDED_TEST)
+%-extended-test: p2p_image=$(P2P_REGISTRY_EXTENDED_TEST)/$(if $(filter-out undefined,$(origin 1)),$(1),$(P2P_APP_NAME))-extended
 %-extended-test: p2p_image_tag=$(P2P_REGISTRY_EXTENDED_TEST)/$(if $(filter-out undefined,$(origin 1)),$(1),$(P2P_APP_NAME))-extended:$(P2P_VERSION)
 %-extended-test: p2p_image_cache=--cache-from=type=gha,scope=$(if $(filter-out undefined,$(origin 1)),$(1),$(P2P_APP_NAME))-extended --cache-to=type=gha,scope=$(if $(filter-out undefined,$(origin 1)),$(1),$(P2P_APP_NAME))-extended,mode=max
 
