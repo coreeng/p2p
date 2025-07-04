@@ -159,5 +159,4 @@ jobs:
       checkout-version: ${{ inputs.checkout-version }}
       dry-run: ${{ inputs.dry-run }}
       working-directory: ${{ inputs.working-directory }}
-      connect-to-k8s: true
       corectl-version: ${{ inputs.corectl-version }}

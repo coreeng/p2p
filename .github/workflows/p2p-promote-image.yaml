@@ -13,10 +13,6 @@ on:
         required: false
         type: boolean
         default: false
-      connect-to-k8s:
-        required: false
-        type: boolean
-        default: false
       source_matrix:
         required: true
         type: string
@@ -35,10 +31,6 @@ on:
         required: false
         type: string
         default: europe-west2
-      zone:
-        required: false
-        type: string
-        default: europe-west2-a
       working-directory:
         required: false
         type: string
@@ -136,32 +128,6 @@ jobs:
           project_id: ${{ env.PROJECT_ID }}
           token_format: access_token
           access_token_lifetime: 3600s
-
-      - name: Setup Google Cloud SDK
-        id: setup-gcloud
-        if: inputs.dry-run == false && inputs.connect-to-k8s == true
-        uses: google-github-actions/setup-gcloud@v2
-        with:
-          skip_install: true
-
-      - name: Setup kubeconfig
-        id: setup-kubeconfig
-        if: inputs.dry-run == false && inputs.connect-to-k8s == true
-        env:
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ steps.auth-source.outputs.credentials_file_path }}
-        uses: google-github-actions/get-gke-credentials@v2
-        with:
-          context_name: gke_${{ env.PROJECT_ID }}_${{ inputs.region }}_${{ env.DPLATFORM }}
-          cluster_name: ${{ env.DPLATFORM }}
-          location: ${{ inputs.region }}
-          project_id: ${{ env.PROJECT_ID }}
-          use_dns_based_endpoint: true
-
-      - name: Test kubeconfig
-        id: test-kubeconfig
-        if: inputs.dry-run == false && inputs.connect-to-k8s == true
-        run: |
-          kubectl cluster-info
 
       - name: Setup corectl
         id: setup-corectl
