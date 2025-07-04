@@ -45,9 +45,6 @@ on:
         required: false
         type: string
         default: 'v'
-      corectl-version:
-        required: false
-        type: string
 
 jobs:
   run-tests:
@@ -91,4 +88,3 @@ jobs:
       dry-run: ${{ inputs.dry-run }}
       working-directory: ${{ inputs.working-directory }}
       checkout-version: ${{ inputs.version-prefix }}${{ inputs.version }}
-      corectl-version: ${{ inputs.corectl-version }}
