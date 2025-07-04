@@ -45,9 +45,6 @@ on:
         required: false
         type: string
         default: '.'
-      corectl-version:
-        required: false
-        type: string
     outputs:
       version:
         value: ${{ inputs.version }}
@@ -159,4 +156,3 @@ jobs:
       checkout-version: ${{ inputs.checkout-version }}
       dry-run: ${{ inputs.dry-run }}
       working-directory: ${{ inputs.working-directory }}
-      corectl-version: ${{ inputs.corectl-version }}

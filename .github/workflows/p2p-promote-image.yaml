@@ -38,9 +38,6 @@ on:
       checkout-version:
         required: false
         type: string
-      corectl-version:
-        required: false
-        type: string
 
 jobs:
   lookup:
@@ -129,22 +126,6 @@ jobs:
           token_format: access_token
           access_token_lifetime: 3600s
 
-      - name: Setup corectl
-        id: setup-corectl
-        if: inputs.dry-run == false
-        env:
-          CORECTL_VERSION: ${{ inputs.corectl-version }}
-        run: |
-          if [ -z "${CORECTL_VERSION}" ]; then
-            CORECTL_VERSION=$(curl -s https://api.github.com/repos/coreeng/corectl/releases/latest | grep '"tag_name":' | cut -d'"' -f4)
-          fi
-          echo "Downloading corectl ${CORECTL_VERSION}..."
-          curl -Lso corectl.tgz "https://github.com/coreeng/corectl/releases/download/${CORECTL_VERSION}/corectl_Linux_x86_64.tar.gz"
-          tar zxf corectl.tgz
-          sudo install -o root -g root -m 0755 corectl /usr/local/bin/
-          rm corectl.tgz corectl
-          corectl version
-
       - name: Decode environment variables
         shell: bash
         run: |
@@ -180,6 +161,16 @@ jobs:
           export P2P_NAMESPACE_EXTENDED=${P2P_NAMESPACE}-extended
           export P2P_NAMESPACE_PROD=${P2P_NAMESPACE}-prod
           env | grep "^P2P_" | sort | tee "${GITHUB_ENV}"
+
+      - name: Setup skopeo
+        id: setup-skopeo
+        if: ${{ inputs.dry-run == false }}
+        env:
+          SOURCE_ACCESS_TOKEN: ${{ steps.auth-source.outputs.access_token }}
+          DEST_ACCESS_TOKEN: ${{ steps.auth-dest.outputs.access_token }}
+        run: |
+          skopeo login -u oauth2accesstoken --password-stdin "${SOURCE_REGISTRY}" < <(echo "${SOURCE_ACCESS_TOKEN}")
+          skopeo login -u oauth2accesstoken --password-stdin "${REGISTRY}" < <(echo "${DEST_ACCESS_TOKEN}")
 
       - name: Promote to ${{ inputs.promotion-stage }}
         id: run-promotion
