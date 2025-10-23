@@ -45,6 +45,10 @@ on:
         required: false
         type: string
         default: '.'
+      skip-fastfeedback-integration-on-prs:
+        required: false
+        type: boolean
+        default: false
     outputs:
       version:
         value: ${{ inputs.version }}
@@ -116,6 +120,7 @@ jobs:
 
   integration-test:
     needs: [functional-test, nft-test]
+    if: success() && ( !inputs.skip-fastfeedback-integration-on-prs || github.ref == inputs.main-branch || github.ref_type == 'tag' )
     uses: ./.github/workflows/p2p-execute-command.yaml
     secrets:
       env_vars: ${{ secrets.env_vars }}
