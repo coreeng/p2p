@@ -42,6 +42,12 @@ on:
         required: false
         type: string
         default: 'v'
+      skip-subnamespaces-create:
+        description: |
+          Skip creating subnamespaces
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   prod-deploy:
@@ -66,3 +72,4 @@ jobs:
       dry-run: ${{ inputs.dry-run }}
       working-directory: ${{ inputs.working-directory }}
       checkout-version: ${{ inputs.version-prefix }}${{ inputs.version }}
+      skip-subnamespaces-create: ${{ inputs.skip-subnamespaces-create }}
