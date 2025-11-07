@@ -45,6 +45,12 @@ on:
         required: false
         type: string
         default: 'v'
+      skip-subnamespaces-create:
+        description: |
+          Skip creating subnamespaces
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   run-tests:
@@ -68,6 +74,7 @@ jobs:
       dry-run: ${{ inputs.dry-run }}
       working-directory: ${{ inputs.working-directory }}
       checkout-version: ${{ inputs.version-prefix }}${{ inputs.version }}
+      skip-subnamespaces-create: ${{ inputs.skip-subnamespaces-create }}
 
   promote:
     uses: ./.github/workflows/p2p-promote-image.yaml
