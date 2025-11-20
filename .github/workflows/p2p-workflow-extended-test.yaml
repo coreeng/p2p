@@ -38,6 +38,10 @@ on:
         required: false
         type: string
         default: ''
+      tenant-name:
+        required: false
+        type: string
+        default: ''
       version:
         required: true
         type: string
@@ -70,6 +74,7 @@ jobs:
       region: ${{ inputs.region }}
       github_env: ${{ matrix.deploy_env }}
       app-name: ${{ inputs.app-name }}
+      tenant-name: ${{ inputs.tenant-name }}
       version: ${{ inputs.version }}
       dry-run: ${{ inputs.dry-run }}
       working-directory: ${{ inputs.working-directory }}
@@ -91,6 +96,7 @@ jobs:
       region: ${{ inputs.region }}
       promotion-stage: prod
       app-name: ${{ inputs.app-name }}
+      tenant-name: ${{ inputs.tenant-name }}
       version: ${{ inputs.version  }}
       dry-run: ${{ inputs.dry-run }}
       working-directory: ${{ inputs.working-directory }}
