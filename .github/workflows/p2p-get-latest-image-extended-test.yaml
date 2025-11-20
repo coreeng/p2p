@@ -28,6 +28,10 @@ on:
         required: false
         type: string
         default: 'extended-test'
+      tenant-name:
+        required: false
+        type: string
+        default: ''
       image-name:
         required: true
         type: string
@@ -48,6 +52,7 @@ jobs:
     with:
       environment: ${{ inputs.environment }}
       registry-path: ${{ inputs.registry-path }}
+      tenant-name: ${{ inputs.tenant-name }}
       image-name: ${{ inputs.image-name }}
       dry-run: ${{ inputs.dry-run }}
       working-directory: ${{ inputs.working-directory }}

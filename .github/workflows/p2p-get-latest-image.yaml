@@ -14,6 +14,10 @@ on:
         required: false
         type: string
         default: 'extended-test'
+      tenant-name:
+        required: false
+        type: string
+        default: ''
       image-name:
         required: true
         type: string
@@ -47,11 +51,11 @@ jobs:
       PROJECT_ID: ${{ vars.PROJECT_ID }}
       PROJECT_NUMBER: ${{ vars.PROJECT_NUMBER }}
       REGION: ${{ inputs.region }}
-      REGISTRY: ${{ inputs.region }}-docker.pkg.dev/${{ vars.PROJECT_ID }}/tenant/${{ vars.TENANT_NAME }}
-      SERVICE_ACCOUNT: p2p-${{ vars.TENANT_NAME }}@${{ vars.PROJECT_ID }}.iam.gserviceaccount.com
+      REGISTRY: ${{ inputs.region }}-docker.pkg.dev/${{ vars.PROJECT_ID }}/tenant/${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}
+      SERVICE_ACCOUNT: p2p-${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}@${{ vars.PROJECT_ID }}.iam.gserviceaccount.com
       GITHUB_ENV: ${{ fromJson(inputs.environment).include[0]['deploy_env'] }}
-      TENANT_NAME: ${{ vars.TENANT_NAME }}
-      WORKLOAD_IDENTITY_PROVIDER: projects/${{ vars.PROJECT_NUMBER }}/locations/global/workloadIdentityPools/p2p-${{ vars.TENANT_NAME }}/providers/p2p-${{ vars.TENANT_NAME }}
+      TENANT_NAME: ${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}
+      WORKLOAD_IDENTITY_PROVIDER: projects/${{ vars.PROJECT_NUMBER }}/locations/global/workloadIdentityPools/p2p-${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}/providers/p2p-${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}
       REGISTRY_PATH: ${{ inputs.registry-path }}
       IMAGE_NAME: ${{ inputs.image-name }}
     permissions:
