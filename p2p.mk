@@ -2,6 +2,34 @@
 MAKEFLAGS += --warn-undefined-variables
 SHELL := /bin/bash
 
+# Parse app.yaml and export all config values as p2p_app_config_* environment variables
+P2P_APP_FILE := app.yaml
+ifneq ($(wildcard $(P2P_APP_FILE)),)
+P2P_APP_PAIRS := $(shell awk '\
+  BEGIN { indent_unit = 0 } \
+  /^[[:space:]]*\#/ || /^[[:space:]]*$$/ || /^---/ { next } \
+  { \
+    match($$0, /^[[:space:]]*/); \
+    spaces = RLENGTH; \
+    if (indent_unit == 0 && spaces > 0) indent_unit = spaces; \
+    indent = (indent_unit > 0) ? int(spaces / indent_unit) : 0; \
+    gsub(/^[[:space:]]+/, ""); \
+    n = index($$0, ":"); \
+    key = substr($$0, 1, n-1); \
+    val = substr($$0, n+1); \
+    gsub(/^[[:space:]]+/, "", val); \
+    gsub(/[[:space:]]+\#.*$$/, "", val); \
+    path[indent] = key; \
+    if (val != "" && path[0] == "config") { \
+      p = "p2p_app"; \
+      for (i = 0; i <= indent; i++) p = p "_" path[i]; \
+      print p "=" val; \
+    } \
+  }' $(P2P_APP_FILE) 2>/dev/null)
+$(foreach pair,$(P2P_APP_PAIRS),$(eval $(word 1,$(subst =, ,$(pair))) := $(word 2,$(subst =, ,$(pair)))))
+$(foreach pair,$(P2P_APP_PAIRS),$(eval export $(word 1,$(subst =, ,$(pair)))))
+endif
+
 # Set p2p variables for local testing
 P2P_TENANT_NAME ?= default-tenant
 P2P_APP_NAME ?= default-app
