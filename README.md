@@ -55,6 +55,50 @@ fastfeedback:
           SECRET_USER=${{ secrets.SECRET_USER }}
           SECRET_PASSWORD=${{ secrets.SECRET_PASSWORD }}        
 ```
+
+### Artifact uploads (artifacts)
+
+Both the fastfeedback and extended-test workflows support an optional `artifacts` input.
+
+- Type: `string`
+- Format: YAML mapping from **command name** (e.g. `p2p-build`, `p2p-functional`, `p2p-nft`, `p2p-integration`, `p2p-extended-test`) to a **list of path/glob patterns** to upload.
+- Behavior:
+  - If `artifacts` is not set or does not contain a key for the current command, no artifacts are uploaded.
+  - When configured, artifacts from matching paths are uploaded per job after `make <command>` completes.
+  - Paths are interpreted **relative to the `working-directory` input** of the reusable workflow (default `.` / repo root). For example, if you set `working-directory: ./service`, then an artifact path `path/to/reports/**` refers to `service/path/to/report/**` in the repository.
+
+Example opting in for fastfeedback:
+
+```yaml
+fastfeedback:
+  needs: [version]
+  uses: coreeng/p2p/.github/workflows/p2p-workflow-fastfeedback.yaml@v1
+  with:
+    version: ${{ needs.version.outputs.version }}
+    artifacts: |
+      p2p-build:
+        - reports/build/**
+      p2p-functional:
+        - reports/functional/**
+        - reports/shared/**
+      p2p-nft:
+        - reports/nft/**
+      p2p-integration:
+        - reports/integration/**
+```
+
+Example opting in for extended-test:
+
+```yaml
+extended-test:
+  needs: [fastfeedback]
+  uses: coreeng/p2p/.github/workflows/p2p-workflow-extended-test.yaml@v1
+  with:
+    version: ${{ needs.version.outputs.version }}
+    artifacts: |
+      p2p-extended-test:
+        - reports/extended/**
+```
 ### secrets.env_vars
 
 This is a way you can pass secrets to be exposed as environment variables for your makefile to use. This will also ensure

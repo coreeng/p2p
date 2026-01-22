@@ -69,6 +69,10 @@ on:
         required: false
         type: boolean
         default: false
+      artifacts:
+        required: false
+        type: string
+        default: ''
 
 jobs:
   exec:
@@ -236,3 +240,51 @@ jobs:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ steps.auth.outputs.credentials_file_path }}
         run: |
           make ${{ inputs.command }}
+
+      - name: Resolve artifact paths
+        id: resolve-artifacts
+        if: ${{ always() && inputs.artifacts != '' }}
+        run: |
+          # Write the artifacts YAML config from the input string.
+          cat <<'EOF' > artifacts.yaml
+          ${{ inputs.artifacts }}
+          EOF
+
+          # Extract raw paths for the current command from the YAML config.
+          raw_paths=$(yq -r '."${{ inputs.command }}" // [] | .[]' artifacts.yaml || true)
+
+          # Make artifact paths relative to the configured working-directory (if not ".").
+          wd="${{ inputs.working-directory }}"
+          prefixed_paths=""
+          while IFS= read -r p; do
+            [ -z "${p}" ] && continue
+            if [ -n "${wd}" ] && [ "${wd}" != "." ]; then
+              case "${p}" in
+                /*) prefixed="${p}" ;;
+                *)  prefixed="${wd}/${p}" ;;
+              esac
+            else
+              prefixed="${p}"
+            fi
+
+            if [ -z "${prefixed_paths}" ]; then
+              prefixed_paths="${prefixed}"
+            else
+              prefixed_paths="${prefixed_paths}"$'\n'"${prefixed}"
+            fi
+          done <<< "${raw_paths}"
+
+          {
+            echo "paths<<EOF"
+            echo "${prefixed_paths}"
+            echo "EOF"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Upload artifacts
+        if: ${{ always() && steps.resolve-artifacts.outputs.paths != '' }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ inputs.command }}-${{ inputs.github_env || 'noenv' }}-run${{ github.run_number }}-attempt${{ github.run_attempt }}
+          path: ${{ steps.resolve-artifacts.outputs.paths }}
+          retention-days: 14
+          if-no-files-found: warn

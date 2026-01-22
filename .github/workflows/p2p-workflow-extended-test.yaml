@@ -55,6 +55,10 @@ on:
         required: false
         type: boolean
         default: false
+      artifacts:
+        required: false
+        type: string
+        default: ''
 
 jobs:
   run-tests:
@@ -80,6 +84,7 @@ jobs:
       working-directory: ${{ inputs.working-directory }}
       checkout-version: ${{ inputs.version-prefix }}${{ inputs.version }}
       skip-subnamespaces-create: ${{ inputs.skip-subnamespaces-create }}
+      artifacts: ${{ inputs.artifacts }}
 
   promote:
     uses: ./.github/workflows/p2p-promote-image.yaml
