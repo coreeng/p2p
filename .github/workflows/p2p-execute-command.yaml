@@ -274,11 +274,13 @@ jobs:
             fi
           done <<< "${raw_paths}"
 
-          {
-            echo "paths<<EOF"
-            echo "${prefixed_paths}"
-            echo "EOF"
-          } >> "${GITHUB_OUTPUT}"
+          if [ -n "${prefixed_paths}" ]; then
+            {
+              echo "paths<<EOF"
+              echo "${prefixed_paths}"
+              echo "EOF"
+            } >> "${GITHUB_OUTPUT}"
+          fi
 
       - name: Upload artifacts
         if: ${{ always() && steps.resolve-artifacts.outputs.paths != '' }}
