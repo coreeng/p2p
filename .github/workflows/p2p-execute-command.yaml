@@ -150,6 +150,14 @@ jobs:
           driver-opts: |
             default-load=true
 
+      - name: Setup skopeo
+        id: setup-skopeo
+        shell: bash
+        run: |
+          curl -fsSL "https://github.com/lework/skopeo-binary/releases/download/v1.22.0/skopeo-linux-amd64" -o /usr/local/bin/skopeo
+          chmod +x /usr/local/bin/skopeo
+          skopeo --version
+
       - name: Expose GitHub Runtime
         id: expose-github-runtime
         uses: crazy-max/ghaction-github-runtime@v3
