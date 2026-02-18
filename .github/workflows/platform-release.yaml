@@ -62,6 +62,14 @@ jobs:
           # generate source date epoch timestamp
           echo "timestamp=$(git log -1 --pretty=%ct)" >> "${GITHUB_OUTPUT}"
 
+      - id: skopeo-setup
+        name: Setup skopeo
+        shell: bash
+        run: |
+          curl -fsSL "https://github.com/lework/skopeo-binary/releases/download/v1.22.0/skopeo-linux-amd64" -o /usr/local/bin/skopeo
+          chmod +x /usr/local/bin/skopeo
+          skopeo --version
+
       - id: docker-setup-buildx
         name: Setup Buildx
         uses: docker/setup-buildx-action@v3
