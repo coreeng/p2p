@@ -1,0 +1,148 @@
+---
+name: AWS LZ CD
+
+on:
+  workflow_call:
+    inputs:
+      aws_region:
+        type: string
+        required: true
+      aws_role_arn:
+        type: string
+        required: true
+      aws_codecommit_url:
+        type: string
+        required: true
+      aws_codecommit_branch:
+        type: string
+        required: true
+      aws_codepipeline_name:
+        type: string
+        required: true
+      gh_codepipeline_poll:
+        type: string
+        required: false
+        default: 'true'
+      gh_codepipeline_poll_interval_sec:
+        type: string
+        required: false
+        default: '60'
+      gh_codepipeline_poll_timeout_minutes:
+        type: string
+        required: false
+        default: '90'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  git-sync:
+    name: Git Sync
+    runs-on: ubuntu-latest
+    steps:
+
+      - id: checkout
+        name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: aws-auth
+        name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ inputs.aws_role_arn }}
+          aws-region: ${{ inputs.aws_region }}
+
+      - id: codecommit-sync
+        name: Sync to CodeCommit Repository
+        run: |
+          set +x
+          git config --global credential.helper '!aws codecommit credential-helper $@'
+          git config --global credential.UseHttpPath true
+          git remote add codecommit ${{ inputs.aws_codecommit_url }}
+          echo "Pulling CodeCommit: ${{ inputs.aws_codecommit_url }} to validate existing commits match"
+          git pull codecommit ${{ inputs.aws_codecommit_branch }}
+          git push codecommit --mirror
+
+  start-pipeline-execution:
+    name: Release Change
+    needs:
+      - git-sync
+    runs-on: ubuntu-latest
+    outputs:
+      aws_pipeline_execution_id: ${{ steps.codepipeline-start.outputs.aws_pipeline_execution_id }}
+    steps:
+
+      - id: aws-auth
+        name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ inputs.aws_role_arn }}
+          aws-region: ${{ inputs.aws_region }}
+
+      - id: codepipeline-start
+        name: Release Change
+        env:
+          AWS_CODEPIPELINE_NAME: ${{ inputs.aws_codepipeline_name }}
+          AWS_REGION: ${{ inputs.aws_region }}
+        run: |
+          set +xeo pipefail
+          aws codepipeline start-pipeline-execution --name "${AWS_CODEPIPELINE_NAME}" | tee output.json
+          AWS_PIPELINE_EXECUTION_ID=$(jq -r .pipelineExecutionId output.json)
+          echo "Pipeline started, url: https://${AWS_REGION}.console.aws.amazon.com/codesuite/codepipeline/pipelines/${AWS_CODEPIPELINE_NAME}/executions/${AWS_PIPELINE_EXECUTION_ID}/visualization?region=${AWS_REGION}"
+          echo "aws_pipeline_execution_id=${AWS_PIPELINE_EXECUTION_ID}" >> "$GITHUB_OUTPUT"
+
+  poll-pipeline-execution:
+    name: Poll Pipeline Execution
+    needs:
+      - start-pipeline-execution
+    if: ${{ inputs.gh_codepipeline_poll != 'false' }}
+    runs-on: ubuntu-latest
+    steps:
+
+      - id: aws-auth
+        name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ inputs.aws_role_arn }}
+          aws-region: ${{ inputs.aws_region }}
+          role-duration-seconds: 14400
+
+      - id: wait-codepipeline-to-complete
+        name: Wait for CodePipeline to Complete
+        timeout-minutes: ${{ fromJSON(inputs.gh_codepipeline_poll_timeout_minutes) }}
+        env:
+          AWS_PIPELINE_EXECUTION_ID: ${{ needs.start-pipeline-execution.outputs.aws_pipeline_execution_id}}
+          AWS_CODEPIPELINE_NAME: ${{ inputs.aws_codepipeline_name }}
+          AWS_REGION: ${{ inputs.aws_region }}
+          GH_CODEPIPELINE_POLL_INTERVAL_SEC: ${{ inputs.gh_codepipeline_poll_interval_sec }}
+        run: |
+          set +x
+          echo "Pipeline execution: https://${AWS_REGION}.console.aws.amazon.com/codesuite/codepipeline/pipelines/${AWS_CODEPIPELINE_NAME}/executions/${AWS_PIPELINE_EXECUTION_ID}/visualization?region=${AWS_REGION}"
+          while true ; do
+                STATUS=$(aws codepipeline list-pipeline-executions --pipeline-name "${AWS_CODEPIPELINE_NAME}" --query "pipelineExecutionSummaries[?pipelineExecutionId == '${AWS_PIPELINE_EXECUTION_ID}']" | jq -r '.[0].status')
+                if [[ "${STATUS}" != 'null' && "${STATUS}" != 'InProgress' && "${STATUS}" != 'Stopping' ]] ; then
+                        break;
+                fi
+                echo "Pipeline status: ${STATUS}s, refresh in ${GH_CODEPIPELINE_POLL_INTERVAL_SEC}s..."
+                sleep "${GH_CODEPIPELINE_POLL_INTERVAL_SEC}"
+          done
+          echo "Pipeline completed with status: ${STATUS}"
+          while read -r JSONL ; do
+                echo ""
+                echo "Stage: $(echo "${JSONL}" | jq -r .stageName)"
+                echo "Action: $(echo "${JSONL}" | jq -r .actionName)"
+                echo "Summary: $(echo "${JSONL}" | jq -r .executionResult.externalExecutionSummary)"
+                echo ""
+                echo "-----BEGIN LOGS-----"
+                aws logs get-log-events \
+                        --log-group-name "/aws/codebuild/$(echo "${JSONL}" | jq -r .executionResult.externalExecutionId | cut -f1 -d:)" \
+                        --log-stream-name "$(echo "${JSONL}" | jq -r .executionResult.externalExecutionId | cut -f2 -d:)" | jq '.events[].message' | sed -e 's/^"//' -e 's/\\n"$//'
+                echo "-----END LOGS-----"
+          done < <(aws codepipeline list-action-executions --pipeline-name "${AWS_CODEPIPELINE_NAME}" --filter pipelineExecutionId="${AWS_PIPELINE_EXECUTION_ID}" | \
+                jq -c '.actionExecutionDetails[] | select(.status!="Succeeded") | {stageName:.stageName,actionName:.actionName,executionResult:.output.executionResult}')
+          if [ "${STATUS}" != 'Succeeded' ] ; then
+                exit 1
+          fi
