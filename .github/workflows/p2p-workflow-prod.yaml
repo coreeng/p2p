@@ -54,8 +54,15 @@ on:
         default: false
 
 jobs:
+  validate-vars:
+    name: validate-vars
+    uses: ./.github/workflows/validate-environment-variables.yaml
+    with:
+      environment: ${{ inputs.source }}
+
   prod-deploy:
     name: prod-deploy
+    needs: [validate-vars]
     if: success() && github.ref == inputs.main-branch
     uses: ./.github/workflows/p2p-execute-command.yaml
     secrets:

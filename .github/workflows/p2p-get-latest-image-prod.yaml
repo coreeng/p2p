@@ -41,8 +41,15 @@ on:
         default: europe-west2
 
 jobs:
+  validate-vars-environment:
+    name: validate-vars
+    uses: ./.github/workflows/validate-environment-variables.yaml
+    with:
+      environment: ${{ inputs.environment }}
+
   get-latest-version:
     uses: ./.github/workflows/p2p-get-latest-image.yaml
+    needs: [validate-vars-environment]
     if: success() && (github.ref == inputs.main-branch )
     secrets:
       env_vars: ${{ secrets.env_vars }}

@@ -61,8 +61,21 @@ on:
         default: ''
 
 jobs:
+  validate-vars-source:
+    name: validate-vars
+    uses: ./.github/workflows/validate-environment-variables.yaml
+    with:
+      environment: ${{ inputs.source }}
+
+  validate-vars-destination:
+    name: validate-vars
+    uses: ./.github/workflows/validate-environment-variables.yaml
+    with:
+      environment: ${{ inputs.destination }}
+
   run-tests:
     uses: ./.github/workflows/p2p-execute-command.yaml
+    needs: [validate-vars-source, validate-vars-destination]
     if: success() && (github.ref == inputs.main-branch )
     secrets:
       env_vars: ${{ secrets.env_vars }}

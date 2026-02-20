@@ -10,6 +10,14 @@ on:
       container_registry_url:
         required: false
     inputs:
+      source:
+        required: false
+        type: string
+        default: ${{ vars.FAST_FEEDBACK }}
+      destination:
+        required: false
+        type: string
+        default: ${{ vars.EXTENDED_TEST }}
       dry-run:
         required: false
         type: boolean
@@ -68,8 +76,21 @@ on:
         value: ${{ inputs.version }}
 
 jobs:
+  validate-vars-source:
+    name: validate-vars
+    uses: ./.github/workflows/validate-environment-variables.yaml
+    with:
+      environment: ${{ inputs.source }}
+
+  validate-vars-destination:
+    name: validate-vars
+    uses: ./.github/workflows/validate-environment-variables.yaml
+    with:
+      environment: ${{ inputs.destination }}
+
   build:
     uses: ./.github/workflows/p2p-execute-command.yaml
+    needs: [validate-vars-source, validate-vars-destination]
     secrets:
       env_vars: ${{ secrets.env_vars }}
       container_registry_user: ${{ secrets.container_registry_user }}
