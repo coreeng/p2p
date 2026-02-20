@@ -90,8 +90,8 @@ jobs:
       PLATFORM_ENVIRONMENT: ${{ vars.DPLATFORM }}
       PROJECT_ID: ${{ vars.PROJECT_ID }}
       PROJECT_NUMBER: ${{ vars.PROJECT_NUMBER }}
-      REGION: ${{ inputs.region }}
-      REGISTRY: ${{ inputs.region }}-docker.pkg.dev/${{ vars.PROJECT_ID }}/tenant/${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}
+      REGION: ${{ vars.REGION || inputs.region }}
+      REGISTRY: ${{ vars.REGION || inputs.region }}-docker.pkg.dev/${{ vars.PROJECT_ID }}/tenant/${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}
       VERSION: ${{ inputs.version }}
       SERVICE_ACCOUNT: p2p-${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}@${{ vars.PROJECT_ID }}.iam.gserviceaccount.com
       TENANT_NAME: ${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}
@@ -131,9 +131,9 @@ jobs:
         if: ${{ inputs.dry-run == false }}
         uses: google-github-actions/get-gke-credentials@v2
         with:
-          context_name: gke_${{ env.PROJECT_ID }}_${{ inputs.region }}_${{ env.DPLATFORM }}
+          context_name: gke_${{ env.PROJECT_ID }}_${{ env.REGION }}_${{ env.DPLATFORM }}
           cluster_name: ${{ env.DPLATFORM }}
-          location: ${{ inputs.region }}
+          location: ${{ env.REGION }}
           project_id: ${{ env.PROJECT_ID }}
           use_dns_based_endpoint: true
 
@@ -166,7 +166,7 @@ jobs:
         uses: docker/login-action@v3
         if: ${{ inputs.dry-run == false }}
         with:
-          registry: ${{ inputs.region }}-docker.pkg.dev
+          registry: ${{ env.REGION }}-docker.pkg.dev
           username: oauth2accesstoken
           password: ${{ steps.auth.outputs.access_token }}
 
@@ -220,7 +220,7 @@ jobs:
           export P2P_TENANT_NAME="${{ env.TENANT_NAME }}"
           export P2P_APP_NAME=${{ inputs.app-name }}
           export P2P_VERSION=${{ inputs.version }}
-          export P2P_REGISTRY=${{ inputs.region }}-docker.pkg.dev/${{ vars.PROJECT_ID }}/tenant/${{ env.TENANT_NAME }}
+          export P2P_REGISTRY=${{ env.REGION }}-docker.pkg.dev/${{ vars.PROJECT_ID }}/tenant/${{ env.TENANT_NAME }}
           export P2P_REGISTRY_FAST_FEEDBACK_PATH=fast-feedback
           export P2P_REGISTRY_EXTENDED_TEST_PATH=extended-test
           export P2P_REGISTRY_PROD_PATH=prod
