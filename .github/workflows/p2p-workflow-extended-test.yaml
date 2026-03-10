@@ -66,13 +66,9 @@ jobs:
   run-tests:
     uses: ./.github/workflows/p2p-execute-command.yaml
     if: success() && (github.ref == inputs.main-branch )
-    secrets:
-      env_vars: ${{ secrets.env_vars }}
-      container_registry_user: ${{ secrets.container_registry_user }}
-      container_registry_pat: ${{ secrets.container_registry_pat }}
-      container_registry_url: ${{ secrets.container_registry_url }}
+    secrets: inherit
     strategy:
-      matrix: ${{ fromJSON(inputs.source ) }}
+      matrix: ${{ fromJSON(startsWith(inputs.source, '{') && inputs.source || format('{"include":[{"deploy_env":"{0}"}]}', inputs.source)) }}
       fail-fast: false
     with:
       command: p2p-extended-test
@@ -92,10 +88,9 @@ jobs:
     uses: ./.github/workflows/p2p-promote-image.yaml
     if: success() && (github.ref == inputs.main-branch)
     needs: [run-tests]
-    secrets:
-      env_vars: ${{ secrets.env_vars }}
+    secrets: inherit
     strategy:
-      matrix: ${{ fromJSON(inputs.destination) }}
+      matrix: ${{ fromJSON(startsWith(inputs.destination, '{') && inputs.destination || format('{"include":[{"deploy_env":"{0}"}]}', inputs.destination)) }}
       fail-fast: false
     with:
       source_matrix: ${{ inputs.source }}

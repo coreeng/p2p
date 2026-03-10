@@ -43,7 +43,7 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       version: ${{ steps.get-latest-image.outputs.version }}
-    environment: ${{ fromJson(inputs.environment).include[0]['deploy_env'] }}
+    environment: ${{ fromJSON(startsWith(inputs.environment, '{') && inputs.environment || format('{"include":[{"deploy_env":"{0}"}]}', inputs.environment)).include[0]['deploy_env'] }}
     env:
       BASE_DOMAIN: ${{ vars.BASE_DOMAIN }}
       INTERNAL_SERVICES_DOMAIN: ${{ vars.INTERNAL_SERVICES_DOMAIN }}
@@ -53,7 +53,7 @@ jobs:
       REGION: ${{ vars.REGION || inputs.region }}
       REGISTRY: ${{ vars.REGION || inputs.region }}-docker.pkg.dev/${{ vars.PROJECT_ID }}/tenant/${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}
       SERVICE_ACCOUNT: p2p-${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}@${{ vars.PROJECT_ID }}.iam.gserviceaccount.com
-      ENV_NAME: ${{ fromJson(inputs.environment).include[0]['deploy_env'] }}
+      ENV_NAME: ${{ fromJSON(startsWith(inputs.environment, '{') && inputs.environment || format('{"include":[{"deploy_env":"{0}"}]}', inputs.environment)).include[0]['deploy_env'] }}
       TENANT_NAME: ${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}
       WORKLOAD_IDENTITY_PROVIDER: projects/${{ vars.PROJECT_NUMBER }}/locations/global/workloadIdentityPools/p2p-${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}/providers/p2p-${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}
       REGISTRY_PATH: ${{ inputs.registry-path }}
@@ -68,6 +68,61 @@ jobs:
           yq 'del(.env_vars)' -p=json -C <<EOT
           ${{ toJSON(env) }}
           EOT
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generate environment reader token
+        id: env-token
+        if: ${{ !hashFiles('.p2p.yaml') && secrets.P2P_ENV_APP_ID != '' }}
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.P2P_ENV_APP_ID }}
+          private-key: ${{ secrets.P2P_ENV_APP_PRIVATE_KEY }}
+          owner: coreeng
+          repositories: core-platform-environments
+
+      - name: Checkout environment config
+        if: ${{ steps.env-token.outputs.token != '' }}
+        uses: actions/checkout@v4
+        with:
+          repository: coreeng/core-platform-environments
+          token: ${{ steps.env-token.outputs.token }}
+          path: /tmp/core-platform-environments
+          sparse-checkout: |
+            environments/${{ env.ENV_NAME }}
+
+      - name: Resolve environment config
+        run: |
+          set -euo pipefail
+          ENV_NAME="${{ env.ENV_NAME }}"
+          CONFIG=""
+
+          # Mode 1: .p2p.yaml in tenant repo
+          if [ -f .p2p.yaml ] && yq -e ".environments.${ENV_NAME}" .p2p.yaml > /dev/null 2>&1; then
+            echo "::notice::Resolving environment config from .p2p.yaml (${ENV_NAME})"
+            CONFIG=$(yq ".environments.${ENV_NAME}" .p2p.yaml)
+
+          # Mode 2: core-platform-environments (if checked out)
+          elif [ -f "/tmp/core-platform-environments/environments/${ENV_NAME}/config.yaml" ]; then
+            echo "::notice::Resolving environment config from core-platform-environments (${ENV_NAME})"
+            CONFIG=$(cat "/tmp/core-platform-environments/environments/${ENV_NAME}/config.yaml")
+          fi
+
+          # Apply config if resolved (otherwise vars.* defaults remain)
+          if [ -n "$CONFIG" ]; then
+            PROJECT_ID=$(echo "$CONFIG" | yq '.platform.projectId')
+            PROJECT_NUMBER=$(echo "$CONFIG" | yq '.platform.projectNumber')
+            REGION=$(echo "$CONFIG" | yq '.platform.region')
+            TENANT_NAME="${{ env.TENANT_NAME }}"
+
+            echo "PROJECT_ID=${PROJECT_ID}" >> "$GITHUB_ENV"
+            echo "PROJECT_NUMBER=${PROJECT_NUMBER}" >> "$GITHUB_ENV"
+            echo "REGION=${REGION}" >> "$GITHUB_ENV"
+            echo "REGISTRY=${REGION}-docker.pkg.dev/${PROJECT_ID}/tenant/${TENANT_NAME}" >> "$GITHUB_ENV"
+            echo "SERVICE_ACCOUNT=p2p-${TENANT_NAME}@${PROJECT_ID}.iam.gserviceaccount.com" >> "$GITHUB_ENV"
+            echo "WORKLOAD_IDENTITY_PROVIDER=projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/p2p-${TENANT_NAME}/providers/p2p-${TENANT_NAME}" >> "$GITHUB_ENV"
+          fi
 
       - name: Authenticate to Google Cloud
         id: auth

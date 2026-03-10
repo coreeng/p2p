@@ -60,13 +60,9 @@ jobs:
     name: prod-deploy
     if: success() && github.ref == inputs.main-branch
     uses: ./.github/workflows/p2p-execute-command.yaml
-    secrets:
-      env_vars: ${{ secrets.env_vars }}
-      container_registry_user: ${{ secrets.container_registry_user }}
-      container_registry_pat: ${{ secrets.container_registry_pat }}
-      container_registry_url: ${{ secrets.container_registry_url }}
+    secrets: inherit
     strategy:
-      matrix: ${{ fromJSON(inputs.source) }}
+      matrix: ${{ fromJSON(startsWith(inputs.source, '{') && inputs.source || format('{"include":[{"deploy_env":"{0}"}]}', inputs.source)) }}
       fail-fast: false
     with:
       command: p2p-prod

@@ -46,10 +46,9 @@ jobs:
   get-latest-version:
     uses: ./.github/workflows/p2p-get-latest-image.yaml
     if: success() && (github.ref == inputs.main-branch )
-    secrets:
-      env_vars: ${{ secrets.env_vars }}
+    secrets: inherit
     strategy:
-      matrix: ${{ fromJSON(inputs.environment) }}
+      matrix: ${{ fromJSON(startsWith(inputs.environment, '{') && inputs.environment || format('{"include":[{"deploy_env":"{0}"}]}', inputs.environment)) }}
       fail-fast: false
     with:
       environment: ${{ inputs.environment }}

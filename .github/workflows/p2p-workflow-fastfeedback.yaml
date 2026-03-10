@@ -72,13 +72,9 @@ on:
 jobs:
   build:
     uses: ./.github/workflows/p2p-execute-command.yaml
-    secrets:
-      env_vars: ${{ secrets.env_vars }}
-      container_registry_user: ${{ secrets.container_registry_user }}
-      container_registry_pat: ${{ secrets.container_registry_pat }}
-      container_registry_url: ${{ secrets.container_registry_url }}
+    secrets: inherit
     strategy:
-      matrix: ${{ fromJSON(inputs.source) }}
+      matrix: ${{ fromJSON(startsWith(inputs.source, '{') && inputs.source || format('{"include":[{"deploy_env":"{0}"}]}', inputs.source)) }}
       fail-fast: false
     with:
       command: p2p-build
@@ -96,13 +92,9 @@ jobs:
   functional-test:
     needs: [build]
     uses: ./.github/workflows/p2p-execute-command.yaml
-    secrets:
-      env_vars: ${{ secrets.env_vars }}
-      container_registry_user: ${{ secrets.container_registry_user }}
-      container_registry_pat: ${{ secrets.container_registry_pat }}
-      container_registry_url: ${{ secrets.container_registry_url }}
+    secrets: inherit
     strategy:
-      matrix: ${{ fromJSON(inputs.source) }}
+      matrix: ${{ fromJSON(startsWith(inputs.source, '{') && inputs.source || format('{"include":[{"deploy_env":"{0}"}]}', inputs.source)) }}
       fail-fast: false
     with:
       command: p2p-functional
@@ -121,13 +113,9 @@ jobs:
   nft-test:
     needs: [build]
     uses: ./.github/workflows/p2p-execute-command.yaml
-    secrets:
-      env_vars: ${{ secrets.env_vars }}
-      container_registry_user: ${{ secrets.container_registry_user }}
-      container_registry_pat: ${{ secrets.container_registry_pat }}
-      container_registry_url: ${{ secrets.container_registry_url }}
+    secrets: inherit
     strategy:
-      matrix: ${{ fromJSON(inputs.source) }}
+      matrix: ${{ fromJSON(startsWith(inputs.source, '{') && inputs.source || format('{"include":[{"deploy_env":"{0}"}]}', inputs.source)) }}
       fail-fast: false
     with:
       command: p2p-nft
@@ -147,13 +135,9 @@ jobs:
     needs: [functional-test, nft-test]
     if: success() && ( !inputs.skip-fastfeedback-integration-on-prs || github.ref == inputs.main-branch || github.ref_type == 'tag' )
     uses: ./.github/workflows/p2p-execute-command.yaml
-    secrets:
-      env_vars: ${{ secrets.env_vars }}
-      container_registry_user: ${{ secrets.container_registry_user }}
-      container_registry_pat: ${{ secrets.container_registry_pat }}
-      container_registry_url: ${{ secrets.container_registry_url }}
+    secrets: inherit
     strategy:
-      matrix: ${{ fromJSON(inputs.source) }}
+      matrix: ${{ fromJSON(startsWith(inputs.source, '{') && inputs.source || format('{"include":[{"deploy_env":"{0}"}]}', inputs.source)) }}
       fail-fast: false
     with:
       command: p2p-integration
@@ -173,11 +157,10 @@ jobs:
     name: promote
     needs: [integration-test]
     if: success() && ( github.ref == inputs.main-branch || github.ref_type == 'tag' )
-    secrets:
-      env_vars: ${{ secrets.env_vars }}
+    secrets: inherit
     uses: ./.github/workflows/p2p-promote-image.yaml
     strategy:
-      matrix: ${{ fromJSON(inputs.destination) }}
+      matrix: ${{ fromJSON(startsWith(inputs.destination, '{') && inputs.destination || format('{"include":[{"deploy_env":"{0}"}]}', inputs.destination)) }}
       fail-fast: false
     with:
       source_matrix: ${{ inputs.source }}
