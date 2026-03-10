@@ -47,7 +47,7 @@ jobs:
     secrets:
       env_vars: ${{ secrets.env_vars }}
     strategy:
-      matrix: ${{ fromJSON(vars.EXTENDED_TEST) }}
+      matrix: ${{ fromJSON(inputs.environment) }}
       fail-fast: false
     with:
       environment: ${{ inputs.environment }}

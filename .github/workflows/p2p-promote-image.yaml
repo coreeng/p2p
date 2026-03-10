@@ -148,7 +148,7 @@ jobs:
           export P2P_TENANT_NAME="${{ env.TENANT_NAME }}"
           export P2P_APP_NAME=${{ inputs.app-name }}
           export P2P_VERSION=${{ inputs.version }}
-          export P2P_REGISTRY=${{ env.REGION }}-docker.pkg.dev/${{ vars.PROJECT_ID }}/tenant/${{ env.TENANT_NAME }}
+          export P2P_REGISTRY=${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/tenant/${{ env.TENANT_NAME }}
           export P2P_REGISTRY_FAST_FEEDBACK_PATH=fast-feedback
           export P2P_REGISTRY_EXTENDED_TEST_PATH=extended-test
           export P2P_REGISTRY_PROD_PATH=prod
