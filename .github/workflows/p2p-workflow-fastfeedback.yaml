@@ -65,6 +65,22 @@ on:
         required: false
         type: string
         default: ''
+      env-config-file:
+        description: 'Tenant repo config file for environment resolution (e.g. .p2p.yaml)'
+        required: false
+        type: string
+      env-config-repo:
+        description: 'Central repo name for environment config'
+        required: false
+        type: string
+      env-config-repo-owner:
+        description: 'Owner of the central environment config repo'
+        required: false
+        type: string
+      env-config-path-pattern:
+        description: 'Path pattern in central repo (use {env} as placeholder)'
+        required: false
+        type: string
     outputs:
       version:
         value: ${{ inputs.version }}
@@ -88,6 +104,10 @@ jobs:
       working-directory: ${{ inputs.working-directory }}
       skip-subnamespaces-create: ${{ inputs.skip-subnamespaces-create }}
       artifacts: ${{ inputs.artifacts }}
+      env-config-file: ${{ inputs.env-config-file }}
+      env-config-repo: ${{ inputs.env-config-repo }}
+      env-config-repo-owner: ${{ inputs.env-config-repo-owner }}
+      env-config-path-pattern: ${{ inputs.env-config-path-pattern }}
 
   functional-test:
     needs: [build]
@@ -109,6 +129,10 @@ jobs:
       working-directory: ${{ inputs.working-directory }}
       skip-subnamespaces-create: ${{ inputs.skip-subnamespaces-create }}
       artifacts: ${{ inputs.artifacts }}
+      env-config-file: ${{ inputs.env-config-file }}
+      env-config-repo: ${{ inputs.env-config-repo }}
+      env-config-repo-owner: ${{ inputs.env-config-repo-owner }}
+      env-config-path-pattern: ${{ inputs.env-config-path-pattern }}
 
   nft-test:
     needs: [build]
@@ -130,6 +154,10 @@ jobs:
       working-directory: ${{ inputs.working-directory }}
       skip-subnamespaces-create: ${{ inputs.skip-subnamespaces-create }}
       artifacts: ${{ inputs.artifacts }}
+      env-config-file: ${{ inputs.env-config-file }}
+      env-config-repo: ${{ inputs.env-config-repo }}
+      env-config-repo-owner: ${{ inputs.env-config-repo-owner }}
+      env-config-path-pattern: ${{ inputs.env-config-path-pattern }}
 
   integration-test:
     needs: [functional-test, nft-test]
@@ -152,6 +180,10 @@ jobs:
       working-directory: ${{ inputs.working-directory }}
       skip-subnamespaces-create: ${{ inputs.skip-subnamespaces-create }}
       artifacts: ${{ inputs.artifacts }}
+      env-config-file: ${{ inputs.env-config-file }}
+      env-config-repo: ${{ inputs.env-config-repo }}
+      env-config-repo-owner: ${{ inputs.env-config-repo-owner }}
+      env-config-path-pattern: ${{ inputs.env-config-path-pattern }}
 
   promote:
     name: promote
@@ -173,6 +205,10 @@ jobs:
       checkout-version: ${{ inputs.checkout-version }}
       dry-run: ${{ inputs.dry-run }}
       working-directory: ${{ inputs.working-directory }}
+      env-config-file: ${{ inputs.env-config-file }}
+      env-config-repo: ${{ inputs.env-config-repo }}
+      env-config-repo-owner: ${{ inputs.env-config-repo-owner }}
+      env-config-path-pattern: ${{ inputs.env-config-path-pattern }}
 
   notify-failure:
     needs: [build, functional-test, nft-test, integration-test, promote]

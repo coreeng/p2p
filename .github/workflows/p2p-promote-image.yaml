@@ -42,6 +42,22 @@ on:
       checkout-version:
         required: false
         type: string
+      env-config-file:
+        description: 'Tenant repo config file for environment resolution (e.g. .p2p.yaml)'
+        required: false
+        type: string
+      env-config-repo:
+        description: 'Central repo name for environment config'
+        required: false
+        type: string
+      env-config-repo-owner:
+        description: 'Owner of the central environment config repo'
+        required: false
+        type: string
+      env-config-path-pattern:
+        description: 'Path pattern in central repo (use {env} as placeholder)'
+        required: false
+        type: string
 
 jobs:
   lookup:
@@ -67,59 +83,74 @@ jobs:
           EOT
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
-      - name: Generate environment reader token
-        id: env-token
-        if: ${{ !hashFiles('.p2p.yaml') && secrets.P2P_ENV_APP_ID != '' }}
-        uses: actions/create-github-app-token@v1
-        with:
-          app-id: ${{ secrets.P2P_ENV_APP_ID }}
-          private-key: ${{ secrets.P2P_ENV_APP_PRIVATE_KEY }}
-          owner: coreeng
-          repositories: core-platform-environments
-
-      - name: Checkout environment config
-        if: ${{ steps.env-token.outputs.token != '' }}
-        uses: actions/checkout@v4
-        with:
-          repository: coreeng/core-platform-environments
-          token: ${{ steps.env-token.outputs.token }}
-          path: /tmp/core-platform-environments
-          sparse-checkout: |
-            environments/${{ env.ENV_NAME }}
-
-      - name: Resolve environment config (source)
+      - name: Resolve source config from tenant repo file
+        id: tenant-config
+        if: ${{ inputs.env-config-file != '' }}
+        env:
+          ENV_CONFIG_FILE: ${{ inputs.env-config-file }}
         run: |
           set -euo pipefail
           ENV_NAME="${{ env.ENV_NAME }}"
-          CONFIG=""
-
-          # Mode 1: .p2p.yaml in tenant repo
-          if [ -f .p2p.yaml ] && yq -e ".environments.${ENV_NAME}" .p2p.yaml > /dev/null 2>&1; then
-            echo "::notice::Resolving source environment config from .p2p.yaml (${ENV_NAME})"
-            CONFIG=$(yq ".environments.${ENV_NAME}" .p2p.yaml)
-
-          # Mode 2: core-platform-environments (if checked out)
-          elif [ -f "/tmp/core-platform-environments/environments/${ENV_NAME}/config.yaml" ]; then
-            echo "::notice::Resolving source environment config from core-platform-environments (${ENV_NAME})"
-            CONFIG=$(cat "/tmp/core-platform-environments/environments/${ENV_NAME}/config.yaml")
+          if [ -f "${ENV_CONFIG_FILE}" ] && yq -e ".environments.${ENV_NAME}" "${ENV_CONFIG_FILE}" > /dev/null 2>&1; then
+            echo "::notice::Resolving source environment config from ${ENV_CONFIG_FILE} (${ENV_NAME})"
+            yq ".environments.${ENV_NAME}" "${ENV_CONFIG_FILE}" > /tmp/resolved-env-config.yaml
+            echo "resolved=true" >> "$GITHUB_OUTPUT"
           fi
 
-          # Apply config if resolved (otherwise vars.* defaults remain)
-          if [ -n "$CONFIG" ]; then
-            PROJECT_ID=$(echo "$CONFIG" | yq '.platform.projectId')
-            PROJECT_NUMBER=$(echo "$CONFIG" | yq '.platform.projectNumber')
-            REGION=$(echo "$CONFIG" | yq '.platform.region')
-            TENANT_NAME="${{ env.TENANT_NAME }}"
+      - name: Generate environment reader token
+        id: env-token
+        if: ${{ steps.tenant-config.outputs.resolved != 'true' && inputs.env-config-repo != '' && inputs.env-config-repo-owner != '' && secrets.P2P_ENV_APP_ID != '' }}
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.P2P_ENV_APP_ID }}
+          private-key: ${{ secrets.P2P_ENV_APP_PRIVATE_KEY }}
+          owner: ${{ inputs.env-config-repo-owner }}
+          repositories: ${{ inputs.env-config-repo }}
 
-            echo "PROJECT_ID=${PROJECT_ID}" >> "$GITHUB_ENV"
-            echo "PROJECT_NUMBER=${PROJECT_NUMBER}" >> "$GITHUB_ENV"
-            echo "REGION=${REGION}" >> "$GITHUB_ENV"
-            echo "REGISTRY=${REGION}-docker.pkg.dev/${PROJECT_ID}/tenant/${TENANT_NAME}" >> "$GITHUB_ENV"
-            echo "SERVICE_ACCOUNT=p2p-${TENANT_NAME}@${PROJECT_ID}.iam.gserviceaccount.com" >> "$GITHUB_ENV"
-            echo "WORKLOAD_IDENTITY_PROVIDER=projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/p2p-${TENANT_NAME}/providers/p2p-${TENANT_NAME}" >> "$GITHUB_ENV"
+      - name: Checkout central environment config
+        if: ${{ steps.env-token.outputs.token != '' }}
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ inputs.env-config-repo-owner }}/${{ inputs.env-config-repo }}
+          token: ${{ steps.env-token.outputs.token }}
+          path: /tmp/${{ inputs.env-config-repo }}
+          sparse-checkout: |
+            ${{ format(inputs.env-config-path-pattern, env.ENV_NAME) }}
+
+      - name: Resolve source config from central repo
+        id: central-config
+        if: ${{ steps.tenant-config.outputs.resolved != 'true' && steps.env-token.outputs.token != '' }}
+        env:
+          ENV_CONFIG_REPO: ${{ inputs.env-config-repo }}
+          ENV_CONFIG_PATH_PATTERN: ${{ inputs.env-config-path-pattern }}
+        run: |
+          set -euo pipefail
+          ENV_NAME="${{ env.ENV_NAME }}"
+          CENTRAL_CONFIG_PATH="/tmp/${ENV_CONFIG_REPO}/${ENV_CONFIG_PATH_PATTERN/\{env\}/${ENV_NAME}}"
+          if [ -f "${CENTRAL_CONFIG_PATH}" ]; then
+            echo "::notice::Resolving source environment config from ${ENV_CONFIG_REPO} (${ENV_NAME})"
+            cp "${CENTRAL_CONFIG_PATH}" /tmp/resolved-env-config.yaml
+            echo "resolved=true" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Apply resolved source environment config
+        if: ${{ steps.tenant-config.outputs.resolved == 'true' || steps.central-config.outputs.resolved == 'true' }}
+        run: |
+          set -euo pipefail
+          CONFIG=$(cat /tmp/resolved-env-config.yaml)
+          TENANT_NAME="${{ env.TENANT_NAME }}"
+          PROJECT_ID=$(echo "$CONFIG" | yq '.platform.projectId')
+          PROJECT_NUMBER=$(echo "$CONFIG" | yq '.platform.projectNumber')
+          REGION=$(echo "$CONFIG" | yq '.platform.region')
+
+          echo "PROJECT_ID=${PROJECT_ID}" >> "$GITHUB_ENV"
+          echo "PROJECT_NUMBER=${PROJECT_NUMBER}" >> "$GITHUB_ENV"
+          echo "REGION=${REGION}" >> "$GITHUB_ENV"
+          echo "REGISTRY=${REGION}-docker.pkg.dev/${PROJECT_ID}/tenant/${TENANT_NAME}" >> "$GITHUB_ENV"
+          echo "SERVICE_ACCOUNT=p2p-${TENANT_NAME}@${PROJECT_ID}.iam.gserviceaccount.com" >> "$GITHUB_ENV"
+          echo "WORKLOAD_IDENTITY_PROVIDER=projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/p2p-${TENANT_NAME}/providers/p2p-${TENANT_NAME}" >> "$GITHUB_ENV"
 
       - name: Export resolved source config
         id: export
@@ -169,60 +200,76 @@ jobs:
         with:
           ref: ${{ inputs.dry-run == false && inputs.checkout-version || '' }}
 
-      - name: Generate environment reader token
-        id: env-token
-        if: ${{ !hashFiles('.p2p.yaml') && secrets.P2P_ENV_APP_ID != '' }}
-        uses: actions/create-github-app-token@v1
-        with:
-          app-id: ${{ secrets.P2P_ENV_APP_ID }}
-          private-key: ${{ secrets.P2P_ENV_APP_PRIVATE_KEY }}
-          owner: coreeng
-          repositories: core-platform-environments
-
-      - name: Checkout environment config
-        if: ${{ steps.env-token.outputs.token != '' }}
-        uses: actions/checkout@v4
-        with:
-          repository: coreeng/core-platform-environments
-          token: ${{ steps.env-token.outputs.token }}
-          path: /tmp/core-platform-environments
-          sparse-checkout: |
-            environments/${{ inputs.dest_github_env }}
-
-      - name: Resolve environment config (destination)
+      - name: Resolve dest config from tenant repo file
+        id: tenant-config
+        if: ${{ inputs.env-config-file != '' }}
+        env:
+          ENV_CONFIG_FILE: ${{ inputs.env-config-file }}
         run: |
           set -euo pipefail
           ENV_NAME="${{ inputs.dest_github_env }}"
-          CONFIG=""
-
-          # Mode 1: .p2p.yaml in tenant repo
-          if [ -f .p2p.yaml ] && yq -e ".environments.${ENV_NAME}" .p2p.yaml > /dev/null 2>&1; then
-            echo "::notice::Resolving destination environment config from .p2p.yaml (${ENV_NAME})"
-            CONFIG=$(yq ".environments.${ENV_NAME}" .p2p.yaml)
-
-          # Mode 2: core-platform-environments (if checked out)
-          elif [ -f "/tmp/core-platform-environments/environments/${ENV_NAME}/config.yaml" ]; then
-            echo "::notice::Resolving destination environment config from core-platform-environments (${ENV_NAME})"
-            CONFIG=$(cat "/tmp/core-platform-environments/environments/${ENV_NAME}/config.yaml")
+          if [ -f "${ENV_CONFIG_FILE}" ] && yq -e ".environments.${ENV_NAME}" "${ENV_CONFIG_FILE}" > /dev/null 2>&1; then
+            echo "::notice::Resolving destination environment config from ${ENV_CONFIG_FILE} (${ENV_NAME})"
+            yq ".environments.${ENV_NAME}" "${ENV_CONFIG_FILE}" > /tmp/resolved-env-config.yaml
+            echo "resolved=true" >> "$GITHUB_OUTPUT"
           fi
 
-          # Apply config if resolved (otherwise vars.* defaults remain)
-          if [ -n "$CONFIG" ]; then
-            PROJECT_ID=$(echo "$CONFIG" | yq '.platform.projectId')
-            PROJECT_NUMBER=$(echo "$CONFIG" | yq '.platform.projectNumber')
-            REGION=$(echo "$CONFIG" | yq '.platform.region')
-            TENANT_NAME="${{ env.TENANT_NAME }}"
+      - name: Generate environment reader token
+        id: env-token
+        if: ${{ steps.tenant-config.outputs.resolved != 'true' && inputs.env-config-repo != '' && inputs.env-config-repo-owner != '' && secrets.P2P_ENV_APP_ID != '' }}
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.P2P_ENV_APP_ID }}
+          private-key: ${{ secrets.P2P_ENV_APP_PRIVATE_KEY }}
+          owner: ${{ inputs.env-config-repo-owner }}
+          repositories: ${{ inputs.env-config-repo }}
 
-            echo "PROJECT_ID=${PROJECT_ID}" >> "$GITHUB_ENV"
-            echo "PROJECT_NUMBER=${PROJECT_NUMBER}" >> "$GITHUB_ENV"
-            echo "REGION=${REGION}" >> "$GITHUB_ENV"
-            echo "BASE_DOMAIN=$(echo "$CONFIG" | yq '.ingressDomains[0].domain')" >> "$GITHUB_ENV"
-            echo "INTERNAL_SERVICES_DOMAIN=$(echo "$CONFIG" | yq '.internalServices.domain')" >> "$GITHUB_ENV"
-            echo "DPLATFORM=${ENV_NAME}" >> "$GITHUB_ENV"
-            echo "REGISTRY=${REGION}-docker.pkg.dev/${PROJECT_ID}/tenant/${TENANT_NAME}" >> "$GITHUB_ENV"
-            echo "SERVICE_ACCOUNT=p2p-${TENANT_NAME}@${PROJECT_ID}.iam.gserviceaccount.com" >> "$GITHUB_ENV"
-            echo "WORKLOAD_IDENTITY_PROVIDER=projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/p2p-${TENANT_NAME}/providers/p2p-${TENANT_NAME}" >> "$GITHUB_ENV"
+      - name: Checkout central environment config
+        if: ${{ steps.env-token.outputs.token != '' }}
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ inputs.env-config-repo-owner }}/${{ inputs.env-config-repo }}
+          token: ${{ steps.env-token.outputs.token }}
+          path: /tmp/${{ inputs.env-config-repo }}
+          sparse-checkout: |
+            ${{ format(inputs.env-config-path-pattern, inputs.dest_github_env) }}
+
+      - name: Resolve dest config from central repo
+        id: central-config
+        if: ${{ steps.tenant-config.outputs.resolved != 'true' && steps.env-token.outputs.token != '' }}
+        env:
+          ENV_CONFIG_REPO: ${{ inputs.env-config-repo }}
+          ENV_CONFIG_PATH_PATTERN: ${{ inputs.env-config-path-pattern }}
+        run: |
+          set -euo pipefail
+          ENV_NAME="${{ inputs.dest_github_env }}"
+          CENTRAL_CONFIG_PATH="/tmp/${ENV_CONFIG_REPO}/${ENV_CONFIG_PATH_PATTERN/\{env\}/${ENV_NAME}}"
+          if [ -f "${CENTRAL_CONFIG_PATH}" ]; then
+            echo "::notice::Resolving destination environment config from ${ENV_CONFIG_REPO} (${ENV_NAME})"
+            cp "${CENTRAL_CONFIG_PATH}" /tmp/resolved-env-config.yaml
+            echo "resolved=true" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Apply resolved destination environment config
+        if: ${{ steps.tenant-config.outputs.resolved == 'true' || steps.central-config.outputs.resolved == 'true' }}
+        run: |
+          set -euo pipefail
+          CONFIG=$(cat /tmp/resolved-env-config.yaml)
+          ENV_NAME="${{ inputs.dest_github_env }}"
+          TENANT_NAME="${{ env.TENANT_NAME }}"
+          PROJECT_ID=$(echo "$CONFIG" | yq '.platform.projectId')
+          PROJECT_NUMBER=$(echo "$CONFIG" | yq '.platform.projectNumber')
+          REGION=$(echo "$CONFIG" | yq '.platform.region')
+
+          echo "PROJECT_ID=${PROJECT_ID}" >> "$GITHUB_ENV"
+          echo "PROJECT_NUMBER=${PROJECT_NUMBER}" >> "$GITHUB_ENV"
+          echo "REGION=${REGION}" >> "$GITHUB_ENV"
+          echo "BASE_DOMAIN=$(echo "$CONFIG" | yq '.ingressDomains[0].domain')" >> "$GITHUB_ENV"
+          echo "INTERNAL_SERVICES_DOMAIN=$(echo "$CONFIG" | yq '.internalServices.domain')" >> "$GITHUB_ENV"
+          echo "DPLATFORM=${ENV_NAME}" >> "$GITHUB_ENV"
+          echo "REGISTRY=${REGION}-docker.pkg.dev/${PROJECT_ID}/tenant/${TENANT_NAME}" >> "$GITHUB_ENV"
+          echo "SERVICE_ACCOUNT=p2p-${TENANT_NAME}@${PROJECT_ID}.iam.gserviceaccount.com" >> "$GITHUB_ENV"
+          echo "WORKLOAD_IDENTITY_PROVIDER=projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/p2p-${TENANT_NAME}/providers/p2p-${TENANT_NAME}" >> "$GITHUB_ENV"
 
       - name: Authenticate to Google Cloud (Source)
         id: auth-source

@@ -41,6 +41,22 @@ on:
         required: false
         type: string
         default: europe-west2
+      env-config-file:
+        description: 'Tenant repo config file for environment resolution (e.g. .p2p.yaml)'
+        required: false
+        type: string
+      env-config-repo:
+        description: 'Central repo name for environment config'
+        required: false
+        type: string
+      env-config-repo-owner:
+        description: 'Owner of the central environment config repo'
+        required: false
+        type: string
+      env-config-path-pattern:
+        description: 'Path pattern in central repo (use {env} as placeholder)'
+        required: false
+        type: string
 
 jobs:
   get-latest-version:
@@ -58,6 +74,10 @@ jobs:
       dry-run: ${{ inputs.dry-run }}
       working-directory: ${{ inputs.working-directory }}
       region: ${{ inputs.region }}
+      env-config-file: ${{ inputs.env-config-file }}
+      env-config-repo: ${{ inputs.env-config-repo }}
+      env-config-repo-owner: ${{ inputs.env-config-repo-owner }}
+      env-config-path-pattern: ${{ inputs.env-config-path-pattern }}
 
   notify-failure:
     needs: [get-latest-version]
