@@ -104,6 +104,20 @@ extended-test:
 This is a way you can pass secrets to be exposed as environment variables for your makefile to use. This will also ensure
 your secrets stay secret and hidden from any inputs on the CI jobs.
 
+Both `KEY=value` and `KEY<<MARKER ... MARKER` entries are supported inside `secrets.env_vars`, so you can pass either single-line values or multiline secrets.
+
+```yaml
+secrets:
+  env_vars: |
+    SIMPLE=value
+    PRIVATE_KEY<<EOF
+    -----BEGIN PRIVATE KEY-----
+    line1
+    line2
+    -----END PRIVATE KEY-----
+    EOF
+```
+
 ### secrets.container_registry_user && container_registry_pat
 
 These will be used to authenticate to tenant provided registry with tenant's own account. Check the documentation on how to generate these for dockerhub.
