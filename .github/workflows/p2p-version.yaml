@@ -39,7 +39,7 @@ jobs:
       previous_version: ${{ steps.setversion.outputs.previous_version }}
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         fetch-depth: 0
         ref: ${{ inputs.checkout-version }}

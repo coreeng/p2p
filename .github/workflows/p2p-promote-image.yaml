@@ -101,7 +101,7 @@ jobs:
           EOT
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ inputs.dry-run == false && inputs.checkout-version || '' }}
 
@@ -109,7 +109,7 @@ jobs:
       - name: Authenticate to Google Cloud (Source)
         id: auth-source
         if: inputs.dry-run == false
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@v3
         with:
           export_environment_variables: false
           workload_identity_provider: ${{ env.SOURCE_WORKLOAD_IDENTITY_PROVIDER }}
@@ -122,7 +122,7 @@ jobs:
       - name: Authenticate to Google Cloud (Dest)
         id: auth-dest
         if: inputs.dry-run == false
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@v3
         with:
           export_environment_variables: false
           workload_identity_provider: ${{ env.WORKLOAD_IDENTITY_PROVIDER }}
