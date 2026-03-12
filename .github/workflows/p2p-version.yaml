@@ -12,6 +12,8 @@ on:
     secrets:
       git-token:
         required: true
+      slack_webhook_url:
+        required: false
     inputs:
       main-branch:
         required: false
@@ -131,3 +133,25 @@ jobs:
       shell: bash
       run: |
         echo "Output version: ${{ steps.setversion.outputs.version }}"
+
+  failure-alert:
+    needs: [increment-version]
+    name: Slack failure alert
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    if: always() && github.ref == inputs.main-branch && contains(needs.*.result, 'failure')
+
+    env:
+      SLACK_WEBHOOK_URL: ${{ secrets.slack_webhook_url }}
+
+    steps:
+      - id: slack-alert
+        name: Slack alert
+        uses: slackapi/slack-github-action@v2
+        if: env.SLACK_WEBHOOK_URL != ''
+        with:
+          webhook: ${{ env.SLACK_WEBHOOK_URL }}
+          webhook-type: webhook-trigger
+          payload: |
+            notification: "P2P version workflow failed"
+            workflow_link: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
