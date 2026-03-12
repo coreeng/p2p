@@ -112,6 +112,14 @@ These will be used to authenticate to tenant provided registry with tenant's own
 
 Tenant provided registry url. If unspecified, the default of dockerhub will be used
 
+### secrets.slack_webhook_url
+
+Optional Slack Incoming Webhook URL used for failure alerts.
+
+- If set, P2P reusable workflows will send Slack alerts when they fail on the default branch.
+- Additionally, the prod reusable workflow will send a Slack alert when prod succeeds (skips `dry-run`).
+- Recommended: store it as a repo secret named `P2P_SLACK_WEBHOOK_URL`, and pass it through to the reusable workflows as `slack_webhook_url`.
+
 ### dry_run
 
 Typically used for syntax testing. Will run most jobs without actually connecting to them or calling the makefile tasks.

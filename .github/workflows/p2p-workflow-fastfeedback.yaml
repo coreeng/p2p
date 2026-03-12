@@ -9,6 +9,8 @@ on:
         required: false
       container_registry_url:
         required: false
+      slack_webhook_url:
+        required: false
     inputs:
       dry-run:
         required: false
@@ -188,3 +190,27 @@ jobs:
       checkout-version: ${{ inputs.checkout-version }}
       dry-run: ${{ inputs.dry-run }}
       working-directory: ${{ inputs.working-directory }}
+
+  failure-alert:
+    needs: [build, functional-test, nft-test, integration-test, promote]
+    name: Slack failure alert
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    if: always() && github.ref == inputs.main-branch && contains(needs.*.result, 'failure')
+
+    env:
+      SLACK_WEBHOOK_URL: ${{ secrets.slack_webhook_url }}
+
+    steps:
+      - id: slack-alert
+        name: Slack alert
+        uses: slackapi/slack-github-action@v2
+        if: env.SLACK_WEBHOOK_URL != ''
+        with:
+          webhook: ${{ env.SLACK_WEBHOOK_URL }}
+          webhook-type: webhook-trigger
+          payload: |
+            notification: "❌ P2P fast-feedback failed: *${{ inputs.app-name != '' && inputs.app-name || github.event.repository.name }}* @ *${{ inputs.version }}*"
+            app_name: "${{ inputs.app-name != '' && inputs.app-name || github.event.repository.name }}"
+            version: "${{ inputs.version }}"
+            workflow_link: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
