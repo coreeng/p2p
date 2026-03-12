@@ -134,9 +134,8 @@ jobs:
       run: |
         echo "Output version: ${{ steps.setversion.outputs.version }}"
 
-  failure-alert:
+  notify-failure:
     needs: [increment-version]
-    name: Slack failure alert
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     if: always() && github.ref == inputs.main-branch && contains(needs.*.result, 'failure')

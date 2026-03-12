@@ -81,9 +81,8 @@ jobs:
       checkout-version: ${{ inputs.version-prefix }}${{ inputs.version }}
       skip-subnamespaces-create: ${{ inputs.skip-subnamespaces-create }}
 
-  failure-alert:
+  notify-failure:
     needs: [prod-deploy]
-    name: Slack failure alert
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     if: always() && github.ref == inputs.main-branch && contains(needs.*.result, 'failure')
@@ -105,9 +104,8 @@ jobs:
             version: "${{ inputs.version }}"
             workflow_link: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
-  success-alert:
+  notify-success:
     needs: [prod-deploy]
-    name: Slack success alert
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     if: github.ref == inputs.main-branch && needs.prod-deploy.result == 'success' && inputs.dry-run == false

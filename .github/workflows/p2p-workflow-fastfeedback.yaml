@@ -191,9 +191,8 @@ jobs:
       dry-run: ${{ inputs.dry-run }}
       working-directory: ${{ inputs.working-directory }}
 
-  failure-alert:
+  notify-failure:
     needs: [build, functional-test, nft-test, integration-test, promote]
-    name: Slack failure alert
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     if: always() && github.ref == inputs.main-branch && contains(needs.*.result, 'failure')

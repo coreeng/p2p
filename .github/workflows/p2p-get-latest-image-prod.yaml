@@ -60,9 +60,8 @@ jobs:
       working-directory: ${{ inputs.working-directory }}
       region: ${{ inputs.region }}
 
-  failure-alert:
+  notify-failure:
     needs: [get-latest-version]
-    name: Slack failure alert
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     if: always() && github.ref == inputs.main-branch && contains(needs.*.result, 'failure')

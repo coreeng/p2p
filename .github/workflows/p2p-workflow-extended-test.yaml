@@ -109,9 +109,8 @@ jobs:
       working-directory: ${{ inputs.working-directory }}
       checkout-version: ${{ inputs.version-prefix }}${{ inputs.version }}
 
-  failure-alert:
+  notify-failure:
     needs: [run-tests, promote]
-    name: Slack failure alert
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     if: always() && github.ref == inputs.main-branch && contains(needs.*.result, 'failure')
