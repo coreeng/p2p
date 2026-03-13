@@ -54,22 +54,31 @@ on:
         required: false
         type: boolean
         default: false
-      env-config-file:
-        description: 'Tenant repo config file for environment resolution (e.g. .p2p.yaml)'
+      config-mode:
+        description: 'Config source: github-env, repo-file, or central-repo'
         required: false
         type: string
-      env-config-repo:
-        description: 'Central repo name for environment config'
+        default: ''
+      repo-file-path:
+        description: 'Path to tenant repo config file (e.g. .p2p.yaml)'
         required: false
         type: string
-      env-config-repo-owner:
-        description: 'Owner of the central environment config repo'
+        default: ''
+      central-repo-name:
+        description: 'Central config repo name'
         required: false
         type: string
-      env-config-path-pattern:
-        description: 'Path pattern in central repo (use {env} as placeholder)'
+        default: ''
+      central-repo-owner:
+        description: 'Central config repo owner'
         required: false
         type: string
+        default: ''
+      central-repo-path-pattern:
+        description: 'Path pattern in central repo ({env} replaced with environment name)'
+        required: false
+        type: string
+        default: 'environments/{env}/config.yaml'
 
 jobs:
   prod-deploy:
@@ -92,10 +101,11 @@ jobs:
       working-directory: ${{ inputs.working-directory }}
       checkout-version: ${{ inputs.version-prefix }}${{ inputs.version }}
       skip-subnamespaces-create: ${{ inputs.skip-subnamespaces-create }}
-      env-config-file: ${{ inputs.env-config-file }}
-      env-config-repo: ${{ inputs.env-config-repo }}
-      env-config-repo-owner: ${{ inputs.env-config-repo-owner }}
-      env-config-path-pattern: ${{ inputs.env-config-path-pattern }}
+      config-mode: ${{ inputs.config-mode }}
+      repo-file-path: ${{ inputs.repo-file-path }}
+      central-repo-name: ${{ inputs.central-repo-name }}
+      central-repo-owner: ${{ inputs.central-repo-owner }}
+      central-repo-path-pattern: ${{ inputs.central-repo-path-pattern }}
 
   notify-failure:
     needs: [prod-deploy]
