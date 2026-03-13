@@ -49,6 +49,16 @@ When `config-mode` is empty (default), `vars.*` are used implicitly — same as 
 
 `DPLATFORM` and `PLATFORM_ENVIRONMENT` are set to the environment name when `fields` is `full`. They are not set for `core` (used by lookup-only jobs like `p2p-get-latest-image` and the `lookup` job in `p2p-promote-image`).
 
+### Field presence validation
+
+When `config-mode` is `repo-file` or `central-repo`, the action validates that every field in the requested set is present and non-empty in the resolved config. If any field is missing, the action fails with a clear error naming the missing field, the source, and the environment. For example:
+
+```
+::error::Field 'BASE_DOMAIN' (path: .ingressDomains[0].domain) not found in repo-file '.p2p.yaml' for environment 'gcp-dev'
+```
+
+This prevents silent misconfiguration — if you've chosen a config source, it must fully satisfy the requested field set.
+
 ### Derived variables
 
 When resolution occurs (mode is `repo-file` or `central-repo`), derived variables are recomputed from resolved values:
