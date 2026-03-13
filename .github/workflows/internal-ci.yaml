@@ -48,6 +48,118 @@ jobs:
       dry-run: true
       version: ${{ needs.test_version.outputs.version }}
 
+  test_execute_command_multiline_env:
+    needs: [test_version]
+    uses: ./.github/workflows/p2p-execute-command.yaml
+    secrets:
+      env_vars: |
+        TEST_MULTILINE_VARIABLE<<EOF
+        line one
+        line two
+        EOF
+    with:
+      command: test-multiline-var-print
+      dry-run: true
+      version: ${{ needs.test_version.outputs.version }}
+
+  test_multiline_env_decoders:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify multiline env decoders
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os
+          import subprocess
+          import tempfile
+          from pathlib import Path
+
+          WORKFLOWS = [
+              '.github/workflows/p2p-execute-command.yaml',
+              '.github/workflows/platform-execute-command.yaml',
+              '.github/workflows/p2p-promote-image.yaml',
+          ]
+
+          FIXTURES = [
+              (
+                  'single and multiline',
+                  'SIMPLE=value\nMULTI<<EOF\nline one\nline two\nEOF\n',
+                  {'SIMPLE': 'value', 'MULTI': 'line one\nline two'},
+              ),
+              (
+                  'leading blank line',
+                  'LEADING<<EOF\n\nline one\nEOF\n',
+                  {'LEADING': '\nline one'},
+              ),
+          ]
+
+          def extract_decoder(path: Path) -> str:
+              lines = path.read_text().splitlines()
+              for index, line in enumerate(lines):
+                  if line.strip() != '- name: Decode environment variables':
+                      continue
+                  for run_index in range(index + 1, len(lines)):
+                      if lines[run_index].strip() == 'run: |':
+                          body = []
+                          for body_line in lines[run_index + 1:]:
+                              if body_line.startswith('          '):
+                                  body.append(body_line[10:])
+                                  continue
+                              if body_line == '':
+                                  body.append('')
+                                  continue
+                              break
+                          return '\n'.join(body) + '\n'
+              raise AssertionError(f'Could not extract decoder from {path}')
+
+          def parse_github_env(path: Path) -> dict[str, str]:
+              result = {}
+              lines = path.read_text().splitlines()
+              i = 0
+              while i < len(lines):
+                  line = lines[i]
+                  if '<<' in line:
+                      name, marker = line.split('<<', 1)
+                      i += 1
+                      value_lines = []
+                      while i < len(lines) and lines[i] != marker:
+                          value_lines.append(lines[i])
+                          i += 1
+                      result[name] = '\n'.join(value_lines)
+                  else:
+                      name, value = line.split('=', 1)
+                      result[name] = value
+                  i += 1
+              return result
+
+          for workflow in WORKFLOWS:
+              script = extract_decoder(Path(workflow))
+              for fixture_name, env_vars, expected in FIXTURES:
+                  with tempfile.NamedTemporaryFile(delete=False) as tmp:
+                      github_env = tmp.name
+                  env = os.environ.copy()
+                  env.update({'env_vars': env_vars, 'GITHUB_ENV': github_env})
+                  completed = subprocess.run(
+                      ['bash', '-eu', '-c', script],
+                      env=env,
+                      text=True,
+                      capture_output=True,
+                  )
+                  if completed.returncode != 0:
+                      raise SystemExit(
+                          f'{workflow} failed for {fixture_name}:\nSTDOUT:\n{completed.stdout}\nSTDERR:\n{completed.stderr}'
+                      )
+                  parsed = parse_github_env(Path(github_env))
+                  if parsed != expected:
+                      raise SystemExit(
+                          f'{workflow} produced wrong env for {fixture_name}: {parsed!r} != {expected!r}'
+                      )
+
+          print('decoder fixtures passed')
+          PY
+
   test_fastfeedback:
     needs: [test_version]
     uses: ./.github/workflows/p2p-workflow-fastfeedback.yaml

@@ -58,3 +58,8 @@ p2p-promote-to-prod:
 test-var-print :## Test task
 	echo $${TEST_VARIABLE}
 
+.PHONY: test-multiline-var-print
+test-multiline-var-print: ## Test multiline env propagation
+	printf '%s\n' "$${TEST_MULTILINE_VARIABLE}"
+	printf '%s\n' "$${TEST_MULTILINE_VARIABLE}" | grep -Fx 'line one'
+	printf '%s\n' "$${TEST_MULTILINE_VARIABLE}" | grep -Fx 'line two'

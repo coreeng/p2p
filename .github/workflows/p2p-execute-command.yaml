@@ -206,12 +206,72 @@ jobs:
       - name: Decode environment variables
         shell: bash
         run: |
-          IFS=$'\n'
-          for i in $env_vars; do
-            i="${i%%=*}"="${i#*=}"
-            echo "::add-mask::${i#*=}"
-            printf '%s\n' "${i//\\/\\\\}" >> "${GITHUB_ENV}"
-          done
+          current_name=''
+          current_marker=''
+          current_value=''
+          current_has_lines=false
+
+          while IFS= read -r line || [ -n "$line" ]; do
+            if [ -n "$current_name" ]; then
+              if [ "$line" = "$current_marker" ]; then
+                delimiter="P2P_ENV_$(uuidgen)"
+                {
+                  printf '%s<<%s\n' "$current_name" "$delimiter"
+                  printf '%s\n' "$current_value"
+                  printf '%s\n' "$delimiter"
+                } >> "$GITHUB_ENV"
+                current_name=''
+                current_marker=''
+                current_value=''
+                current_has_lines=false
+                continue
+              fi
+
+              if [ -n "$line" ]; then
+                echo "::add-mask::$line"
+              fi
+
+              if [ "$current_has_lines" = true ]; then
+                current_value+=$'\n'
+              fi
+              current_value+="$line"
+              current_has_lines=true
+              continue
+            fi
+
+            if [ -z "$line" ]; then
+              continue
+            fi
+
+            if [[ "$line" == *'<<'* && "$line" != *'='* ]]; then
+              current_name=${line%%<<*}
+              current_marker=${line#*<<}
+
+              if [ -z "$current_name" ] || [ -z "$current_marker" ]; then
+                echo "Invalid multiline environment variable declaration: $line" >&2
+                exit 1
+              fi
+
+              current_value=''
+              current_has_lines=false
+              continue
+            fi
+
+            if [[ "$line" != *'='* ]]; then
+              echo "Invalid environment variable declaration: $line" >&2
+              exit 1
+            fi
+
+            name=${line%%=*}
+            value=${line#*=}
+            echo "::add-mask::$value"
+            printf '%s=%s\n' "$name" "$value" >> "$GITHUB_ENV"
+          done <<< "$env_vars"
+
+          if [ -n "$current_name" ]; then
+            echo "Unterminated multiline environment variable: $current_name" >&2
+            exit 1
+          fi
 
       - name: Set p2p variables
         id: setup-p2p-variables
