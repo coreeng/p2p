@@ -1,0 +1,208 @@
+name: 'Resolve Environment'
+description: 'Resolves environment config from one of three mutually exclusive sources'
+
+inputs:
+  environment:
+    description: 'Environment name (e.g. gcp-dev)'
+    required: true
+  config-mode:
+    description: 'Config source: github-env, repo-file, or central-repo'
+    required: false
+    default: ''
+  repo-file-path:
+    description: 'Path to tenant repo config file (e.g. .p2p.yaml)'
+    required: false
+    default: ''
+  central-repo-name:
+    description: 'Central config repo name'
+    required: false
+    default: ''
+  central-repo-owner:
+    description: 'Central config repo owner'
+    required: false
+    default: ''
+  central-repo-path-pattern:
+    description: 'Path pattern in central repo ({env} replaced with environment name)'
+    required: false
+    default: 'environments/{env}/config.yaml'
+  central-repo-token:
+    description: 'Pre-generated token for central repo access'
+    required: false
+    default: ''
+  fields:
+    description: 'Field set to resolve: core or full'
+    required: false
+    default: 'full'
+
+outputs:
+  resolved:
+    description: 'true if config was resolved from repo-file or central-repo, false otherwise'
+    value: ${{ steps.resolve.outputs.resolved || 'false' }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Validate config-mode inputs
+      shell: bash
+      env:
+        CONFIG_MODE: ${{ inputs.config-mode }}
+        REPO_FILE_PATH: ${{ inputs.repo-file-path }}
+        CENTRAL_REPO_NAME: ${{ inputs.central-repo-name }}
+        CENTRAL_REPO_OWNER: ${{ inputs.central-repo-owner }}
+        CENTRAL_REPO_TOKEN: ${{ inputs.central-repo-token }}
+        FIELDS: ${{ inputs.fields }}
+      run: |
+        set -euo pipefail
+
+        # Validate config-mode value
+        if [[ -n "$CONFIG_MODE" && "$CONFIG_MODE" != "github-env" && "$CONFIG_MODE" != "repo-file" && "$CONFIG_MODE" != "central-repo" ]]; then
+          echo "::error::Invalid config-mode '${CONFIG_MODE}'. Must be one of: github-env, repo-file, central-repo"
+          exit 1
+        fi
+
+        # Validate fields value
+        if [[ "$FIELDS" != "core" && "$FIELDS" != "full" ]]; then
+          echo "::error::Invalid fields '${FIELDS}'. Must be one of: core, full"
+          exit 1
+        fi
+
+        # Validate repo-file mode has required inputs
+        if [[ "$CONFIG_MODE" == "repo-file" && -z "$REPO_FILE_PATH" ]]; then
+          echo "::error::config-mode is 'repo-file' but repo-file-path is not set"
+          exit 1
+        fi
+
+        # Validate central-repo mode has required inputs
+        if [[ "$CONFIG_MODE" == "central-repo" ]]; then
+          [[ -z "$CENTRAL_REPO_NAME" ]] && echo "::error::config-mode is 'central-repo' but central-repo-name is not set" && exit 1
+          [[ -z "$CENTRAL_REPO_OWNER" ]] && echo "::error::config-mode is 'central-repo' but central-repo-owner is not set" && exit 1
+          [[ -z "$CENTRAL_REPO_TOKEN" ]] && echo "::error::config-mode is 'central-repo' but central-repo-token is not set" && exit 1
+        fi
+
+        # Validate no config inputs when mode is empty (force explicit intent)
+        # Note: central-repo-path-pattern is excluded because it has a non-empty default
+        if [[ -z "$CONFIG_MODE" ]]; then
+          if [[ -n "$REPO_FILE_PATH" || -n "$CENTRAL_REPO_NAME" || -n "$CENTRAL_REPO_OWNER" || -n "$CENTRAL_REPO_TOKEN" ]]; then
+            echo "::error::config-mode is not set but repo-file or central-repo inputs are provided. Set config-mode explicitly."
+            exit 1
+          fi
+        fi
+
+        echo "::notice::Config mode: ${CONFIG_MODE:-'(default: github-env implicit)'}"
+
+    - name: Resolve config from tenant repo file
+      id: repo-file
+      if: ${{ inputs.config-mode == 'repo-file' }}
+      shell: bash
+      env:
+        REPO_FILE_PATH: ${{ inputs.repo-file-path }}
+        ENVIRONMENT: ${{ inputs.environment }}
+      run: |
+        set -euo pipefail
+        if [[ ! -f "$REPO_FILE_PATH" ]]; then
+          echo "::error::Config file '${REPO_FILE_PATH}' not found"
+          exit 1
+        fi
+        if ! yq -e ".environments.${ENVIRONMENT}" "$REPO_FILE_PATH" > /dev/null 2>&1; then
+          echo "::error::Environment '${ENVIRONMENT}' not found in '${REPO_FILE_PATH}'"
+          exit 1
+        fi
+        echo "::notice::Resolving environment config from ${REPO_FILE_PATH} (${ENVIRONMENT})"
+        yq ".environments.${ENVIRONMENT}" "$REPO_FILE_PATH" > /tmp/resolved-config.yaml
+
+    - name: Resolve central repo path
+      id: central-path
+      if: ${{ inputs.config-mode == 'central-repo' }}
+      shell: bash
+      env:
+        PATH_PATTERN: ${{ inputs.central-repo-path-pattern }}
+        ENVIRONMENT: ${{ inputs.environment }}
+      run: |
+        RESOLVED_PATH="${PATH_PATTERN//\{env\}/$ENVIRONMENT}"
+        echo "path=${RESOLVED_PATH}" >> "$GITHUB_OUTPUT"
+
+    - name: Checkout central environment config
+      if: ${{ inputs.config-mode == 'central-repo' }}
+      uses: actions/checkout@v6
+      with:
+        repository: ${{ inputs.central-repo-owner }}/${{ inputs.central-repo-name }}
+        token: ${{ inputs.central-repo-token }}
+        path: /tmp/${{ inputs.central-repo-name }}
+        sparse-checkout: |
+          ${{ steps.central-path.outputs.path }}
+
+    - name: Resolve config from central repo
+      id: central-repo
+      if: ${{ inputs.config-mode == 'central-repo' }}
+      shell: bash
+      env:
+        CENTRAL_REPO_NAME: ${{ inputs.central-repo-name }}
+        RESOLVED_PATH: ${{ steps.central-path.outputs.path }}
+      run: |
+        set -euo pipefail
+        CENTRAL_CONFIG_PATH="/tmp/${CENTRAL_REPO_NAME}/${RESOLVED_PATH}"
+        if [[ ! -f "$CENTRAL_CONFIG_PATH" ]]; then
+          echo "::error::Config file not found at '${RESOLVED_PATH}' in central repo '${CENTRAL_REPO_NAME}'"
+          exit 1
+        fi
+        echo "::notice::Resolving environment config from ${CENTRAL_REPO_NAME} (${RESOLVED_PATH})"
+        cp "$CENTRAL_CONFIG_PATH" /tmp/resolved-config.yaml
+
+    - name: Extract and validate fields
+      id: resolve
+      if: ${{ inputs.config-mode == 'repo-file' || inputs.config-mode == 'central-repo' }}
+      shell: bash
+      env:
+        FIELDS: ${{ inputs.fields }}
+        ENVIRONMENT: ${{ inputs.environment }}
+        CONFIG_MODE: ${{ inputs.config-mode }}
+        SOURCE_LABEL: ${{ inputs.config-mode == 'repo-file' && inputs.repo-file-path || inputs.central-repo-name }}
+      run: |
+        set -euo pipefail
+        CONFIG=$(cat /tmp/resolved-config.yaml)
+
+        # Define field mappings
+        CORE_FIELDS=(
+          "PROJECT_ID:.platform.projectId"
+          "PROJECT_NUMBER:.platform.projectNumber"
+          "REGION:.platform.region"
+        )
+        FULL_FIELDS=(
+          "BASE_DOMAIN:.ingressDomains[0].domain"
+          "INTERNAL_SERVICES_DOMAIN:.internalServices.domain"
+        )
+
+        # Select fields based on mode
+        if [[ "$FIELDS" == "full" ]]; then
+          FIELD_LIST=("${CORE_FIELDS[@]}" "${FULL_FIELDS[@]}")
+        else
+          FIELD_LIST=("${CORE_FIELDS[@]}")
+        fi
+
+        # Extract and validate each field
+        for pair in "${FIELD_LIST[@]}"; do
+          key="${pair%%:*}"
+          path="${pair#*:}"
+          val=$(echo "$CONFIG" | yq "${path} // empty")
+          if [[ -z "$val" ]]; then
+            echo "::error::Field '${key}' (path: ${path}) not found in ${CONFIG_MODE} '${SOURCE_LABEL}' for environment '${ENVIRONMENT}'"
+            exit 1
+          fi
+          echo "${key}=${val}" >> "$GITHUB_ENV"
+        done
+
+        # Set DPLATFORM and PLATFORM_ENVIRONMENT for full mode
+        if [[ "$FIELDS" == "full" ]]; then
+          echo "DPLATFORM=${ENVIRONMENT}" >> "$GITHUB_ENV"
+          echo "PLATFORM_ENVIRONMENT=${ENVIRONMENT}" >> "$GITHUB_ENV"
+        fi
+
+        echo "resolved=true" >> "$GITHUB_OUTPUT"
+
+    - name: Recompute derived env vars
+      if: ${{ steps.resolve.outputs.resolved == 'true' }}
+      shell: bash
+      run: |
+        echo "REGISTRY=${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/tenant/${{ env.TENANT_NAME }}" >> "$GITHUB_ENV"
+        echo "SERVICE_ACCOUNT=p2p-${{ env.TENANT_NAME }}@${{ env.PROJECT_ID }}.iam.gserviceaccount.com" >> "$GITHUB_ENV"
+        echo "WORKLOAD_IDENTITY_PROVIDER=projects/${{ env.PROJECT_NUMBER }}/locations/global/workloadIdentityPools/p2p-${{ env.TENANT_NAME }}/providers/p2p-${{ env.TENANT_NAME }}" >> "$GITHUB_ENV"
