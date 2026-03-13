@@ -108,7 +108,7 @@ jobs:
           repositories: ${{ inputs.central-repo-name }}
 
       - name: Resolve environment config
-        uses: ./.github/actions/resolve-environment
+        uses: ./.github/actions/resolve-platform-config
         with:
           environment: ${{ env.ENV_NAME }}
           config-mode: ${{ inputs.config-mode }}

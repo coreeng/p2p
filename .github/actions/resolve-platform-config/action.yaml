@@ -1,5 +1,5 @@
-name: 'Resolve Environment'
-description: 'Resolves environment config from one of three mutually exclusive sources'
+name: 'Resolve Platform Config'
+description: 'Resolves platform config from one of three mutually exclusive sources'
 
 inputs:
   environment:
