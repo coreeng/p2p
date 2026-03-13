@@ -26,7 +26,7 @@ inputs:
     required: false
     default: 'environments/{env}/config.yaml'
   central-repo-token:
-    description: 'Pre-generated token for central repo access'
+    description: 'Token for central repo access (PAT, GitHub App token, or GITHUB_TOKEN)'
     required: false
     default: ''
   fields:

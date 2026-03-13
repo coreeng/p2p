@@ -11,6 +11,8 @@ on:
         required: false
       slack_webhook_url:
         required: false
+      central_repo_token:
+        required: false
     inputs:
       source:
         required: false
@@ -113,6 +115,7 @@ jobs:
       central-repo-name: ${{ inputs.central-repo-name }}
       central-repo-owner: ${{ inputs.central-repo-owner }}
       central-repo-path-pattern: ${{ inputs.central-repo-path-pattern }}
+      central-repo-token: ${{ secrets.central_repo_token }}
 
   promote:
     uses: ./.github/workflows/p2p-promote-image.yaml
@@ -138,6 +141,7 @@ jobs:
       central-repo-name: ${{ inputs.central-repo-name }}
       central-repo-owner: ${{ inputs.central-repo-owner }}
       central-repo-path-pattern: ${{ inputs.central-repo-path-pattern }}
+      central-repo-token: ${{ secrets.central_repo_token }}
 
   notify-failure:
     needs: [run-tests, promote]

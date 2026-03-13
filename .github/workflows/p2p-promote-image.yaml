@@ -67,6 +67,11 @@ on:
         required: false
         type: string
         default: 'environments/{env}/config.yaml'
+      central-repo-token:
+        description: 'Token for central repo access (PAT, GitHub App token, or GITHUB_TOKEN)'
+        required: false
+        type: string
+        default: ''
 
 jobs:
   lookup:
@@ -96,16 +101,6 @@ jobs:
         with:
           ref: ${{ inputs.dry-run == false && inputs.checkout-version || '' }}
 
-      - name: Generate environment reader token
-        id: env-token
-        if: ${{ inputs.config-mode == 'central-repo' }}
-        uses: actions/create-github-app-token@v2
-        with:
-          app-id: ${{ secrets.P2P_ENV_APP_ID }}
-          private-key: ${{ secrets.P2P_ENV_APP_PRIVATE_KEY }}
-          owner: ${{ inputs.central-repo-owner }}
-          repositories: ${{ inputs.central-repo-name }}
-
       - name: Resolve source environment config
         uses: ./.github/actions/resolve-platform-config
         with:
@@ -115,7 +110,7 @@ jobs:
           central-repo-name: ${{ inputs.central-repo-name }}
           central-repo-owner: ${{ inputs.central-repo-owner }}
           central-repo-path-pattern: ${{ inputs.central-repo-path-pattern }}
-          central-repo-token: ${{ steps.env-token.outputs.token }}
+          central-repo-token: ${{ inputs.central-repo-token }}
           fields: core
 
   promote-image:
@@ -158,16 +153,6 @@ jobs:
         with:
           ref: ${{ inputs.dry-run == false && inputs.checkout-version || '' }}
 
-      - name: Generate environment reader token
-        id: env-token
-        if: ${{ inputs.config-mode == 'central-repo' }}
-        uses: actions/create-github-app-token@v2
-        with:
-          app-id: ${{ secrets.P2P_ENV_APP_ID }}
-          private-key: ${{ secrets.P2P_ENV_APP_PRIVATE_KEY }}
-          owner: ${{ inputs.central-repo-owner }}
-          repositories: ${{ inputs.central-repo-name }}
-
       - name: Resolve destination environment config
         uses: ./.github/actions/resolve-platform-config
         with:
@@ -177,7 +162,7 @@ jobs:
           central-repo-name: ${{ inputs.central-repo-name }}
           central-repo-owner: ${{ inputs.central-repo-owner }}
           central-repo-path-pattern: ${{ inputs.central-repo-path-pattern }}
-          central-repo-token: ${{ steps.env-token.outputs.token }}
+          central-repo-token: ${{ inputs.central-repo-token }}
           fields: full
 
       - name: Authenticate to Google Cloud (Source)
