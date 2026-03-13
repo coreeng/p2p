@@ -19,42 +19,48 @@ Rewrite `resolve-platform-config` as a TypeScript GitHub Action using `node20`.
 
 ```
 .github/actions/resolve-platform-config/
-  action.yml                  # using: 'node20', main: 'dist/index.js'
+  action.yaml                 # using: 'node20', main: 'dist/index.js' (replaces existing file)
   src/
     main.ts                   # entry point — orchestrates validation, resolution, field export
     validate.ts               # input validation (mode, required inputs, field set)
     resolve-repo-file.ts      # read local YAML file, extract environment block
     resolve-central-repo.ts   # fetch file from remote repo via GitHub API
     extract-fields.ts         # extract fields from parsed config, export to GITHUB_ENV
+    get-nested-value.ts       # property accessor for dot/bracket paths (e.g. ingressDomains[0].domain)
     types.ts                  # TypeScript interfaces for config schema and inputs
   __tests__/
     validate.test.ts
     resolve-repo-file.test.ts
     resolve-central-repo.test.ts
     extract-fields.test.ts
+    get-nested-value.test.ts
     main.test.ts              # integration-level test of the full flow
   dist/
     index.js                  # ncc-bundled output (committed to repo)
   package.json
+  package-lock.json           # committed for reproducible npm ci
   tsconfig.json
   jest.config.ts
-  .eslintrc.json
+  eslint.config.mjs           # ESLint v9 flat config
+  .gitignore                  # excludes node_modules/
 ```
 
-### action.yml
+### action.yaml
 
-Inputs and outputs remain identical to the current composite action — this is a transparent implementation swap. No caller changes required.
+The existing `action.yaml` is replaced in-place (same filename). Inputs and outputs remain identical to the current composite action — this is a transparent implementation swap. No caller changes required.
 
 ```yaml
 name: 'Resolve Platform Config'
 description: 'Resolves platform config from one of three mutually exclusive sources'
 
 inputs:
-  # (identical to current)
+  # (identical to current — environment, config-mode, repo-file-path,
+  #  central-repo-name, central-repo-owner, central-repo-path-pattern,
+  #  central-repo-token, fields)
 
 outputs:
   resolved:
-    description: 'true if config was resolved from repo-file or central-repo'
+    description: 'true if config was resolved from repo-file or central-repo, false otherwise'
 
 runs:
   using: 'node20'
@@ -65,23 +71,45 @@ runs:
 
 ```typescript
 async function run(): Promise<void> {
-  const inputs = getInputs();        // read from @actions/core
-  validateInputs(inputs);            // throw on invalid combinations
+  try {
+    const inputs = getInputs();        // read from @actions/core
+    validateInputs(inputs);            // throw ConfigError on invalid combinations
 
-  if (inputs.configMode === '' || inputs.configMode === 'github-env') {
-    core.notice(`Config mode: ${inputs.configMode || '(default: github-env implicit)'}`);
-    return; // vars.* already in environment — nothing to do
+    if (inputs.configMode === '' || inputs.configMode === 'github-env') {
+      core.notice(`Config mode: ${inputs.configMode || '(default: github-env implicit)'}`);
+      core.setOutput('resolved', 'false');
+      return; // vars.* already in environment — nothing to do
+    }
+
+    let config: EnvironmentConfig;
+    if (inputs.configMode === 'repo-file') {
+      config = resolveRepoFile(inputs.repoFilePath, inputs.environment);
+    } else {
+      config = await resolveCentralRepo(inputs);
+    }
+
+    extractAndExportFields(config, inputs);
+    core.setOutput('resolved', 'true');
+  } catch (error) {
+    if (error instanceof Error) {
+      core.setFailed(error.message);
+    } else {
+      core.setFailed(String(error));
+    }
   }
+}
+```
 
-  let config: EnvironmentConfig;
-  if (inputs.configMode === 'repo-file') {
-    config = resolveRepoFile(inputs.repoFilePath, inputs.environment);
-  } else {
-    config = await resolveCentralRepo(inputs);
+### Error handling (types.ts)
+
+All domain errors use `ConfigError`, a plain `Error` subclass. It carries no special behavior — the top-level catch in `run()` calls `core.setFailed()` to produce the `::error::` annotation.
+
+```typescript
+export class ConfigError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ConfigError';
   }
-
-  extractAndExportFields(config, inputs);
-  core.setOutput('resolved', 'true');
 }
 ```
 
@@ -89,13 +117,14 @@ async function run(): Promise<void> {
 
 Replicates the exact same checks as the current bash step, with the same error messages:
 
-1. `config-mode` must be one of: `github-env`, `repo-file`, `central-repo`, or empty
-2. `fields` must be `core` or `full`
-3. `repo-file` mode requires `repo-file-path`
-4. `central-repo` mode requires `central-repo-name`, `central-repo-owner`, `central-repo-token`
-5. Empty `config-mode` with config inputs present is an error
+1. `environment` must be non-empty
+2. `config-mode` must be one of: `github-env`, `repo-file`, `central-repo`, or empty
+3. `fields` must be `core` or `full`
+4. `repo-file` mode requires `repo-file-path`
+5. `central-repo` mode requires `central-repo-name`, `central-repo-owner`, `central-repo-token`
+6. Empty `config-mode` with config inputs present is an error
 
-Each check calls `core.setFailed(message)` with the same `::error::` message text as today.
+Each validation failure throws a `ConfigError`. The top-level `run()` function wraps the entire flow in a try/catch that calls `core.setFailed(error.message)`, producing the same `::error::` annotations as today.
 
 ### Repo-file resolution (resolve-repo-file.ts)
 
@@ -148,13 +177,17 @@ export async function resolveCentralRepo(
     path: resolvedPath,
   });
 
-  if (Array.isArray(data) || data.type !== 'file') {
+  if (Array.isArray(data) || data.type !== 'file' || !data.content) {
     throw new ConfigError(
       `Config file not found at '${resolvedPath}' in central repo '${inputs.centralRepoName}'`
     );
   }
 
-  const content = Buffer.from(data.content, 'base64').toString('utf-8');
+  // GitHub API returns base64 encoding for files. Check defensively.
+  const encoding = (data as { encoding?: string }).encoding ?? 'base64';
+  const content = encoding === 'base64'
+    ? Buffer.from(data.content, 'base64').toString('utf-8')
+    : data.content;
   core.notice(
     `Resolving environment config from ${inputs.centralRepoName} (${resolvedPath})`
   );
@@ -191,7 +224,7 @@ export function extractAndExportFields(
 
   for (const { envVar, path } of fields) {
     const value = getNestedValue(config, path);
-    if (!value) {
+    if (value === undefined || value === null || value === '') {
       throw new ConfigError(
         `Field '${envVar}' (path: ${path}) not found in ${inputs.configMode} '${sourceLabel(inputs)}' for environment '${inputs.environment}'`
       );
@@ -204,8 +237,16 @@ export function extractAndExportFields(
     core.exportVariable('PLATFORM_ENVIRONMENT', inputs.environment);
   }
 
-  // Recompute derived vars (needs TENANT_NAME from caller's env)
-  const tenantName = process.env.TENANT_NAME ?? '';
+  // Recompute derived vars.
+  // TENANT_NAME must be set in the job-level env: block of the calling workflow
+  // (it is NOT set by this action). All current callers do this — see
+  // p2p-execute-command.yaml line 127, p2p-promote-image.yaml line 81/138.
+  // process.env reads job-level env vars; it does NOT see GITHUB_ENV writes
+  // from prior steps, only vars set at job definition time.
+  const tenantName = process.env.TENANT_NAME;
+  if (!tenantName) {
+    core.warning('TENANT_NAME is not set in the job environment — derived vars (REGISTRY, SERVICE_ACCOUNT, WORKLOAD_IDENTITY_PROVIDER) will be incorrect');
+  }
   const region = getNestedValue(config, 'platform.region');
   const projectId = getNestedValue(config, 'platform.projectId');
   const projectNumber = getNestedValue(config, 'platform.projectNumber');
@@ -225,7 +266,24 @@ export function extractAndExportFields(
 }
 ```
 
-`getNestedValue` is a helper that traverses the parsed object using dot-and-bracket notation (e.g., `ingressDomains[0].domain`). This replaces `yq` path evaluation.
+### Property accessor (get-nested-value.ts)
+
+`getNestedValue` traverses a parsed JS object using dot-and-bracket notation (e.g., `ingressDomains[0].domain`), replacing `yq` path evaluation.
+
+```typescript
+export function getNestedValue(obj: unknown, path: string): unknown {
+  // Split "ingressDomains[0].domain" into ["ingressDomains", "0", "domain"]
+  const segments = path.replace(/\[(\d+)\]/g, '.$1').split('.');
+  let current: unknown = obj;
+  for (const segment of segments) {
+    if (current === null || current === undefined) return undefined;
+    current = (current as Record<string, unknown>)[segment];
+  }
+  return current;
+}
+```
+
+This is a self-contained ~10-line function. No external dependency (e.g., lodash) needed.
 
 ### Types (types.ts)
 
@@ -282,10 +340,40 @@ export interface FieldMapping {
 }
 ```
 
-**CI:** A `check-dist.yml` workflow runs on PRs touching `.github/actions/resolve-platform-config/`:
-1. `npm ci && npm run build`
-2. `git diff --exit-code dist/`
-3. Fails if the committed `dist/` is stale
+**CI:** A `check-dist.yml` workflow ensures the committed `dist/` matches the build output:
+
+```yaml
+name: Check dist/
+on:
+  pull_request:
+    paths:
+      - '.github/actions/resolve-platform-config/src/**'
+      - '.github/actions/resolve-platform-config/package*.json'
+      - '.github/actions/resolve-platform-config/tsconfig.json'
+
+jobs:
+  check-dist:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: .github/actions/resolve-platform-config
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm run build
+      - name: Compare dist/
+        run: |
+          if ! git diff --quiet dist/; then
+            echo "::error::dist/ is out of date. Run 'npm run build' and commit."
+            git diff dist/
+            exit 1
+          fi
+```
+
+**Node version:** Build toolchain uses Node.js 20 (matching the `using: 'node20'` runtime).
 
 ### Test strategy
 
@@ -322,10 +410,10 @@ All tests use Jest with mocked `@actions/core` and `@actions/github`.
 
 ## Backwards compatibility
 
-- `action.yml` inputs/outputs are identical — no caller changes
+- `action.yaml` inputs/outputs are identical — no caller changes
 - Same error messages — existing error-handling documentation remains accurate
 - Same `GITHUB_ENV` variables exported — downstream steps see the same environment
-- `resolved` output still set to `'true'` when config is resolved
+- `resolved` output: `'true'` when config is resolved, explicitly `'false'` when in github-env mode (current composite action also returns `'false'` via its `|| 'false'` fallback)
 
 ## Risks and mitigations
 
@@ -336,4 +424,5 @@ All tests use Jest with mocked `@actions/core` and `@actions/github`.
 | Contributors unfamiliar with TypeScript | Action is self-contained; wrapper workflows (YAML) remain unchanged |
 | `getContent()` API rate limits | Only called once per action invocation; well within limits |
 | `getContent()` file size limit (100MB) | Config files are tiny YAML; not a concern |
-| `TENANT_NAME` env var may not be set when derived vars are computed | Same risk exists today; document that `TENANT_NAME` must be in env before the action runs |
+| `TENANT_NAME` not in job-level env | Action emits a `core.warning()` if `TENANT_NAME` is empty; all current callers set it at job level |
+| `process.env` doesn't see prior-step `GITHUB_ENV` writes | `TENANT_NAME` is set in job-level `env:` blocks, not via `GITHUB_ENV` writes — this is documented as a constraint |
