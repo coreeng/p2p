@@ -224,9 +224,12 @@ export function extractAndExportFields(
 
   for (const { envVar, path } of fields) {
     const value = getNestedValue(config, path);
+    const source = inputs.configMode === 'repo-file'
+      ? inputs.repoFilePath
+      : inputs.centralRepoName;
     if (value === undefined || value === null || value === '') {
       throw new ConfigError(
-        `Field '${envVar}' (path: ${path}) not found in ${inputs.configMode} '${sourceLabel(inputs)}' for environment '${inputs.environment}'`
+        `Field '${envVar}' (path: ${path}) not found in ${inputs.configMode} '${source}' for environment '${inputs.environment}'`
       );
     }
     core.exportVariable(envVar, String(value));
@@ -404,7 +407,7 @@ All tests use Jest with mocked `@actions/core` and `@actions/github`.
 - Derived vars (REGISTRY, SERVICE_ACCOUNT, WORKLOAD_IDENTITY_PROVIDER) computed correctly
 
 **main.test.ts:**
-- End-to-end: `github-env` mode does nothing, returns without setting `resolved`
+- End-to-end: `github-env` mode sets `resolved` to `'false'` and returns without exporting env vars
 - End-to-end: `repo-file` mode reads file, extracts fields, sets env vars
 - End-to-end: `central-repo` mode calls API, extracts fields, sets env vars
 
