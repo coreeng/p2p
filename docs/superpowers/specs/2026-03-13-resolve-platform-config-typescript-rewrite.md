@@ -21,7 +21,8 @@ Rewrite `resolve-platform-config` as a TypeScript GitHub Action using `node20`.
 .github/actions/resolve-platform-config/
   action.yaml                 # using: 'node20', main: 'dist/index.js' (replaces existing file)
   src/
-    main.ts                   # entry point — orchestrates validation, resolution, field export
+    index.ts                  # ncc entry point — imports and calls run()
+    main.ts                   # run() function — orchestrates validation, resolution, field export
     validate.ts               # input validation (mode, required inputs, field set)
     resolve-repo-file.ts      # read local YAML file, extract environment block
     resolve-central-repo.ts   # fetch file from remote repo via GitHub API
@@ -336,7 +337,7 @@ export interface FieldMapping {
 **Scripts:**
 ```json
 {
-  "build": "ncc build src/main.ts -o dist --source-map --license licenses.txt",
+  "build": "ncc build src/index.ts -o dist --source-map --license licenses.txt",
   "test": "jest",
   "lint": "eslint src/ __tests__/",
   "all": "npm run lint && npm run test && npm run build"
