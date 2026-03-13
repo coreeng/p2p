@@ -1,0 +1,4 @@
+node_modules/
+lib/
+# dist/ must be committed for GitHub Actions JS actions (override global gitignore)
+!dist/
