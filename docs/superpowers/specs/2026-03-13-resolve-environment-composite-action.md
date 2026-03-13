@@ -81,7 +81,7 @@ When resolution occurs (mode is `repo-file` or `central-repo`), derived variable
 | `config-mode: central-repo` without `central-repo-name` | Fail |
 | `config-mode: central-repo` without `central-repo-owner` | Fail |
 | `config-mode: central-repo` without `central-repo-token` | Fail |
-| `config-mode: ""` with any `repo-file-*` or `central-repo-*` inputs non-empty | Fail (force explicit intent) |
+| `config-mode: ""` with any `repo-file-*` or `central-repo-*` inputs non-empty (excluding `central-repo-path-pattern` which has a default) | Fail (force explicit intent) |
 | `config-mode: github-env` with any `repo-file-*` or `central-repo-*` inputs set | Ignore (explicit no-op) |
 
 ### Token generation
