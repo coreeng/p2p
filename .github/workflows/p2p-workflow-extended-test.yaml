@@ -11,6 +11,8 @@ on:
         required: false
       slack_webhook_url:
         required: false
+      central_repo_token:
+        required: false
     inputs:
       source:
         required: false
@@ -61,18 +63,39 @@ on:
         required: false
         type: string
         default: ''
+      config-mode:
+        description: 'Config source: github-env, repo-file, or central-repo'
+        required: false
+        type: string
+        default: ''
+      repo-file-path:
+        description: 'Path to tenant repo config file (e.g. .p2p.yaml)'
+        required: false
+        type: string
+        default: ''
+      central-repo-name:
+        description: 'Central config repo name'
+        required: false
+        type: string
+        default: ''
+      central-repo-owner:
+        description: 'Central config repo owner'
+        required: false
+        type: string
+        default: ''
+      central-repo-path-pattern:
+        description: 'Path pattern in central repo ({env} replaced with environment name)'
+        required: false
+        type: string
+        default: 'environments/{env}/config.yaml'
 
 jobs:
   run-tests:
     uses: ./.github/workflows/p2p-execute-command.yaml
     if: success() && (github.ref == inputs.main-branch )
-    secrets:
-      env_vars: ${{ secrets.env_vars }}
-      container_registry_user: ${{ secrets.container_registry_user }}
-      container_registry_pat: ${{ secrets.container_registry_pat }}
-      container_registry_url: ${{ secrets.container_registry_url }}
+    secrets: inherit
     strategy:
-      matrix: ${{ fromJSON(inputs.source ) }}
+      matrix: ${{ fromJSON(startsWith(inputs.source, '{') && inputs.source || format('{"include":[{"deploy_env":"{0}"}]}', inputs.source)) }}
       fail-fast: false
     with:
       command: p2p-extended-test
@@ -87,15 +110,20 @@ jobs:
       checkout-version: ${{ inputs.version-prefix }}${{ inputs.version }}
       skip-subnamespaces-create: ${{ inputs.skip-subnamespaces-create }}
       artifacts: ${{ inputs.artifacts }}
+      config-mode: ${{ inputs.config-mode }}
+      repo-file-path: ${{ inputs.repo-file-path }}
+      central-repo-name: ${{ inputs.central-repo-name }}
+      central-repo-owner: ${{ inputs.central-repo-owner }}
+      central-repo-path-pattern: ${{ inputs.central-repo-path-pattern }}
+      central-repo-token: ${{ secrets.central_repo_token }}
 
   promote:
     uses: ./.github/workflows/p2p-promote-image.yaml
     if: success() && (github.ref == inputs.main-branch)
     needs: [run-tests]
-    secrets:
-      env_vars: ${{ secrets.env_vars }}
+    secrets: inherit
     strategy:
-      matrix: ${{ fromJSON(inputs.destination) }}
+      matrix: ${{ fromJSON(startsWith(inputs.destination, '{') && inputs.destination || format('{"include":[{"deploy_env":"{0}"}]}', inputs.destination)) }}
       fail-fast: false
     with:
       source_matrix: ${{ inputs.source }}
@@ -108,6 +136,12 @@ jobs:
       dry-run: ${{ inputs.dry-run }}
       working-directory: ${{ inputs.working-directory }}
       checkout-version: ${{ inputs.version-prefix }}${{ inputs.version }}
+      config-mode: ${{ inputs.config-mode }}
+      repo-file-path: ${{ inputs.repo-file-path }}
+      central-repo-name: ${{ inputs.central-repo-name }}
+      central-repo-owner: ${{ inputs.central-repo-owner }}
+      central-repo-path-pattern: ${{ inputs.central-repo-path-pattern }}
+      central-repo-token: ${{ secrets.central_repo_token }}
 
   notify-failure:
     needs: [run-tests, promote]

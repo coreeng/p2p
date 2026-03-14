@@ -11,6 +11,8 @@ on:
         required: false
       slack_webhook_url:
         required: false
+      central_repo_token:
+        required: false
     inputs:
       source:
         required: false
@@ -54,19 +56,40 @@ on:
         required: false
         type: boolean
         default: false
+      config-mode:
+        description: 'Config source: github-env, repo-file, or central-repo'
+        required: false
+        type: string
+        default: ''
+      repo-file-path:
+        description: 'Path to tenant repo config file (e.g. .p2p.yaml)'
+        required: false
+        type: string
+        default: ''
+      central-repo-name:
+        description: 'Central config repo name'
+        required: false
+        type: string
+        default: ''
+      central-repo-owner:
+        description: 'Central config repo owner'
+        required: false
+        type: string
+        default: ''
+      central-repo-path-pattern:
+        description: 'Path pattern in central repo ({env} replaced with environment name)'
+        required: false
+        type: string
+        default: 'environments/{env}/config.yaml'
 
 jobs:
   prod-deploy:
     name: prod-deploy
     if: success() && github.ref == inputs.main-branch
     uses: ./.github/workflows/p2p-execute-command.yaml
-    secrets:
-      env_vars: ${{ secrets.env_vars }}
-      container_registry_user: ${{ secrets.container_registry_user }}
-      container_registry_pat: ${{ secrets.container_registry_pat }}
-      container_registry_url: ${{ secrets.container_registry_url }}
+    secrets: inherit
     strategy:
-      matrix: ${{ fromJSON(inputs.source) }}
+      matrix: ${{ fromJSON(startsWith(inputs.source, '{') && inputs.source || format('{"include":[{"deploy_env":"{0}"}]}', inputs.source)) }}
       fail-fast: false
     with:
       command: p2p-prod
@@ -80,6 +103,12 @@ jobs:
       working-directory: ${{ inputs.working-directory }}
       checkout-version: ${{ inputs.version-prefix }}${{ inputs.version }}
       skip-subnamespaces-create: ${{ inputs.skip-subnamespaces-create }}
+      config-mode: ${{ inputs.config-mode }}
+      repo-file-path: ${{ inputs.repo-file-path }}
+      central-repo-name: ${{ inputs.central-repo-name }}
+      central-repo-owner: ${{ inputs.central-repo-owner }}
+      central-repo-path-pattern: ${{ inputs.central-repo-path-pattern }}
+      central-repo-token: ${{ secrets.central_repo_token }}
 
   notify-failure:
     needs: [prod-deploy]

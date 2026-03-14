@@ -73,6 +73,36 @@ on:
         required: false
         type: string
         default: ''
+      config-mode:
+        description: 'Config source: github-env, repo-file, or central-repo'
+        required: false
+        type: string
+        default: ''
+      repo-file-path:
+        description: 'Path to tenant repo config file (e.g. .p2p.yaml)'
+        required: false
+        type: string
+        default: ''
+      central-repo-name:
+        description: 'Central config repo name'
+        required: false
+        type: string
+        default: ''
+      central-repo-owner:
+        description: 'Central config repo owner'
+        required: false
+        type: string
+        default: ''
+      central-repo-path-pattern:
+        description: 'Path pattern in central repo ({env} replaced with environment name)'
+        required: false
+        type: string
+        default: 'environments/{env}/config.yaml'
+      central-repo-token:
+        description: 'Token for central repo access (PAT, GitHub App token, or GITHUB_TOKEN)'
+        required: false
+        type: string
+        default: ''
 
 jobs:
   exec:
@@ -107,6 +137,18 @@ jobs:
         uses: actions/checkout@v6
         with:
           ref: ${{ inputs.dry-run == false && inputs.checkout-version || '' }}
+
+      - name: Resolve environment config
+        uses: ./.github/actions/resolve-platform-config
+        with:
+          environment: ${{ inputs.github_env }}
+          config-mode: ${{ inputs.config-mode }}
+          repo-file-path: ${{ inputs.repo-file-path }}
+          central-repo-name: ${{ inputs.central-repo-name }}
+          central-repo-owner: ${{ inputs.central-repo-owner }}
+          central-repo-path-pattern: ${{ inputs.central-repo-path-pattern }}
+          central-repo-token: ${{ inputs.central-repo-token }}
+          fields: full
 
       - name: Authenticate to Google Cloud
         id: auth

@@ -42,6 +42,36 @@ on:
       checkout-version:
         required: false
         type: string
+      config-mode:
+        description: 'Config source: github-env, repo-file, or central-repo'
+        required: false
+        type: string
+        default: ''
+      repo-file-path:
+        description: 'Path to tenant repo config file (e.g. .p2p.yaml)'
+        required: false
+        type: string
+        default: ''
+      central-repo-name:
+        description: 'Central config repo name'
+        required: false
+        type: string
+        default: ''
+      central-repo-owner:
+        description: 'Central config repo owner'
+        required: false
+        type: string
+        default: ''
+      central-repo-path-pattern:
+        description: 'Path pattern in central repo ({env} replaced with environment name)'
+        required: false
+        type: string
+        default: 'environments/{env}/config.yaml'
+      central-repo-token:
+        description: 'Token for central repo access (PAT, GitHub App token, or GITHUB_TOKEN)'
+        required: false
+        type: string
+        default: ''
 
 jobs:
   lookup:
@@ -53,6 +83,7 @@ jobs:
       PROJECT_ID: ${{ vars.PROJECT_ID }}
       SERVICE_ACCOUNT: p2p-${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}@${{ vars.PROJECT_ID }}.iam.gserviceaccount.com
       WORKLOAD_IDENTITY_PROVIDER: projects/${{ vars.PROJECT_NUMBER }}/locations/global/workloadIdentityPools/p2p-${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}/providers/p2p-${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}
+      ENV_NAME: ${{ fromJson(inputs.source_matrix).include[0]['deploy_env'] }}
     outputs:
       source_registry: ${{ env.REGISTRY }}
       source_project_id: ${{ env.PROJECT_ID }}
@@ -64,6 +95,23 @@ jobs:
           yq 'del(.env_vars)' -p=json -C <<EOT
           ${{ toJSON(env) }}
           EOT
+
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.dry-run == false && inputs.checkout-version || '' }}
+
+      - name: Resolve source environment config
+        uses: ./.github/actions/resolve-platform-config
+        with:
+          environment: ${{ env.ENV_NAME }}
+          config-mode: ${{ inputs.config-mode }}
+          repo-file-path: ${{ inputs.repo-file-path }}
+          central-repo-name: ${{ inputs.central-repo-name }}
+          central-repo-owner: ${{ inputs.central-repo-owner }}
+          central-repo-path-pattern: ${{ inputs.central-repo-path-pattern }}
+          central-repo-token: ${{ inputs.central-repo-token }}
+          fields: core
 
   promote-image:
     name: promote-to-${{ inputs.promotion-stage }}
@@ -105,6 +153,17 @@ jobs:
         with:
           ref: ${{ inputs.dry-run == false && inputs.checkout-version || '' }}
 
+      - name: Resolve destination environment config
+        uses: ./.github/actions/resolve-platform-config
+        with:
+          environment: ${{ inputs.dest_github_env }}
+          config-mode: ${{ inputs.config-mode }}
+          repo-file-path: ${{ inputs.repo-file-path }}
+          central-repo-name: ${{ inputs.central-repo-name }}
+          central-repo-owner: ${{ inputs.central-repo-owner }}
+          central-repo-path-pattern: ${{ inputs.central-repo-path-pattern }}
+          central-repo-token: ${{ inputs.central-repo-token }}
+          fields: full
 
       - name: Authenticate to Google Cloud (Source)
         id: auth-source

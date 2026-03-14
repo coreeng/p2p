@@ -36,6 +36,36 @@ on:
       environment:
         required: true
         type: string
+      config-mode:
+        description: 'Config source: github-env, repo-file, or central-repo'
+        required: false
+        type: string
+        default: ''
+      repo-file-path:
+        description: 'Path to tenant repo config file (e.g. .p2p.yaml)'
+        required: false
+        type: string
+        default: ''
+      central-repo-name:
+        description: 'Central config repo name'
+        required: false
+        type: string
+        default: ''
+      central-repo-owner:
+        description: 'Central config repo owner'
+        required: false
+        type: string
+        default: ''
+      central-repo-path-pattern:
+        description: 'Path pattern in central repo ({env} replaced with environment name)'
+        required: false
+        type: string
+        default: 'environments/{env}/config.yaml'
+      central-repo-token:
+        description: 'Token for central repo access (PAT, GitHub App token, or GITHUB_TOKEN)'
+        required: false
+        type: string
+        default: ''
 
 jobs:
   get-latest-image:
@@ -68,6 +98,21 @@ jobs:
           yq 'del(.env_vars)' -p=json -C <<EOT
           ${{ toJSON(env) }}
           EOT
+
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Resolve environment config
+        uses: ./.github/actions/resolve-platform-config
+        with:
+          environment: ${{ env.ENV_NAME }}
+          config-mode: ${{ inputs.config-mode }}
+          repo-file-path: ${{ inputs.repo-file-path }}
+          central-repo-name: ${{ inputs.central-repo-name }}
+          central-repo-owner: ${{ inputs.central-repo-owner }}
+          central-repo-path-pattern: ${{ inputs.central-repo-path-pattern }}
+          central-repo-token: ${{ inputs.central-repo-token }}
+          fields: core
 
       - name: Authenticate to Google Cloud
         id: auth

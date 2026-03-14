@@ -5,6 +5,8 @@ on:
         required: false
       slack_webhook_url:
         required: false
+      central_repo_token:
+        required: false
     outputs:
       version:
         description: "The latest image in the registry"
@@ -41,15 +43,39 @@ on:
         required: false
         type: string
         default: europe-west2
+      config-mode:
+        description: 'Config source: github-env, repo-file, or central-repo'
+        required: false
+        type: string
+        default: ''
+      repo-file-path:
+        description: 'Path to tenant repo config file (e.g. .p2p.yaml)'
+        required: false
+        type: string
+        default: ''
+      central-repo-name:
+        description: 'Central config repo name'
+        required: false
+        type: string
+        default: ''
+      central-repo-owner:
+        description: 'Central config repo owner'
+        required: false
+        type: string
+        default: ''
+      central-repo-path-pattern:
+        description: 'Path pattern in central repo ({env} replaced with environment name)'
+        required: false
+        type: string
+        default: 'environments/{env}/config.yaml'
 
 jobs:
   get-latest-version:
     uses: ./.github/workflows/p2p-get-latest-image.yaml
     if: success() && (github.ref == inputs.main-branch )
-    secrets:
-      env_vars: ${{ secrets.env_vars }}
+    secrets: inherit
     strategy:
-      matrix: ${{ fromJSON(inputs.environment) }}
+      matrix: ${{ fromJSON(startsWith(inputs.environment, '{') && inputs.environment || format('{"include":[{"deploy_env":"{0}"}]}', inputs.environment)) }}
       fail-fast: false
     with:
       environment: ${{ inputs.environment }}
@@ -59,6 +85,12 @@ jobs:
       dry-run: ${{ inputs.dry-run }}
       working-directory: ${{ inputs.working-directory }}
       region: ${{ inputs.region }}
+      config-mode: ${{ inputs.config-mode }}
+      repo-file-path: ${{ inputs.repo-file-path }}
+      central-repo-name: ${{ inputs.central-repo-name }}
+      central-repo-owner: ${{ inputs.central-repo-owner }}
+      central-repo-path-pattern: ${{ inputs.central-repo-path-pattern }}
+      central-repo-token: ${{ secrets.central_repo_token }}
 
   notify-failure:
     needs: [get-latest-version]
