@@ -11,7 +11,7 @@ The `resolve-platform-config` composite action (`.github/actions/resolve-platfor
 
 ## Decision
 
-Rewrite `resolve-platform-config` as a TypeScript GitHub Action using `node20`.
+Rewrite `resolve-platform-config` as a TypeScript GitHub Action using `node24`.
 
 ## Design
 
@@ -19,7 +19,7 @@ Rewrite `resolve-platform-config` as a TypeScript GitHub Action using `node20`.
 
 ```
 .github/actions/resolve-platform-config/
-  action.yaml                 # using: 'node20', main: 'dist/index.js' (replaces existing file)
+  action.yaml                 # using: 'node24', main: 'dist/index.js' (replaces existing file)
   src/
     index.ts                  # ncc entry point — imports and calls run()
     main.ts                   # run() function — orchestrates validation, resolution, field export
@@ -64,7 +64,7 @@ outputs:
     description: 'true if config was resolved from repo-file or central-repo, false otherwise'
 
 runs:
-  using: 'node20'
+  using: 'node24'
   main: 'dist/index.js'
 ```
 
@@ -377,7 +377,7 @@ jobs:
           fi
 ```
 
-**Node version:** Build toolchain uses Node.js 20 (matching the `using: 'node20'` runtime).
+**Node version:** Build toolchain uses Node.js 24 (matching the `using: 'node24'` runtime).
 
 ### Test strategy
 

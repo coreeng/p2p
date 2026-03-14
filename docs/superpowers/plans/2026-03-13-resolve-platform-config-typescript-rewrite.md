@@ -1497,7 +1497,7 @@ git commit -m "feat: add main entry point for resolve-platform-config action"
 ### Task 9: Replace action.yaml and build dist/
 
 **Files:**
-- Modify: `.github/actions/resolve-platform-config/action.yaml` (replace composite with node20)
+- Modify: `.github/actions/resolve-platform-config/action.yaml` (replace composite with node24)
 
 - [ ] **Step 1: Replace action.yaml**
 
@@ -1545,7 +1545,7 @@ outputs:
     description: 'true if config was resolved from repo-file or central-repo, false otherwise'
 
 runs:
-  using: 'node20'
+  using: 'node24'
   main: 'dist/index.js'
 ```
 
@@ -1568,7 +1568,7 @@ cd .github/actions/resolve-platform-config
 git add action.yaml dist/ src/ __tests__/
 git commit -m "feat: replace composite action with TypeScript implementation
 
-Replaces the bash/yq composite action with a TypeScript node20 action.
+Replaces the bash/yq composite action with a TypeScript node24 action.
 - js-yaml replaces yq dependency
 - GitHub API (repos.getContent) replaces actions/checkout for central repo
 - @actions/core.exportVariable replaces GITHUB_ENV writes
