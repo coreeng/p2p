@@ -79,6 +79,5 @@ The following variables are exported to `GITHUB_ENV` before the `make` target ru
 
 - [How to pass secrets and environment variables](../how-to/pass-secrets-and-env-vars.md)
 - [How to use multiple environments](../how-to/use-multiple-environments.md)
-- [How to use a custom build tool](../how-to/use-a-custom-build-tool.md)
 - [Environment configuration](../explanation/environment-configuration.md)
 - [Make targets](../explanation/make-targets.md)

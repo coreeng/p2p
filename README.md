@@ -87,6 +87,6 @@ See [Environment Configuration](docs/explanation/environment-configuration.md) f
 | Category | What's inside |
 |----------|---------------|
 | [Tutorials](docs/tutorials/) | Step-by-step guides to get running |
-| [How-to Guides](docs/how-to/) | Solve specific problems: secrets, artifacts, custom build tools, Slack alerts |
+| [How-to Guides](docs/how-to/) | Solve specific problems: secrets, artifacts, Slack alerts, environments, versioning |
 | [Reference](docs/reference/) | Complete inputs/outputs/secrets for every workflow |
 | [Explanation](docs/explanation/) | Concepts: pipeline model, versioning, environments, make targets |

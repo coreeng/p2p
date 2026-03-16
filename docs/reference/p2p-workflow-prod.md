@@ -66,4 +66,3 @@ notify-success  (needs: prod-deploy; runs on main-branch when prod-deploy succee
 - [How to configure Slack alerts](../how-to/configure-slack-alerts.md)
 - [How to use multiple environments](../how-to/use-multiple-environments.md)
 - [How to customise versioning](../how-to/customise-versioning.md)
-- [How to use a custom build tool](../how-to/use-a-custom-build-tool.md)

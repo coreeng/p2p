@@ -206,7 +206,6 @@ p2p-promote-to-prod:
 
 ## See also
 
-- [How to use a custom build tool](../how-to/use-a-custom-build-tool.md)
 - [Pipeline model](pipeline-model.md)
 - [p2p-execute-command reference](../reference/p2p-execute-command.md)
 - [p2p-promote-image reference](../reference/p2p-promote-image.md)

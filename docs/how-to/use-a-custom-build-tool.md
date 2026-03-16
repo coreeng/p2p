@@ -1,8 +1,16 @@
 # How to Use a Custom Build Tool
 
-> Requires P2P version with configurable build tool support (PR #140).
+> **⚠️ EXPERIMENTAL — UNSUPPORTED**
+>
+> This feature is experimental and not yet available on the stable `@v1` branch. To use it, you must reference the `configurable-build-tool` branch directly:
+>
+> ```yaml
+> uses: coreeng/p2p/.github/workflows/p2p-workflow-fastfeedback.yaml@configurable-build-tool
+> ```
+>
+> This branch may change or be removed without notice. Do not use it in production workflows.
 
-By default, P2P workflows invoke `make` to run build targets. Use the `build-tool`, `build-tool-args`, and `build-target-args` inputs to swap in a different tool or pass extra flags.
+By default, P2P workflows invoke `make` to run build targets. The `build-tool`, `build-tool-args`, and `build-target-args` inputs allow you to swap in a different tool or pass extra flags.
 
 ## 1. Swap `make` for another tool
 
@@ -10,7 +18,7 @@ Set `build-tool` to the name of the executable you want to use.
 
 ```yaml
 fastfeedback:
-  uses: coreeng/p2p/.github/workflows/p2p-workflow-fastfeedback.yaml@v1
+  uses: coreeng/p2p/.github/workflows/p2p-workflow-fastfeedback.yaml@configurable-build-tool
   with:
     version: ${{ needs.version.outputs.version }}
     build-tool: just

@@ -71,4 +71,3 @@ All jobs use a matrix derived from `source`. The `promote` job uses a matrix der
 - [How to configure Slack alerts](../how-to/configure-slack-alerts.md)
 - [How to use multiple environments](../how-to/use-multiple-environments.md)
 - [How to customise versioning](../how-to/customise-versioning.md)
-- [How to use a custom build tool](../how-to/use-a-custom-build-tool.md)
