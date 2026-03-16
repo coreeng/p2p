@@ -76,7 +76,7 @@ Before calling the workflows, set up the following:
   | `BASE_DOMAIN` | External base domain, e.g. `dev.example.com` |
   | `INTERNAL_SERVICES_DOMAIN` | Internal services domain, e.g. `dev-internal.example.com` |
   | `DPLATFORM` | Environment name from platform-environments, e.g. `gcp-dev` |
-  | `PROJECT_ID` | GCP project ID, e.g. `my-project-abc123` |
+  | `PROJECT_ID` | Core Platform GCP project ID, e.g. `core-platform-dev-1a2b3c` |
   | `PROJECT_NUMBER` | GCP project number for the project above |
   | `REGION` | GCP region, e.g. `europe-west2` |
 

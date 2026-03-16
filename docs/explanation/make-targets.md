@@ -53,7 +53,7 @@ The `p2p-execute-command` workflow sets the following environment variables befo
 | `P2P_TENANT_NAME` | `my-app` | Tenant name |
 | `P2P_APP_NAME` | `my-app` | App name passed to the workflow |
 | `P2P_VERSION` | `1.2.4` | Version string |
-| `P2P_REGISTRY` | `europe-west2-docker.pkg.dev/my-project/tenant/my-app` | Base registry for the tenant |
+| `P2P_REGISTRY` | `europe-west2-docker.pkg.dev/core-platform-dev-1a2b3c/tenant/my-app` | Base registry for the tenant |
 | `P2P_REGISTRY_FAST_FEEDBACK` | `<P2P_REGISTRY>/fast-feedback` | Fast-feedback registry path |
 | `P2P_REGISTRY_EXTENDED_TEST` | `<P2P_REGISTRY>/extended-test` | Extended-test registry path |
 | `P2P_REGISTRY_PROD` | `<P2P_REGISTRY>/prod` | Prod registry path |

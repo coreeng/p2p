@@ -67,7 +67,7 @@ Each GitHub environment carries variables that describe the target cloud project
 | `BASE_DOMAIN` | Base DNS domain for the environment (e.g., `dev.example.com`) |
 | `INTERNAL_SERVICES_DOMAIN` | Internal services DNS domain |
 | `DPLATFORM` | GKE cluster name (used as both the cluster identifier and the `PLATFORM_ENVIRONMENT` env var) |
-| `PROJECT_ID` | GCP project ID (e.g., `my-app-dev-1a2b`) |
+| `PROJECT_ID` | GCP project ID for the Core Platform environment (e.g., `core-platform-dev-1a2b`) |
 | `PROJECT_NUMBER` | GCP project number (e.g., `123456789012`) |
 | `REGION` | GCP region (e.g., `europe-west2`); overrides the workflow's `region` input |
 
@@ -132,7 +132,7 @@ TENANT_NAME=my-app
 BASE_DOMAIN=dev.example.com
 INTERNAL_SERVICES_DOMAIN=internal.dev.example.com
 DPLATFORM=platform-dev
-PROJECT_ID=my-app-dev-1a2b3c
+PROJECT_ID=core-platform-dev-1a2b3c
 PROJECT_NUMBER=123456789012
 REGION=europe-west2
 ```
@@ -143,20 +143,20 @@ REGION=europe-west2
 BASE_DOMAIN=prod.example.com
 INTERNAL_SERVICES_DOMAIN=internal.prod.example.com
 DPLATFORM=platform-prod
-PROJECT_ID=my-app-prod-4d5e6f
+PROJECT_ID=core-platform-prod-4d5e6f
 PROJECT_NUMBER=987654321098
 REGION=europe-west2
 ```
 
 With this configuration, the pipeline authenticates as:
 
-- Dev: `p2p-my-app@my-app-dev-1a2b3c.iam.gserviceaccount.com`
-- Prod: `p2p-my-app@my-app-prod-4d5e6f.iam.gserviceaccount.com`
+- Dev: `p2p-my-app@core-platform-dev-1a2b3c.iam.gserviceaccount.com`
+- Prod: `p2p-my-app@core-platform-prod-4d5e6f.iam.gserviceaccount.com`
 
 Images are stored at:
 
-- Dev fast-feedback: `europe-west2-docker.pkg.dev/my-app-dev-1a2b3c/tenant/my-app/fast-feedback/<image>:<version>`
-- Prod: `europe-west2-docker.pkg.dev/my-app-prod-4d5e6f/tenant/my-app/prod/<image>:<version>`
+- Dev fast-feedback: `europe-west2-docker.pkg.dev/core-platform-dev-1a2b3c/tenant/my-app/fast-feedback/<image>:<version>`
+- Prod: `europe-west2-docker.pkg.dev/core-platform-prod-4d5e6f/tenant/my-app/prod/<image>:<version>`
 
 ## See also
 
