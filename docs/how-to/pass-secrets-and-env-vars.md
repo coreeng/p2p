@@ -54,17 +54,7 @@ Store the encoded value as `CERTIFICATE_B64` and pass it through `env_vars` as a
 
 ## Use a private container registry
 
-Pass `container_registry_user`, `container_registry_pat`, and optionally `container_registry_url` to authenticate with a private registry before your make targets run. When both `container_registry_user` and `container_registry_pat` are set, the workflow calls `docker login` automatically.
-
-```yaml
-secrets:
-  container_registry_user: ${{ secrets.REGISTRY_USER }}
-  container_registry_pat: ${{ secrets.REGISTRY_PAT }}
-  container_registry_url: ${{ secrets.REGISTRY_URL }}
-  # other secrets omitted
-```
-
-If `container_registry_url` is omitted, `docker login` is called without a registry argument, which defaults to Docker Hub.
+If your make targets need to pull images from a private registry (e.g., Docker Hub, a private GHCR), see [How to use a private container registry](use-a-private-container-registry.md).
 
 ## Reference
 
