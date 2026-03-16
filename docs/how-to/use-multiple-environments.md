@@ -15,7 +15,7 @@ Single environment:
 Multiple environments (the stage runs once per entry):
 
 ```json
-{"include": [{"deploy_env": "gcp-dev"}, {"deploy_env": "gcp-staging"}]}
+{"include": [{"deploy_env": "gcp-dev"}, {"deploy_env": "gcp-dev-eu"}]}
 ```
 
 Set these as GitHub Actions repository variables in your repo settings.

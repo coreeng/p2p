@@ -11,7 +11,6 @@ Create one GitHub environment per deployment target. Common examples:
 | Environment name | Purpose |
 |-----------------|---------|
 | `gcp-dev` | Fast-feedback and extended-test workloads |
-| `gcp-staging` | Extended-test workloads in a separate project |
 | `gcp-prod` | Production workloads |
 
 GitHub environment protection rules (required reviewers, deployment branches) apply normally; P2P workflows reference environments by name through the matrix variables described below.
