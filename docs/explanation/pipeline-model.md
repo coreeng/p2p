@@ -64,43 +64,43 @@ The promotion targets copy images between these paths using skopeo. `p2p-promote
 The three stages run as separate workflows, connected by the image registry:
 
 ```
-┌────────────────────────────────────────────────────┐
-│ ci.yaml (push/PR to main)                          │
-│                                                    │
-│ p2p-build                                          │
-│   ├── p2p-functional ──┐                           │
+┌─────────────────────────────────────────────────────┐
+│ ci.yaml (push/PR to main)                           │
+│                                                     │
+│ p2p-build                                           │
+│   ├── p2p-functional ──┐                            │
 │   │                    ├── p2p-integration          │
-│   └── p2p-nft ─────────┘         │                 │
+│   └── p2p-nft ─────────┘         │                  │
 │                                   │ (main/tag only) │
 │                                   ▼                 │
-│                 p2p-promote-to-extended-test         │
-│                 [fast-feedback → extended-test]      │
+│                 p2p-promote-to-extended-test        │
+│                 [fast-feedback → extended-test]     │
+└─────────────────────────┬───────────────────────────┘
+                          │
+                   image registry
+                          │
+┌─────────────────────────▼──────────────────────────┐
+│ extended-test.yaml (cron: evenings + manual)       │
+│                                                    │
+│ p2p-get-latest-image-extended-test                 │
+│   │                                                │
+│   ▼                                                │
+│ p2p-extended-test                                  │
+│   │                                                │
+│   ▼                                                │
+│ p2p-promote-to-prod                                │
+│ [extended-test → prod]                             │
 └─────────────────────────┬──────────────────────────┘
                           │
                    image registry
                           │
 ┌─────────────────────────▼──────────────────────────┐
-│ extended-test.yaml (cron: evenings + manual)        │
+│ prod.yaml (cron: mornings + manual)                │
 │                                                    │
-│ p2p-get-latest-image-extended-test                  │
+│ p2p-get-latest-image-prod                          │
 │   │                                                │
 │   ▼                                                │
-│ p2p-extended-test                                   │
-│   │                                                │
-│   ▼                                                │
-│ p2p-promote-to-prod                                 │
-│ [extended-test → prod]                              │
-└─────────────────────────┬──────────────────────────┘
-                          │
-                   image registry
-                          │
-┌─────────────────────────▼──────────────────────────┐
-│ prod.yaml (cron: mornings + manual)                 │
-│                                                    │
-│ p2p-get-latest-image-prod                           │
-│   │                                                │
-│   ▼                                                │
-│ p2p-prod                                            │
+│ p2p-prod                                           │
 └────────────────────────────────────────────────────┘
 ```
 
