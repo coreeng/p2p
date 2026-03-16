@@ -1,6 +1,6 @@
 # Pipeline model
 
-The P2P pipeline promotes container images through three sequential stages: `fast-feedback`, `extended-test`, and `prod`. Each stage runs a defined set of make targets against the image produced in the previous stage. An image advances to the next stage only when all targets in the current stage succeed and the pipeline is running on the `main` branch (or a tag push).
+The P2P pipeline promotes container images through three stages: fast-feedback, extended-test, and prod. Each stage runs as a **separate GitHub Actions workflow** on its own trigger and schedule. The image registry connects the stages: each stage promotes its image to the next registry path, and the next stage resolves the latest promoted image independently.
 
 ## The three stages
 
@@ -25,11 +25,13 @@ The extended-test stage runs deeper, longer-running tests against the promoted i
 
 - `p2p-extended-test` — runs extended tests in the `extended` subnamespace.
 
-The stage only runs on `main` branch. Before executing, the workflow resolves the latest promoted image version from the extended-test registry using `p2p-get-latest-image-extended-test`. On success, the pipeline runs `p2p-promote-to-prod` to copy the image into the prod registry.
+**This stage runs in its own workflow file**, typically on a cron schedule (e.g., weekday evenings). Running extended tests overnight keeps them off the critical path — developers get fast-feedback results in minutes, while longer-running tests run when the cluster is quieter and results are ready by morning.
+
+Before executing, the workflow calls `p2p-get-latest-image-extended-test` to resolve the most recently promoted image from the extended-test registry. On success, it runs `p2p-promote-to-prod` to copy the image into the prod registry.
 
 The `source` input (default: `${{ vars.EXTENDED_TEST }}`) controls the test environments. The `destination` input (default: `${{ vars.PROD }}`) controls the promotion targets.
 
-See [p2p-workflow-extended-test reference](../reference/p2p-workflow-extended-test.md).
+See [p2p-workflow-extended-test reference](../reference/p2p-workflow-extended-test.md) and the [full pipeline tutorial](../tutorials/full-pipeline.md) for a complete example.
 
 ### Prod
 
@@ -37,11 +39,13 @@ The prod stage deploys the promoted image to production. It executes one make ta
 
 - `p2p-prod` — deploys the application in the `prod` subnamespace.
 
-The stage only runs on `main` branch. Before executing, the workflow resolves the latest promoted image version from the prod registry using `p2p-get-latest-image-prod`.
+**This stage also runs in its own workflow file**, typically on a morning cron schedule (e.g., weekday mornings before office hours). Deploying early in the working day means issues surface when the team is available to respond.
+
+Before executing, the workflow calls `p2p-get-latest-image-prod` to resolve the most recently promoted image from the prod registry.
 
 The `source` input (default: `${{ vars.PROD }}`) controls which environments receive the deployment.
 
-See [p2p-workflow-prod reference](../reference/p2p-workflow-prod.md).
+See [p2p-workflow-prod reference](../reference/p2p-workflow-prod.md) and the [full pipeline tutorial](../tutorials/full-pipeline.md) for a complete example.
 
 ## Image flow between registries
 
@@ -57,45 +61,66 @@ The promotion targets copy images between these paths using skopeo. `p2p-promote
 
 ## Pipeline flow diagram
 
-```
-PR branch                    main branch / tag push
-─────────────────────        ──────────────────────────────────────────────────────────
+The three stages run as separate workflows, connected by the image registry:
 
-p2p-build ──────────────────► p2p-build
-    │                              │
-    ├─► p2p-functional             ├─► p2p-functional ─┐
-    │                              │                    ├─► p2p-integration
-    └─► p2p-nft                    └─► p2p-nft ─────────┘
-                                                            │
-                                                            │ (main/tag only)
-                                                            ▼
-                                               p2p-promote-to-extended-test
-                                               [fast-feedback → extended-test]
-                                                            │
-                                                            ▼
-                                               p2p-get-latest-image-extended-test
-                                                            │
-                                                            ▼
-                                                   p2p-extended-test
-                                                            │
-                                                            │ (main only)
-                                                            ▼
-                                                  p2p-promote-to-prod
-                                               [extended-test → prod]
-                                                            │
-                                                            ▼
-                                                p2p-get-latest-image-prod
-                                                            │
-                                                            ▼
-                                                        p2p-prod
 ```
+┌─────────────────────────────────────────────────────────┐
+│  ci.yaml  (push/PR to main)                             │
+│                                                         │
+│  p2p-build                                              │
+│      ├─► p2p-functional ─┐                              │
+│      │                    ├─► p2p-integration            │
+│      └─► p2p-nft ─────────┘         │                   │
+│                                      │ (main/tag only)  │
+│                                      ▼                  │
+│                         p2p-promote-to-extended-test     │
+│                         [fast-feedback → extended-test]  │
+└─────────────────────────────────────────────────────────┘
+                              │
+              ┌───────────────┘  image registry
+              ▼
+┌─────────────────────────────────────────────────────────┐
+│  extended-test.yaml  (cron: weekday evenings + manual)  │
+│                                                         │
+│  p2p-get-latest-image-extended-test                     │
+│      │                                                  │
+│      ▼                                                  │
+│  p2p-extended-test                                      │
+│      │                                                  │
+│      ▼                                                  │
+│  p2p-promote-to-prod                                    │
+│  [extended-test → prod]                                 │
+└─────────────────────────────────────────────────────────┘
+                              │
+              ┌───────────────┘  image registry
+              ▼
+┌─────────────────────────────────────────────────────────┐
+│  prod.yaml  (cron: weekday mornings + manual)           │
+│                                                         │
+│  p2p-get-latest-image-prod                              │
+│      │                                                  │
+│      ▼                                                  │
+│  p2p-prod                                               │
+└─────────────────────────────────────────────────────────┘
+```
+
+## Why separate workflows
+
+Splitting the stages into separate workflows with their own schedules provides several benefits:
+
+- **Fast feedback stays fast.** Developers get build and test results in minutes. Extended tests and prod deploys run on their own schedule without slowing the inner loop.
+- **Extended tests run overnight.** The cluster is quieter in the evening, and results are ready by morning when the team reviews them.
+- **Prod deploys in the morning.** Issues surface early in the working day when the team is available to respond, not at midnight when nobody is watching.
+- **Stages are independently retriggerable.** The `workflow_dispatch` trigger on extended-test and prod allows manual runs outside the schedule — useful for urgent deployments or re-running a failed stage.
+- **No cascading failures.** A flaky extended test does not block fast-feedback from running on the next commit. Each stage operates independently against the latest promoted image.
 
 ## When promotions happen
 
 Promotions only occur when:
 
-- The pipeline is running on the `main` branch (`refs/heads/main`) or a tag push.
 - All preceding jobs in the stage succeeded.
+- For fast-feedback: the workflow is running on the `main` branch or a tag push.
+- For extended-test and prod: the workflow is running on `main` (enforced by the workflow's own trigger — cron and `workflow_dispatch` always run against the default branch).
 
 On PR branches, fast-feedback runs `p2p-build`, `p2p-functional`, `p2p-nft`, and optionally `p2p-integration` (skippable via `skip-fastfeedback-integration-on-prs`), but never promotes.
 
@@ -111,7 +136,9 @@ Since each application has its own application tenant, the tenant name uniquely 
 
 ## Role of `p2p-get-latest-image-*` workflows
 
-The extended-test and prod stages are triggered independently of the fast-feedback stage — typically on a separate schedule or workflow dispatch — and receive no version string from fast-feedback. Each stage calls `p2p-get-latest-image-extended-test` or `p2p-get-latest-image-prod` to query the Artifact Registry for the most recently promoted image in the relevant registry path, then passes that version into the stage's execute-command jobs.
+Because each stage runs in its own workflow on its own schedule, extended-test and prod receive no version string from fast-feedback. Instead, each stage calls `p2p-get-latest-image-extended-test` or `p2p-get-latest-image-prod` to query the Artifact Registry for the most recently promoted image in the relevant registry path, then passes that version into the stage's execute-command jobs.
+
+This decoupling means a slow extended-test run always picks up the latest image that fast-feedback promoted — not necessarily the one from a specific fast-feedback run. Similarly, prod deploys whatever passed extended-test most recently.
 
 See [p2p-get-latest-image-extended-test reference](../reference/p2p-get-latest-image-extended-test.md) and [p2p-get-latest-image-prod reference](../reference/p2p-get-latest-image-prod.md).
 
