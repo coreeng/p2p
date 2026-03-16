@@ -115,3 +115,20 @@ On a pull request, the pipeline runs build, functional, nft, and integration tes
 The `p2p-nft` and `p2p-integration` targets are optional. If they don't exist in your `Makefile`, those steps exit successfully and the pipeline continues.
 
 See [Pipeline model](../explanation/pipeline-model.md) for the full picture of how stages, environments, and promotion interact. See [Make targets](../explanation/make-targets.md) for the complete list of targets and the environment variables available to them.
+
+## Multi-component repositories
+
+If your repository contains multiple components, each with its own Makefile and pipeline, use the `working-directory` input to point each workflow call at the right directory:
+
+```yaml
+  fastfeedback:
+    needs: [version]
+    uses: coreeng/p2p/.github/workflows/p2p-workflow-fastfeedback.yaml@v1
+    with:
+      version: ${{ needs.version.outputs.version }}
+      working-directory: ./services/api
+    secrets:
+      env_vars: ${{ secrets.env_vars }}
+```
+
+The workflow looks for a `Makefile` in that directory, and all make targets run relative to it. You can define separate jobs for each component in the same workflow file, each with a different `working-directory`.

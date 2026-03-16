@@ -213,3 +213,29 @@ Every push to `main` triggers this sequence:
 Each stage only runs if the previous stage succeeded, and the `get-image-*` steps decouple the version produced by promotion from the version passed into the next test stage. This means a slow extended-test run always picks up the most recently promoted image, not necessarily the one from the same pipeline run.
 
 See [Pipeline model](../explanation/pipeline-model.md) for a detailed explanation of how promotion, environments, and the registry path conventions work together. See [Make targets](../explanation/make-targets.md) for the full list of targets and environment variables available in each stage.
+
+## Multi-component repositories
+
+If your repository has multiple components that each need their own full pipeline, pass `working-directory` to every workflow call for that component. Each component gets its own set of jobs pointing at its directory:
+
+```yaml
+  api-version:
+    uses: coreeng/p2p/.github/workflows/p2p-version.yaml@v1
+    secrets:
+      git-token: ${{ secrets.GITHUB_TOKEN }}
+    with:
+      version-prefix: api-
+
+  api-fastfeedback:
+    needs: [api-version]
+    uses: coreeng/p2p/.github/workflows/p2p-workflow-fastfeedback.yaml@v1
+    with:
+      version: ${{ needs.api-version.outputs.version }}
+      working-directory: ./services/api
+    secrets:
+      env_vars: ${{ secrets.env_vars }}
+
+  # Repeat for api-extended-test, api-prod, etc.
+```
+
+Use a distinct `version-prefix` per component so each gets independent version tags. See [How to customise versioning](../how-to/customise-versioning.md) for details.
