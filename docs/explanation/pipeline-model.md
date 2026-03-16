@@ -71,8 +71,8 @@ The three stages run as separate workflows, connected by the image registry:
 │   ├── p2p-functional ──┐                            │
 │   │                    ├── p2p-integration          │
 │   └── p2p-nft ─────────┘         │                  │
-│                                   │ (main/tag only) │
-│                                   ▼                 │
+│                                  │ (main/tag only)  │
+│                                  ▼                  │
 │                 p2p-promote-to-extended-test        │
 │                 [fast-feedback → extended-test]     │
 └─────────────────────────┬───────────────────────────┘
