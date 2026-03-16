@@ -65,6 +65,24 @@ on:
         required: false
         type: string
         default: ''
+      build-tool:
+        description: |
+          The build tool to invoke targets with
+        required: false
+        type: string
+        default: 'make'
+      build-tool-args:
+        description: |
+          Arguments passed to the build tool before the target
+        required: false
+        type: string
+        default: ''
+      build-target-args:
+        description: |
+          Arguments passed after the target
+        required: false
+        type: string
+        default: ''
     outputs:
       version:
         value: ${{ inputs.version }}
@@ -92,6 +110,9 @@ jobs:
       working-directory: ${{ inputs.working-directory }}
       skip-subnamespaces-create: ${{ inputs.skip-subnamespaces-create }}
       artifacts: ${{ inputs.artifacts }}
+      build-tool: ${{ inputs.build-tool }}
+      build-tool-args: ${{ inputs.build-tool-args }}
+      build-target-args: ${{ inputs.build-target-args }}
 
   functional-test:
     needs: [build]
@@ -117,6 +138,9 @@ jobs:
       working-directory: ${{ inputs.working-directory }}
       skip-subnamespaces-create: ${{ inputs.skip-subnamespaces-create }}
       artifacts: ${{ inputs.artifacts }}
+      build-tool: ${{ inputs.build-tool }}
+      build-tool-args: ${{ inputs.build-tool-args }}
+      build-target-args: ${{ inputs.build-target-args }}
 
   nft-test:
     needs: [build]
@@ -142,6 +166,9 @@ jobs:
       working-directory: ${{ inputs.working-directory }}
       skip-subnamespaces-create: ${{ inputs.skip-subnamespaces-create }}
       artifacts: ${{ inputs.artifacts }}
+      build-tool: ${{ inputs.build-tool }}
+      build-tool-args: ${{ inputs.build-tool-args }}
+      build-target-args: ${{ inputs.build-target-args }}
 
   integration-test:
     needs: [functional-test, nft-test]
@@ -168,6 +195,9 @@ jobs:
       working-directory: ${{ inputs.working-directory }}
       skip-subnamespaces-create: ${{ inputs.skip-subnamespaces-create }}
       artifacts: ${{ inputs.artifacts }}
+      build-tool: ${{ inputs.build-tool }}
+      build-tool-args: ${{ inputs.build-tool-args }}
+      build-target-args: ${{ inputs.build-target-args }}
 
   promote:
     name: promote
@@ -190,6 +220,9 @@ jobs:
       checkout-version: ${{ inputs.checkout-version }}
       dry-run: ${{ inputs.dry-run }}
       working-directory: ${{ inputs.working-directory }}
+      build-tool: ${{ inputs.build-tool }}
+      build-tool-args: ${{ inputs.build-tool-args }}
+      build-target-args: ${{ inputs.build-target-args }}
 
   notify-failure:
     needs: [build, functional-test, nft-test, integration-test, promote]
