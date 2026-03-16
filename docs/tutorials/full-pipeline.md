@@ -13,33 +13,76 @@ Extend your fast-feedback workflow with extended-test and production deployment.
 Add the `p2p-extended-test`, `p2p-prod`, `p2p-promote-to-extended-test`, and `p2p-promote-to-prod` targets to your `Makefile`. The complete updated `Makefile`:
 
 ```makefile
-.PHONY: p2p-build p2p-functional p2p-extended-test p2p-prod \
-        p2p-promote-to-extended-test p2p-promote-to-prod
+# App and tenant name must match your Core Platform tenancy
+P2P_TENANT_NAME ?= my-team
+P2P_APP_NAME ?= $(P2P_TENANT_NAME)  # app name must equal tenant name
 
-p2p-build:
-	@echo "Building image $(REGISTRY)/myapp:$(VERSION)"
-	docker build -t $(REGISTRY)/myapp:$(VERSION) .
-	docker push $(REGISTRY)/myapp:$(VERSION)
+# Download and include the p2p helper makefile
+$(shell curl -fsSL "https://raw.githubusercontent.com/coreeng/p2p/v1/p2p.mk" -o ".p2p.mk")
+include .p2p.mk
 
-p2p-functional:
-	@echo "Running functional tests against $(REGISTRY)/myapp:$(VERSION)"
-	./scripts/functional-tests.sh $(REGISTRY)/myapp:$(VERSION)
+# Define p2p targets as dependency chains
+p2p-build:         build-app           push-app
+p2p-functional:    build-functional    push-functional    deploy-functional    run-functional
+p2p-nft:           build-nft           push-nft           deploy-nft           run-nft
+p2p-integration:   build-integration   push-integration   deploy-integration   run-integration
+p2p-extended-test: build-extended-test push-extended-test deploy-extended-test run-extended-test
+p2p-prod:                                                 deploy-prod
 
-p2p-extended-test:
-	@echo "Running extended tests against $(REGISTRY)/myapp:$(VERSION)"
-	./scripts/extended-tests.sh $(REGISTRY)/myapp:$(VERSION)
+.PHONY: build-app
+build-app:
+	docker buildx build $(p2p_image_cache) --tag "$(p2p_image_tag)" .
 
-p2p-promote-to-extended-test:
-	@echo "Promoting $(REGISTRY)/myapp:$(VERSION) to extended-test"
-	./scripts/promote.sh $(REGISTRY)/myapp:$(VERSION) extended-test
+.PHONY: build-functional
+build-functional:
+	docker buildx build $(p2p_image_cache) --tag "$(p2p_image_tag)" tests/functional/
 
-p2p-prod:
-	@echo "Deploying $(REGISTRY)/myapp:$(VERSION) to prod"
-	./scripts/deploy-prod.sh $(REGISTRY)/myapp:$(VERSION)
+.PHONY: build-nft
+build-nft:
+	docker buildx build $(p2p_image_cache) --tag "$(p2p_image_tag)" tests/nft/
 
-p2p-promote-to-prod:
-	@echo "Promoting $(REGISTRY)/myapp:$(VERSION) to prod"
-	./scripts/promote.sh $(REGISTRY)/myapp:$(VERSION) prod
+.PHONY: build-integration
+build-integration:
+	docker buildx build $(p2p_image_cache) --tag "$(p2p_image_tag)" tests/integration/
+
+.PHONY: build-extended-test
+build-extended-test:
+	docker buildx build $(p2p_image_cache) --tag "$(p2p_image_tag)" tests/extended/
+
+.PHONY: build-%
+build-%:
+	@echo "WARNING: $@ not implemented"
+
+.PHONY: push-%
+push-%:
+	docker image push "$(p2p_image_tag)"
+
+.PHONY: deploy-%
+deploy-%:
+	helm upgrade --install "$(p2p_app_name)" your-chart -n "$(p2p_namespace)" \
+		--set image.repository="$(p2p_registry)/$(p2p_app_name)" \
+		--set image.tag="$(p2p_version)" \
+		--atomic
+
+.PHONY: run-functional
+run-functional:
+	bash scripts/helm-test.sh functional "$(p2p_namespace)" "$(p2p_app_name)" true
+
+.PHONY: run-nft
+run-nft:
+	bash scripts/helm-test.sh nft "$(p2p_namespace)" "$(p2p_app_name)" true
+
+.PHONY: run-integration
+run-integration:
+	bash scripts/helm-test.sh integration "$(p2p_namespace)" "$(p2p_app_name)" false
+
+.PHONY: run-extended-test
+run-extended-test:
+	bash scripts/helm-test.sh extended "$(p2p_namespace)" "$(p2p_app_name)" false
+
+.PHONY: run-%
+run-%:
+	@echo "WARNING: $@ not implemented"
 ```
 
 ## Step 2: Add extended-test to your workflow

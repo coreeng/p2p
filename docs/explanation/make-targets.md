@@ -108,59 +108,100 @@ These variables allow promotion targets to authenticate to both the source and d
 
 ## Minimal Makefile example
 
-The following Makefile shows all standard P2P targets with placeholder implementations. Replace the placeholder commands with the actual build, test, and deploy logic.
+The following Makefile shows the standard P2P structure. It uses the `p2p.mk` helper for consistent variable naming and the dependency-chain pattern for p2p targets. Replace the placeholder commands with actual build, test, and deploy logic.
 
 ```makefile
-IMAGE := $(P2P_REGISTRY_FAST_FEEDBACK)/my-svc
+# App and tenant name must match the Core Platform tenancy
+P2P_TENANT_NAME ?= my-team
+P2P_APP_NAME ?= $(P2P_TENANT_NAME)  # app name must equal tenant name
 
-.PHONY: p2p-build p2p-functional p2p-nft p2p-integration \
-        p2p-extended-test p2p-prod \
-        p2p-promote-to-extended-test p2p-promote-to-prod
+# Download and include the p2p helper makefile
+$(shell curl -fsSL "https://raw.githubusercontent.com/coreeng/p2p/v1/p2p.mk" -o ".p2p.mk")
+include .p2p.mk
 
-# Build and push the application image
-p2p-build:
-	docker build -t $(IMAGE):$(VERSION) .
-	docker push $(IMAGE):$(VERSION)
+# Define p2p targets as dependency chains
+p2p-build:         build-app           push-app
+p2p-functional:    build-functional    push-functional    deploy-functional    run-functional
+p2p-nft:           build-nft           push-nft           deploy-nft           run-nft
+p2p-integration:   build-integration   push-integration   deploy-integration   run-integration
+p2p-extended-test: build-extended-test push-extended-test deploy-extended-test run-extended-test
+p2p-prod:                                                 deploy-prod
 
-# Functional tests — runs in P2P_NAMESPACE_FUNCTIONAL
-p2p-functional:
-	kubectl apply -f deploy/functional/ -n $(P2P_NAMESPACE_FUNCTIONAL)
-	# run tests...
+# Build targets
+.PHONY: build-app
+build-app:
+	docker buildx build $(p2p_image_cache) --tag "$(p2p_image_tag)" .
 
-# Non-functional tests — runs in P2P_NAMESPACE_NFT
-p2p-nft:
-	kubectl apply -f deploy/nft/ -n $(P2P_NAMESPACE_NFT)
-	# run tests...
+.PHONY: build-functional
+build-functional:
+	docker buildx build $(p2p_image_cache) --tag "$(p2p_image_tag)" tests/functional/
 
-# Integration tests — runs in P2P_NAMESPACE_INTEGRATION
-p2p-integration:
-	kubectl apply -f deploy/integration/ -n $(P2P_NAMESPACE_INTEGRATION)
-	# run tests...
+.PHONY: build-nft
+build-nft:
+	docker buildx build $(p2p_image_cache) --tag "$(p2p_image_tag)" tests/nft/
 
-# Extended tests — runs in P2P_NAMESPACE_EXTENDED
-p2p-extended-test:
-	kubectl apply -f deploy/extended/ -n $(P2P_NAMESPACE_EXTENDED)
-	# run tests...
+.PHONY: build-integration
+build-integration:
+	docker buildx build $(p2p_image_cache) --tag "$(p2p_image_tag)" tests/integration/
 
-# Production deploy — runs in P2P_NAMESPACE_PROD
-p2p-prod:
-	kubectl apply -f deploy/prod/ -n $(P2P_NAMESPACE_PROD)
+.PHONY: build-extended-test
+build-extended-test:
+	docker buildx build $(p2p_image_cache) --tag "$(p2p_image_tag)" tests/extended/
 
-# Promote fast-feedback image to extended-test
+.PHONY: build-%
+build-%:
+	@echo "WARNING: $@ not implemented"
+
+# Push targets — all images pushed the same way
+.PHONY: push-%
+push-%:
+	docker image push "$(p2p_image_tag)"
+
+# Deploy targets — deploy the app and tests to the appropriate subnamespace
+.PHONY: deploy-%
+deploy-%:
+	helm upgrade --install "$(p2p_app_name)" your-chart -n "$(p2p_namespace)" \
+		--set image.repository="$(p2p_registry)/$(p2p_app_name)" \
+		--set image.tag="$(p2p_version)" \
+		--atomic
+
+# Run targets — execute tests in the subnamespace
+.PHONY: run-functional
+run-functional:
+	bash scripts/helm-test.sh functional "$(p2p_namespace)" "$(p2p_app_name)" true
+
+.PHONY: run-nft
+run-nft:
+	bash scripts/helm-test.sh nft "$(p2p_namespace)" "$(p2p_app_name)" true
+
+.PHONY: run-integration
+run-integration:
+	bash scripts/helm-test.sh integration "$(p2p_namespace)" "$(p2p_app_name)" false
+
+.PHONY: run-extended-test
+run-extended-test:
+	bash scripts/helm-test.sh extended "$(p2p_namespace)" "$(p2p_app_name)" false
+
+.PHONY: run-%
+run-%:
+	@echo "WARNING: $@ not implemented"
+
+# Promotion targets — use skopeo with the auth tokens provided by the pipeline
+.PHONY: p2p-promote-to-extended-test
 p2p-promote-to-extended-test:
 	skopeo copy \
 	  --src-creds oauth2accesstoken:$(SOURCE_ACCESS_TOKEN) \
 	  --dest-creds oauth2accesstoken:$(DEST_ACCESS_TOKEN) \
-	  docker://$(SOURCE_REGISTRY)/fast-feedback/my-svc:$(VERSION) \
-	  docker://$(P2P_REGISTRY_EXTENDED_TEST)/my-svc:$(VERSION)
+	  docker://$(SOURCE_REGISTRY)/fast-feedback/$(p2p_app_name):$(VERSION) \
+	  docker://$(P2P_REGISTRY_EXTENDED_TEST)/$(p2p_app_name):$(VERSION)
 
-# Promote extended-test image to prod
+.PHONY: p2p-promote-to-prod
 p2p-promote-to-prod:
 	skopeo copy \
 	  --src-creds oauth2accesstoken:$(SOURCE_ACCESS_TOKEN) \
 	  --dest-creds oauth2accesstoken:$(DEST_ACCESS_TOKEN) \
-	  docker://$(SOURCE_REGISTRY)/extended-test/my-svc:$(VERSION) \
-	  docker://$(P2P_REGISTRY_PROD)/my-svc:$(VERSION)
+	  docker://$(SOURCE_REGISTRY)/extended-test/$(p2p_app_name):$(VERSION) \
+	  docker://$(P2P_REGISTRY_PROD)/$(p2p_app_name):$(VERSION)
 ```
 
 ## See also

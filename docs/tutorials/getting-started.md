@@ -14,19 +14,46 @@ You'll set up a CI workflow that builds, tests, and promotes your application on
 Create a `Makefile` at the root of your repository. The `p2p-build` and `p2p-functional` targets are the minimum required for fast-feedback. The `REGISTRY` and `VERSION` variables are injected by the platform at runtime.
 
 ```makefile
-.PHONY: p2p-build p2p-functional
+# App and tenant name must match your Core Platform tenancy
+P2P_TENANT_NAME ?= my-team
+P2P_APP_NAME ?= $(P2P_TENANT_NAME)  # app name must equal tenant name
 
-p2p-build:
-	@echo "Building image $(REGISTRY)/myapp:$(VERSION)"
-	docker build -t $(REGISTRY)/myapp:$(VERSION) .
-	docker push $(REGISTRY)/myapp:$(VERSION)
+# Download and include the p2p helper makefile
+$(shell curl -fsSL "https://raw.githubusercontent.com/coreeng/p2p/v1/p2p.mk" -o ".p2p.mk")
+include .p2p.mk
 
-p2p-functional:
-	@echo "Running functional tests against $(REGISTRY)/myapp:$(VERSION)"
-	./scripts/functional-tests.sh $(REGISTRY)/myapp:$(VERSION)
+# Define p2p targets as dependency chains
+p2p-build:      build-app push-app
+p2p-functional: build-functional push-functional deploy-functional run-functional
+
+.PHONY: build-app
+build-app:
+	docker buildx build $(p2p_image_cache) --tag "$(p2p_image_tag)" .
+
+.PHONY: push-app
+push-app:
+	docker image push "$(p2p_image_tag)"
+
+.PHONY: build-functional
+build-functional:
+	docker buildx build $(p2p_image_cache) --tag "$(p2p_image_tag)" tests/functional/
+
+.PHONY: push-functional
+push-functional:
+	docker image push "$(p2p_image_tag)"
+
+.PHONY: deploy-functional
+deploy-functional:
+	# Deploy your app and test pod to the functional subnamespace
+	kubectl apply -f deploy/functional/ -n "$(p2p_namespace)"
+
+.PHONY: run-functional
+run-functional:
+	# Run functional tests
+	bash scripts/helm-test.sh functional "$(p2p_namespace)" "$(p2p_app_name)" true
 ```
 
-`p2p-build` runs first and is responsible for producing and publishing your container image. `p2p-functional` runs after build completes and should exercise your application's core behaviour.
+The `p2p.mk` helper provides variables like `p2p_image_tag`, `p2p_image_cache`, `p2p_namespace`, and `p2p_app_name` derived from your `P2P_TENANT_NAME`, `P2P_APP_NAME`, and the pipeline environment. The p2p targets (`p2p-build`, `p2p-functional`) are defined as dependency chains — each step runs in order.
 
 ## Step 2: Create your workflow file
 
