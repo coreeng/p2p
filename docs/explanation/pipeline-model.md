@@ -108,7 +108,7 @@ The three stages run as separate workflows, connected by the image registry:
 
 Each stage serves a distinct purpose and runs on its own schedule:
 
-- **Fast-feedback validates every change.** It runs on every pull request and every merge to `main`, keeping the development loop short. After a merge, a successful fast-feedback run promotes the image to the integration registry — guaranteeing that only stable versions reach the integration environment.
+- **Fast-feedback validates every change.** It runs on every pull request and every merge to `main`, keeping the development loop short. Promotion to the integration registry is configurable: restrict it to merges to `main` for a stable integration environment, or allow it on PR pushes too for faster integrated testing at the cost of more churn. See `skip-fastfeedback-integration-on-prs` in the [fast-feedback reference](../reference/p2p-workflow-fastfeedback.md).
 - **Extended-test exercises expensive or long-running behaviour.** These tests run on a schedule (typically overnight) against the latest version that passed fast-feedback. Running them once per day for a known-good version controls cost and cluster load while still catching deeper issues.
 - **Prod deploys on a predictable cadence.** A daily morning schedule takes the most recent well-tested version — from extended-test if configured, or from fast-feedback otherwise — and deploys it. A predictable deployment window means issues surface when the team is available to respond.
 
