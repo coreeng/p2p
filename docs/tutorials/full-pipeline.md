@@ -1,6 +1,6 @@
 # Setting Up the Full Pipeline
 
-Extend your fast-feedback workflow with extended-test and production deployment.
+Extend your fast-feedback workflow with extended-test and production deployment. Each stage runs as a separate workflow on its own schedule.
 
 ## Prerequisites
 
@@ -85,132 +85,107 @@ run-%:
 	@echo "WARNING: $@ not implemented"
 ```
 
-## Step 2: Add extended-test to your workflow
+## Step 2: Create the extended-test workflow
 
-The extended-test stage has two jobs. `get-image-extended-test` resolves the latest image that fast-feedback promoted into the `extended-test` registry path. `extended-test` then runs your `p2p-extended-test` make target against that resolved version.
+Extended tests typically run on a schedule rather than on every push — for example, overnight when the cluster is quieter and longer-running tests won't block development.
 
-Add these two jobs to `.github/workflows/ci.yaml`:
-
-```yaml
-  get-image-extended-test:
-    needs: [fastfeedback]
-    uses: coreeng/p2p/.github/workflows/p2p-get-latest-image-extended-test.yaml@v1
-    with:
-      image-name: myapp
-    secrets:
-      env_vars: ${{ secrets.env_vars }}
-
-  extended-test:
-    needs: [get-image-extended-test]
-    uses: coreeng/p2p/.github/workflows/p2p-workflow-extended-test.yaml@v1
-    with:
-      version: ${{ needs.get-image-extended-test.outputs.version }}
-    secrets:
-      env_vars: ${{ secrets.env_vars }}
-```
-
-`get-image-extended-test` only runs on `main` (not on PRs), so the entire extended-test stage is skipped on pull requests. Replace `myapp` in `image-name` with the name of your container image as published by `p2p-build`.
-
-## Step 3: Add prod to your workflow
-
-The prod stage follows the same pattern. `get-image-prod` resolves the latest image promoted into the `prod` registry path by the extended-test promote step, and `prod` deploys it.
-
-Add these two jobs to `.github/workflows/ci.yaml`:
+Create `.github/workflows/extended-test.yaml`:
 
 ```yaml
-  get-image-prod:
-    needs: [extended-test]
-    uses: coreeng/p2p/.github/workflows/p2p-get-latest-image-prod.yaml@v1
-    with:
-      image-name: myapp
-    secrets:
-      env_vars: ${{ secrets.env_vars }}
+name: Extended Test
 
-  prod:
-    needs: [get-image-prod]
-    uses: coreeng/p2p/.github/workflows/p2p-workflow-prod.yaml@v1
-    with:
-      version: ${{ needs.get-image-prod.outputs.version }}
-    secrets:
-      env_vars: ${{ secrets.env_vars }}
-```
-
-## Step 4: Complete workflow
-
-The complete `.github/workflows/ci.yaml` with all three stages wired together:
-
-```yaml
 on:
-  push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
+  # Run overnight on weekdays
+  schedule:
+    - cron: '0 22 * * 1-5'
+  # Allow manual triggers
+  workflow_dispatch:
 
 permissions:
   contents: read
   id-token: write
 
 jobs:
-  version:
-    uses: coreeng/p2p/.github/workflows/p2p-version.yaml@v1
-    secrets:
-      git-token: ${{ secrets.GITHUB_TOKEN }}
-
-  fastfeedback:
-    needs: [version]
-    uses: coreeng/p2p/.github/workflows/p2p-workflow-fastfeedback.yaml@v1
-    with:
-      version: ${{ needs.version.outputs.version }}
-    secrets:
-      env_vars: ${{ secrets.env_vars }}
-
-  get-image-extended-test:
-    needs: [fastfeedback]
+  get-image:
     uses: coreeng/p2p/.github/workflows/p2p-get-latest-image-extended-test.yaml@v1
     with:
-      image-name: myapp
+      image-name: my-app
     secrets:
       env_vars: ${{ secrets.env_vars }}
 
   extended-test:
-    needs: [get-image-extended-test]
+    needs: [get-image]
     uses: coreeng/p2p/.github/workflows/p2p-workflow-extended-test.yaml@v1
     with:
-      version: ${{ needs.get-image-extended-test.outputs.version }}
-    secrets:
-      env_vars: ${{ secrets.env_vars }}
-
-  get-image-prod:
-    needs: [extended-test]
-    uses: coreeng/p2p/.github/workflows/p2p-get-latest-image-prod.yaml@v1
-    with:
-      image-name: myapp
-    secrets:
-      env_vars: ${{ secrets.env_vars }}
-
-  prod:
-    needs: [get-image-prod]
-    uses: coreeng/p2p/.github/workflows/p2p-workflow-prod.yaml@v1
-    with:
-      version: ${{ needs.get-image-prod.outputs.version }}
+      version: ${{ needs.get-image.outputs.version }}
     secrets:
       env_vars: ${{ secrets.env_vars }}
 ```
 
+`get-image` resolves the latest image that fast-feedback promoted into the extended-test registry path. `extended-test` runs your `p2p-extended-test` make target against that version, then promotes the image to the prod registry path.
+
+Replace `my-app` in `image-name` with the name of your container image as published by `p2p-build`.
+
+## Step 3: Create the prod workflow
+
+Production deployments typically run on a morning schedule — before office hours — so issues surface early in the working day when the team is available.
+
+Create `.github/workflows/prod.yaml`:
+
+```yaml
+name: Prod
+
+on:
+  # Run before office hours on weekdays
+  schedule:
+    - cron: '0 7 * * 1-5'
+  # Allow manual triggers
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  get-image:
+    uses: coreeng/p2p/.github/workflows/p2p-get-latest-image-prod.yaml@v1
+    with:
+      image-name: my-app
+    secrets:
+      env_vars: ${{ secrets.env_vars }}
+
+  prod:
+    needs: [get-image]
+    uses: coreeng/p2p/.github/workflows/p2p-workflow-prod.yaml@v1
+    with:
+      version: ${{ needs.get-image.outputs.version }}
+    secrets:
+      env_vars: ${{ secrets.env_vars }}
+```
+
+## Step 4: Review your workflow files
+
+You now have three separate workflow files:
+
+| File | Trigger | What it does |
+|------|---------|--------------|
+| `.github/workflows/ci.yaml` | Push/PR to `main` | Version + fast-feedback (build, test, promote) |
+| `.github/workflows/extended-test.yaml` | Cron (weekday evenings) + manual | Resolve latest promoted image, run extended tests, promote to prod |
+| `.github/workflows/prod.yaml` | Cron (weekday mornings) + manual | Resolve latest promoted image, deploy to production |
+
+The `ci.yaml` file from the [Getting Started](getting-started.md) tutorial stays unchanged.
+
 ## How the pipeline flows
 
-Every push to `main` triggers this sequence:
+The three stages are decoupled by the image registry:
 
-1. `version` increments the semantic version and tags the commit.
-2. `fastfeedback` builds the image, runs functional, nft, and integration tests, then promotes the image to the `extended-test` registry path.
-3. `get-image-extended-test` queries the registry for the latest image in `extended-test`.
-4. `extended-test` runs your long-running tests against that image, then promotes it to the `prod` registry path.
-5. `get-image-prod` queries the registry for the latest image in `prod`.
-6. `prod` deploys that image to your production environment.
+1. **Fast-feedback** (on every push to `main`): versions the commit, builds the image, runs functional/nft/integration tests, and promotes the image to the extended-test registry path.
+2. **Extended-test** (scheduled overnight): resolves the latest promoted image in the extended-test registry, runs longer-running tests, and promotes to the prod registry path.
+3. **Prod** (scheduled morning): resolves the latest promoted image in the prod registry and deploys it.
 
-Each stage only runs if the previous stage succeeded, and the `get-image-*` steps decouple the version produced by promotion from the version passed into the next test stage. This means a slow extended-test run always picks up the most recently promoted image, not necessarily the one from the same pipeline run.
+Each stage picks up the most recently promoted image independently. A slow extended-test run doesn't block fast-feedback, and prod always deploys whatever passed extended-test most recently.
+
+The `workflow_dispatch` trigger on extended-test and prod lets you run them manually when you need to deploy outside the schedule.
 
 See [Pipeline model](../explanation/pipeline-model.md) for a detailed explanation of how promotion, environments, and the registry path conventions work together. See [Make targets](../explanation/make-targets.md) for the full list of targets and environment variables available in each stage.
 
