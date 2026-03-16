@@ -106,13 +106,13 @@ The three stages run as separate workflows, connected by the image registry:
 
 ## Why separate workflows
 
-Splitting the stages into separate workflows with their own schedules provides several benefits:
+Each stage serves a distinct purpose and runs on its own schedule:
 
-- **Fast feedback stays fast.** Developers get build and test results in minutes. Extended tests and prod deploys run on their own schedule without slowing the inner loop.
-- **Extended tests run overnight.** The cluster is quieter in the evening, and results are ready by morning when the team reviews them.
-- **Prod deploys in the morning.** Issues surface early in the working day when the team is available to respond, not at midnight when nobody is watching.
-- **Stages are independently retriggerable.** The `workflow_dispatch` trigger on extended-test and prod allows manual runs outside the schedule — useful for urgent deployments or re-running a failed stage.
-- **No cascading failures.** A flaky extended test does not block fast-feedback from running on the next commit. Each stage operates independently against the latest promoted image.
+- **Fast-feedback validates every change.** It runs on every pull request and every merge to `main`, keeping the development loop short. After a merge, a successful fast-feedback run promotes the image to the integration registry — guaranteeing that only stable versions reach the integration environment.
+- **Extended-test exercises expensive or long-running behaviour.** These tests run on a schedule (typically overnight) against the latest version that passed fast-feedback. Running them once per day for a known-good version controls cost and cluster load while still catching deeper issues.
+- **Prod deploys on a predictable cadence.** A daily morning schedule takes the most recent well-tested version — from extended-test if configured, or from fast-feedback otherwise — and deploys it. A predictable deployment window means issues surface when the team is available to respond.
+
+All three stages support `workflow_dispatch` for manual runs outside the schedule, covering urgent deployments and re-runs of failed stages.
 
 ## When promotions happen
 
