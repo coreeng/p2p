@@ -42,6 +42,24 @@ on:
       checkout-version:
         required: false
         type: string
+      build-tool:
+        description: |
+          The build tool to invoke targets with
+        required: false
+        type: string
+        default: 'make'
+      build-tool-args:
+        description: |
+          Arguments passed to the build tool before the target
+        required: false
+        type: string
+        default: ''
+      build-target-args:
+        description: |
+          Arguments passed after the target
+        required: false
+        type: string
+        default: ''
 
 jobs:
   lookup:
@@ -187,4 +205,4 @@ jobs:
           DEST_AUTH_OVERRIDE: ${{ steps.auth-dest.outputs.credentials_file_path }}
           DEST_ACCESS_TOKEN: ${{ steps.auth-dest.outputs.access_token }}
         run: |
-          make p2p-promote-to-${{ inputs.promotion-stage }}
+          ${{ inputs.build-tool }} ${{ inputs.build-tool-args }} p2p-promote-to-${{ inputs.promotion-stage }} ${{ inputs.build-target-args }}
