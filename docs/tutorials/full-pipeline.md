@@ -14,7 +14,7 @@ Add the `p2p-extended-test`, `p2p-prod`, `p2p-promote-to-extended-test`, and `p2
 
 ```makefile
 # App and tenant name must match your Core Platform tenancy
-P2P_TENANT_NAME ?= my-team
+P2P_TENANT_NAME ?= my-app
 P2P_APP_NAME ?= $(P2P_TENANT_NAME)  # app name must equal tenant name
 
 # Download and include the p2p helper makefile

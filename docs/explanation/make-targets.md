@@ -50,18 +50,18 @@ The `p2p-execute-command` workflow sets the following environment variables befo
 
 | Variable | Example value | Description |
 |----------|--------------|-------------|
-| `P2P_TENANT_NAME` | `my-team` | Tenant name |
-| `P2P_APP_NAME` | `my-svc` | App name passed to the workflow |
+| `P2P_TENANT_NAME` | `my-app` | Tenant name |
+| `P2P_APP_NAME` | `my-app` | App name passed to the workflow |
 | `P2P_VERSION` | `1.2.4` | Version string |
-| `P2P_REGISTRY` | `europe-west2-docker.pkg.dev/my-project/tenant/my-team` | Base registry for the tenant |
+| `P2P_REGISTRY` | `europe-west2-docker.pkg.dev/my-project/tenant/my-app` | Base registry for the tenant |
 | `P2P_REGISTRY_FAST_FEEDBACK` | `<P2P_REGISTRY>/fast-feedback` | Fast-feedback registry path |
 | `P2P_REGISTRY_EXTENDED_TEST` | `<P2P_REGISTRY>/extended-test` | Extended-test registry path |
 | `P2P_REGISTRY_PROD` | `<P2P_REGISTRY>/prod` | Prod registry path |
-| `P2P_NAMESPACE_FUNCTIONAL` | `my-team-my-svc-functional` | Functional test subnamespace |
-| `P2P_NAMESPACE_NFT` | `my-team-my-svc-nft` | NFT subnamespace |
-| `P2P_NAMESPACE_INTEGRATION` | `my-team-my-svc-integration` | Integration test subnamespace |
-| `P2P_NAMESPACE_EXTENDED` | `my-team-my-svc-extended` | Extended-test subnamespace |
-| `P2P_NAMESPACE_PROD` | `my-team-my-svc-prod` | Prod subnamespace |
+| `P2P_NAMESPACE_FUNCTIONAL` | `my-app-functional` | Functional test subnamespace |
+| `P2P_NAMESPACE_NFT` | `my-app-nft` | NFT subnamespace |
+| `P2P_NAMESPACE_INTEGRATION` | `my-app-integration` | Integration test subnamespace |
+| `P2P_NAMESPACE_EXTENDED` | `my-app-extended` | Extended-test subnamespace |
+| `P2P_NAMESPACE_PROD` | `my-app-prod` | Prod subnamespace |
 
 When the app name equals the tenant name, the namespace pattern is `<TENANT_NAME>-<subnamespace>` (without the repeated app name segment).
 
@@ -112,7 +112,7 @@ The following Makefile shows the standard P2P structure. It uses the `p2p.mk` he
 
 ```makefile
 # App and tenant name must match the Core Platform tenancy
-P2P_TENANT_NAME ?= my-team
+P2P_TENANT_NAME ?= my-app
 P2P_APP_NAME ?= $(P2P_TENANT_NAME)  # app name must equal tenant name
 
 # Download and include the p2p helper makefile

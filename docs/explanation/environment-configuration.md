@@ -55,7 +55,7 @@ Defines the environments that run `p2p-prod` and receive the promoted image from
 The tenancy name as configured in the platform. This value drives namespace resolution, artifact registry paths, service accounts, and workload identity providers (see [TENANT_NAME mapping](#how-tenant_name-maps-to-platform-resources) below).
 
 ```
-TENANT_NAME=my-team
+TENANT_NAME=my-app
 ```
 
 ## Per-environment variables
@@ -67,7 +67,7 @@ Each GitHub environment carries variables that describe the target cloud project
 | `BASE_DOMAIN` | Base DNS domain for the environment (e.g., `dev.example.com`) |
 | `INTERNAL_SERVICES_DOMAIN` | Internal services DNS domain |
 | `DPLATFORM` | GKE cluster name (used as both the cluster identifier and the `PLATFORM_ENVIRONMENT` env var) |
-| `PROJECT_ID` | GCP project ID (e.g., `my-team-dev-1a2b`) |
+| `PROJECT_ID` | GCP project ID (e.g., `my-app-dev-1a2b`) |
 | `PROJECT_NUMBER` | GCP project number (e.g., `123456789012`) |
 | `REGION` | GCP region (e.g., `europe-west2`); overrides the workflow's `region` input |
 
@@ -92,7 +92,7 @@ For platform-level workflows, Azure auth uses `AZURE_CLIENT_ID`, `AZURE_TENANT_I
 
 `TENANT_NAME` is the single identifier that ties together all platform resources for a tenancy.
 
-**Kubernetes namespaces.** The tenant's root namespace is `<TENANT_NAME>`. Subnamespace names follow the pattern `<TENANT_NAME>-<app-name>-<subnamespace>` (or `<TENANT_NAME>-<subnamespace>` when app name equals tenant name). For example, with tenant `my-team` and app `my-svc`, the functional subnamespace is `my-team-my-svc-functional`.
+**Kubernetes namespaces.** The tenant's root namespace is `<TENANT_NAME>`. Since app name equals tenant name, subnamespace names follow the pattern `<TENANT_NAME>-<subnamespace>`. For example, with tenant `my-app`, the functional subnamespace is `my-app-functional`.
 
 **Artifact registry paths.** Images are stored under:
 ```
@@ -123,7 +123,7 @@ The following shows a typical variable set for a `gcp-dev` GitHub environment.
 FAST_FEEDBACK={"include": [{"deploy_env": "gcp-dev"}]}
 EXTENDED_TEST={"include": [{"deploy_env": "gcp-dev"}]}
 PROD={"include": [{"deploy_env": "gcp-prod"}]}
-TENANT_NAME=my-team
+TENANT_NAME=my-app
 ```
 
 **`gcp-dev` environment variables:**
@@ -132,7 +132,7 @@ TENANT_NAME=my-team
 BASE_DOMAIN=dev.example.com
 INTERNAL_SERVICES_DOMAIN=internal.dev.example.com
 DPLATFORM=platform-dev
-PROJECT_ID=my-team-dev-1a2b3c
+PROJECT_ID=my-app-dev-1a2b3c
 PROJECT_NUMBER=123456789012
 REGION=europe-west2
 ```
@@ -143,20 +143,20 @@ REGION=europe-west2
 BASE_DOMAIN=prod.example.com
 INTERNAL_SERVICES_DOMAIN=internal.prod.example.com
 DPLATFORM=platform-prod
-PROJECT_ID=my-team-prod-4d5e6f
+PROJECT_ID=my-app-prod-4d5e6f
 PROJECT_NUMBER=987654321098
 REGION=europe-west2
 ```
 
 With this configuration, the pipeline authenticates as:
 
-- Dev: `p2p-my-team@my-team-dev-1a2b3c.iam.gserviceaccount.com`
-- Prod: `p2p-my-team@my-team-prod-4d5e6f.iam.gserviceaccount.com`
+- Dev: `p2p-my-app@my-app-dev-1a2b3c.iam.gserviceaccount.com`
+- Prod: `p2p-my-app@my-app-prod-4d5e6f.iam.gserviceaccount.com`
 
 Images are stored at:
 
-- Dev fast-feedback: `europe-west2-docker.pkg.dev/my-team-dev-1a2b3c/tenant/my-team/fast-feedback/<image>:<version>`
-- Prod: `europe-west2-docker.pkg.dev/my-team-prod-4d5e6f/tenant/my-team/prod/<image>:<version>`
+- Dev fast-feedback: `europe-west2-docker.pkg.dev/my-app-dev-1a2b3c/tenant/my-app/fast-feedback/<image>:<version>`
+- Prod: `europe-west2-docker.pkg.dev/my-app-prod-4d5e6f/tenant/my-app/prod/<image>:<version>`
 
 ## See also
 
