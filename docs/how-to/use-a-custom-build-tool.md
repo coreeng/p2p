@@ -1,6 +1,7 @@
 # How to Use a Custom Build Tool
 
-> **⚠️ EXPERIMENTAL — UNSUPPORTED**
+> [!WARNING]
+> **EXPERIMENTAL — UNSUPPORTED**
 >
 > This feature is experimental and not yet available on the stable `@v1` branch. To use it, you must reference the `configurable-build-tool` branch directly:
 >
