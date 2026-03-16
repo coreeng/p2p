@@ -73,6 +73,24 @@ on:
         required: false
         type: string
         default: ''
+      build-tool:
+        description: |
+          The build tool to invoke targets with
+        required: false
+        type: string
+        default: 'make'
+      build-tool-args:
+        description: |
+          Arguments passed to the build tool before the target
+        required: false
+        type: string
+        default: ''
+      build-target-args:
+        description: |
+          Arguments passed after the target
+        required: false
+        type: string
+        default: ''
 
 jobs:
   exec:
@@ -239,7 +257,7 @@ jobs:
           export P2P_NAMESPACE_PROD=${P2P_NAMESPACE}-prod
           env | grep "^P2P_" | sort | tee "${GITHUB_ENV}"
 
-      - name: Run make ${{ inputs.command }}
+      - name: Run ${{ inputs.build-tool }} ${{ inputs.command }}
         id: run-command
         if: ${{ inputs.dry-run == false }}
         working-directory: ${{ inputs.working-directory }}
@@ -247,7 +265,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           GOOGLE_APPLICATION_CREDENTIALS: ${{ steps.auth.outputs.credentials_file_path }}
         run: |
-          make ${{ inputs.command }}
+          ${{ inputs.build-tool }} ${{ inputs.build-tool-args }} ${{ inputs.command }} ${{ inputs.build-target-args }}
 
       - name: Resolve artifact paths
         id: resolve-artifacts
