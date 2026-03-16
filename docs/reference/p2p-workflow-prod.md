@@ -29,7 +29,7 @@ jobs:
 | `region` | `string` | No | `europe-west2` | Cloud region used by the `p2p-prod` make target. |
 | `source` | `string` | No | `${{ vars.PROD }}` | JSON matrix of deploy environments for the prod stage. |
 | `working-directory` | `string` | No | `.` | Repository path from which the make target is executed. |
-| `app-name` | `string` | No | `''` | Application name passed to the make target. Defaults to the repository name when empty. |
+| `app-name` | `string` | No | `''` | Application name. Must equal the tenant name (each application has its own application tenant). |
 | `tenant-name` | `string` | No | `''` | Tenant name passed to the make target. |
 | `skip-subnamespaces-create` | `boolean` | No | `false` | Skips creating subnamespaces before running the make target. |
 

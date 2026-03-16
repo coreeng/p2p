@@ -1,6 +1,6 @@
 # How to Use Multiple Environments
 
-The P2P workflows use matrix variables to control which GitHub environments each stage deploys to. You can override the defaults, add regions, and support multiple applications within a single repo.
+The P2P workflows use matrix variables to control which GitHub environments each stage deploys to. You can override the defaults and add regions.
 
 ## 1. Set environments with matrix JSON variables
 
@@ -44,22 +44,7 @@ fastfeedback:
     region: us-central1
 ```
 
-## 4. Support multiple applications with `app-name` and `tenant-name`
-
-When your repo contains multiple applications, set `app-name` to distinguish them. If `app-name` differs from `TENANT_NAME`, namespaces are prefixed as `TENANT_NAME-app-name`.
-
-```yaml
-fastfeedback:
-  uses: coreeng/p2p/.github/workflows/p2p-workflow-fastfeedback.yaml@v1
-  with:
-    version: ${{ needs.version.outputs.version }}
-    app-name: payments-api
-    tenant-name: platform
-```
-
-This results in the namespace `platform-payments-api` being used for deployments.
-
-## 5. Skip subnamespace creation
+## 4. Skip subnamespace creation
 
 Set `skip-subnamespaces-create: true` when you manage namespaces yourself and do not want the workflow to create them.
 

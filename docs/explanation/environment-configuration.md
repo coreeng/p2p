@@ -52,7 +52,7 @@ Defines the environments that run `p2p-prod` and receive the promoted image from
 
 ### `TENANT_NAME`
 
-The tenancy name as configured in the platform. This value drives namespace resolution, artifact registry paths, service accounts, and workload identity providers (see [TENANT_NAME mapping](#how-tenant_name-maps-to-platform-resources) below).
+The application tenant name as configured in the platform. Each application has its own application tenant, so `TENANT_NAME` is both the tenant name and the app name. This value drives namespace resolution, artifact registry paths, service accounts, and workload identity providers (see [TENANT_NAME mapping](#how-tenant_name-maps-to-platform-resources) below).
 
 ```
 TENANT_NAME=my-app

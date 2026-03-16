@@ -51,7 +51,7 @@ The `p2p-execute-command` workflow sets the following environment variables befo
 | Variable | Example value | Description |
 |----------|--------------|-------------|
 | `P2P_TENANT_NAME` | `my-app` | Tenant name |
-| `P2P_APP_NAME` | `my-app` | App name passed to the workflow |
+| `P2P_APP_NAME` | `my-app` | App name (always equals tenant name — each application has its own application tenant) |
 | `P2P_VERSION` | `1.2.4` | Version string |
 | `P2P_REGISTRY` | `europe-west2-docker.pkg.dev/core-platform-dev-1a2b3c/tenant/my-app` | Base registry for the tenant |
 | `P2P_REGISTRY_FAST_FEEDBACK` | `<P2P_REGISTRY>/fast-feedback` | Fast-feedback registry path |
@@ -63,7 +63,7 @@ The `p2p-execute-command` workflow sets the following environment variables befo
 | `P2P_NAMESPACE_EXTENDED` | `my-app-extended` | Extended-test subnamespace |
 | `P2P_NAMESPACE_PROD` | `my-app-prod` | Prod subnamespace |
 
-When the app name equals the tenant name, the namespace pattern is `<TENANT_NAME>-<subnamespace>` (without the repeated app name segment).
+Each application has its own application tenant, so app name always equals tenant name. The namespace pattern is `<TENANT_NAME>-<subnamespace>`.
 
 ## kubectl access
 

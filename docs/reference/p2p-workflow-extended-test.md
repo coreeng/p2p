@@ -30,7 +30,7 @@ jobs:
 | `source` | `string` | No | `${{ vars.EXTENDED_TEST }}` | JSON matrix of deploy environments for the extended-test stage. |
 | `destination` | `string` | No | `${{ vars.PROD }}` | JSON matrix of deploy environments to promote to after tests pass. |
 | `working-directory` | `string` | No | `.` | Repository path from which make targets are executed. |
-| `app-name` | `string` | No | `''` | Application name passed to all make targets. Defaults to the repository name when empty. |
+| `app-name` | `string` | No | `''` | Application name. Must equal the tenant name (each application has its own application tenant). |
 | `tenant-name` | `string` | No | `''` | Tenant name passed to all make targets. |
 | `skip-subnamespaces-create` | `boolean` | No | `false` | Skips creating subnamespaces before running make targets. |
 | `artifacts` | `string` | No | `''` | Comma-separated list of artifact paths to upload after each stage. |

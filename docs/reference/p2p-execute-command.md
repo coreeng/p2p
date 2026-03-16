@@ -25,8 +25,8 @@ jobs:
 | `dry-run` | boolean | No | `false` | When `true`, skips GCP authentication, cluster setup, and the `make` invocation. |
 | `region` | string | No | `europe-west2` | GCP region. Overridden by the `REGION` repository/environment variable when set. |
 | `subnamespace` | string | No | `''` | Kubernetes subnamespace suffix to create and switch context to before running the command. |
-| `app-name` | string | No | `''` | Application name. Used to construct namespace names and P2P environment variables. |
-| `tenant-name` | string | No | `''` | Tenant name. Falls back to the `TENANT_NAME` repository/environment variable when not set. |
+| `app-name` | string | No | `''` | Application name. Must equal the tenant name (each application has its own application tenant). Falls back to `TENANT_NAME` when empty. |
+| `tenant-name` | string | No | `''` | Tenant name. Must equal `app-name`. Falls back to the `TENANT_NAME` repository/environment variable when not set. |
 | `version` | string | Yes | — | Artifact version passed to the `make` target via `P2P_VERSION`. |
 | `checkout-version` | string | No | `''` | Git ref to check out. When `dry-run` is `true`, always checks out the default ref. |
 | `zone` | string | No | `europe-west2-a` | GCP zone. Declared but currently unused by the workflow steps. |
@@ -73,7 +73,7 @@ The following variables are exported to `GITHUB_ENV` before the `make` target ru
 | `P2P_NAMESPACE_PROD` | `<namespace>-prod` |
 | `PLATFORM_ENVIRONMENT` | Value of the `DPLATFORM` repository/environment variable. |
 
-**Namespace naming**: when `app-name` equals `TENANT_NAME`, `<namespace>` is just `TENANT_NAME`. Otherwise `<namespace>` is `TENANT_NAME-<app-name>`.
+**Namespace naming**: each application has its own application tenant, so `app-name` always equals `TENANT_NAME` and `<namespace>` is simply `TENANT_NAME`.
 
 ## See also
 

@@ -104,10 +104,10 @@ On PR branches, fast-feedback runs `p2p-build`, `p2p-functional`, `p2p-nft`, and
 Every job within `p2p-execute-command` uses a concurrency group keyed on:
 
 ```
-<github_env>/<tenant_name>-<app_name>-<subnamespace>
+<github_env>/<tenant_name>-<subnamespace>
 ```
 
-The `cancel-in-progress` flag is set to `false`. When two pipeline runs target the same environment, tenant, app, and subnamespace simultaneously, the second run queues rather than cancelling the first. This prevents in-flight deployments from being interrupted by newer commits.
+Since each application has its own application tenant, the tenant name uniquely identifies the app. The `cancel-in-progress` flag is set to `false`. When two pipeline runs target the same environment, tenant, and subnamespace simultaneously, the second run queues rather than cancelling the first. This prevents in-flight deployments from being interrupted by newer commits.
 
 ## Role of `p2p-get-latest-image-*` workflows
 

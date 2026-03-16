@@ -24,8 +24,8 @@ jobs:
 | `promotion-stage` | string | Yes | — | The promotion stage name. The workflow runs `make p2p-promote-to-<promotion-stage>`. |
 | `source_matrix` | string | Yes | — | JSON matrix string describing the source environment. The first entry's `deploy_env` is used as the source GitHub environment. |
 | `dest_github_env` | string | Yes | — | GitHub environment name for the destination. Used to resolve destination registry credentials. |
-| `app-name` | string | No | `''` | Application name. Used to construct P2P namespace variables. |
-| `tenant-name` | string | No | `''` | Tenant name. Falls back to the `TENANT_NAME` repository/environment variable when not set. |
+| `app-name` | string | No | `''` | Application name. Must equal the tenant name (each application has its own application tenant). |
+| `tenant-name` | string | No | `''` | Tenant name. Must equal `app-name`. Falls back to the `TENANT_NAME` repository/environment variable when not set. |
 | `version` | string | No | `''` | Artifact version passed as `P2P_VERSION`. |
 | `region` | string | No | `europe-west2` | GCP region. Overridden by the `REGION` repository/environment variable when set. |
 | `working-directory` | string | No | `'.'` | Directory from which the `make` target is executed. |

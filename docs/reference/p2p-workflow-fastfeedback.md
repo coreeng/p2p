@@ -26,7 +26,7 @@ jobs:
 | `dry-run` | `boolean` | No | `false` | When `true`, runs commands without making persistent changes. |
 | `main-branch` | `string` | No | `refs/heads/main` | Full ref of the main branch, used to gate promotion and Slack alerts. |
 | `checkout-version` | `string` | No | `''` | Git ref to check out. Defaults to the current workflow ref when empty. |
-| `app-name` | `string` | No | `''` | Application name passed to all make targets. Defaults to the repository name when empty. |
+| `app-name` | `string` | No | `''` | Application name. Must equal the tenant name (each application has its own application tenant). |
 | `tenant-name` | `string` | No | `''` | Tenant name passed to all make targets. |
 | `region` | `string` | No | `europe-west2` | Cloud region used by all make targets. |
 | `source` | `string` | No | `${{ vars.FAST_FEEDBACK }}` | JSON matrix of deploy environments for the fast-feedback stage. |
