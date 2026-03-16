@@ -55,6 +55,12 @@ The primary workflows call these. Call them only through the primary workflows.
 | [p2p-promote-image](docs/reference/p2p-promote-image.md) | Authenticates to source/dest registries and runs the promotion make target |
 | [p2p-get-latest-image](docs/reference/p2p-get-latest-image.md) | Base workflow for querying latest image version from artifact registry |
 
+### Actions
+
+| Action | Purpose |
+|--------|---------|
+| [resolve-platform-config](docs/reference/resolve-platform-config.md) | Resolves environment config and exports P2P convenience variables |
+
 ## Prerequisites
 
 Before calling the workflows, set up the following:
