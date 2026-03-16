@@ -1,6 +1,6 @@
 # p2p-promote-image.yaml
 
-> Authenticates to source and destination Artifact Registries via skopeo, then delegates image promotion to the user's `p2p-promote-to-<stage>` make target.
+> Authenticates to source and destination Artifact Registries via skopeo, then delegates image promotion to the tenant's `p2p-promote-to-<stage>` make target.
 
 ## Usage
 
@@ -49,7 +49,7 @@ This workflow has no outputs.
 
 ## Promotion mechanism
 
-The `promote-image` job authenticates separately to the source and destination GCP projects using Workload Identity Federation. It then logs skopeo in to both registries so that the user's `make p2p-promote-to-<stage>` target can copy images without managing credentials itself.
+The `promote-image` job authenticates separately to the source and destination GCP projects using Workload Identity Federation. It then logs skopeo in to both registries so that the tenant's `p2p-promote-to-<stage>` make target can copy images without managing credentials itself.
 
 The following environment variables are available to the make target:
 
@@ -72,3 +72,9 @@ The following environment variables are available to the make target:
 | `P2P_NAMESPACE_INTEGRATION` | `<namespace>-integration` |
 | `P2P_NAMESPACE_EXTENDED` | `<namespace>-extended` |
 | `P2P_NAMESPACE_PROD` | `<namespace>-prod` |
+
+## See also
+
+- [How to use multiple environments](../how-to/use-multiple-environments.md)
+- [Make targets](../explanation/make-targets.md)
+- [Pipeline model](../explanation/pipeline-model.md)

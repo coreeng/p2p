@@ -65,7 +65,7 @@ Apply the same inputs to each stage to keep build invocations consistent across 
 
 For the full input reference for each workflow, see the relevant reference docs:
 
-- [../reference/p2p-workflow-fastfeedback.md](../reference/p2p-workflow-fastfeedback.md)
-- [../reference/p2p-workflow-extended-test.md](../reference/p2p-workflow-extended-test.md)
-- [../reference/p2p-workflow-prod.md](../reference/p2p-workflow-prod.md)
-- [../reference/p2p-execute-command.md](../reference/p2p-execute-command.md)
+- [p2p-workflow-fastfeedback reference](../reference/p2p-workflow-fastfeedback.md)
+- [p2p-workflow-extended-test reference](../reference/p2p-workflow-extended-test.md)
+- [p2p-workflow-prod reference](../reference/p2p-workflow-prod.md)
+- [p2p-execute-command reference](../reference/p2p-execute-command.md)

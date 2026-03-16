@@ -1,6 +1,6 @@
 # Getting Started with P2P
 
-You'll build a CI pipeline that builds, tests, and promotes your application on every push to main.
+You'll set up a CI workflow that builds, tests, and promotes your application on every push to main.
 
 ## Prerequisites
 
@@ -68,7 +68,7 @@ Commit both files and push to a branch, then open a pull request targeting `main
 
 ```bash
 git add Makefile .github/workflows/ci.yaml
-git commit -m "Add P2P fast-feedback pipeline"
+git commit -m "Add P2P fast-feedback workflow"
 git push origin my-branch
 ```
 
@@ -87,4 +87,4 @@ On a pull request, the pipeline runs build, functional, nft, and integration tes
 
 The `p2p-nft` and `p2p-integration` targets are optional. If they don't exist in your `Makefile`, those steps exit successfully and the pipeline continues.
 
-See [Pipeline Model](../explanation/pipeline-model.md) for the full picture of how stages, environments, and promotion interact.
+See [Pipeline model](../explanation/pipeline-model.md) for the full picture of how stages, environments, and promotion interact. See [Make targets](../explanation/make-targets.md) for the complete list of targets and the environment variables available to them.

@@ -45,3 +45,9 @@ jobs:
 
 1. `get-latest-version` — Calls `p2p-get-latest-image.yaml`. Only runs when `github.ref == main-branch`.
 2. `notify-failure` — Sends a Slack alert if `slack_webhook_url` is set and `get-latest-version` failed on the main branch. Depends on `get-latest-version`.
+
+## See also
+
+- [How to configure Slack alerts](../how-to/configure-slack-alerts.md)
+- [Pipeline model](../explanation/pipeline-model.md)
+- [p2p-get-latest-image reference](p2p-get-latest-image.md)

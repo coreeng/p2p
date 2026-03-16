@@ -73,4 +73,6 @@ fastfeedback:
 
 ---
 
-For the full list of environment-related variables and how they interact, see [../explanation/environment-configuration.md](../explanation/environment-configuration.md).
+For the full list of environment-related variables and how they interact, see [Environment configuration](../explanation/environment-configuration.md).
+
+See the [full input reference](../reference/p2p-workflow-fastfeedback.md#inputs) for all available options on the fast-feedback workflow.

@@ -43,4 +43,4 @@ This gives fast PR feedback without requiring cloud access, while still running 
 
 ---
 
-For the full input reference for the fastfeedback workflow, see [../reference/p2p-workflow-fastfeedback.md](../reference/p2p-workflow-fastfeedback.md).
+For the full input reference for the fast-feedback workflow, see the [p2p-workflow-fastfeedback reference](../reference/p2p-workflow-fastfeedback.md).

@@ -59,3 +59,11 @@ notify-success  (needs: prod-deploy; runs on main-branch when prod-deploy succee
 ```
 
 `notify-failure` and `notify-success` are independent of each other and run after `prod-deploy` completes. This workflow is unique among the orchestrator workflows in that it sends a Slack notification on successful deployment in addition to the standard failure alert.
+
+## See also
+
+- [How to pass secrets and environment variables](../how-to/pass-secrets-and-env-vars.md)
+- [How to configure Slack alerts](../how-to/configure-slack-alerts.md)
+- [How to use multiple environments](../how-to/use-multiple-environments.md)
+- [How to customise versioning](../how-to/customise-versioning.md)
+- [How to use a custom build tool](../how-to/use-a-custom-build-tool.md)

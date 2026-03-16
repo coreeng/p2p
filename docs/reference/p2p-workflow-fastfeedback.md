@@ -71,7 +71,9 @@ All jobs use a matrix derived from `source`. The `promote` job uses a matrix der
 
 ## See also
 
-- [`../how-to/pass-secrets-and-env-vars.md`](../how-to/pass-secrets-and-env-vars.md)
-- [`../how-to/upload-artifacts.md`](../how-to/upload-artifacts.md)
-- [`../how-to/skip-stages-on-prs.md`](../how-to/skip-stages-on-prs.md)
-- [`../how-to/configure-slack-alerts.md`](../how-to/configure-slack-alerts.md)
+- [How to pass secrets and environment variables](../how-to/pass-secrets-and-env-vars.md)
+- [How to upload artifacts](../how-to/upload-artifacts.md)
+- [How to skip stages on pull requests](../how-to/skip-stages-on-prs.md)
+- [How to configure Slack alerts](../how-to/configure-slack-alerts.md)
+- [How to use multiple environments](../how-to/use-multiple-environments.md)
+- [How to use a custom build tool](../how-to/use-a-custom-build-tool.md)

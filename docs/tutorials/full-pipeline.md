@@ -1,6 +1,6 @@
 # Setting Up the Full Pipeline
 
-Extend your fast-feedback pipeline with extended testing and production deployment.
+Extend your fast-feedback workflow with extended-test and production deployment.
 
 ## Prerequisites
 
@@ -169,4 +169,4 @@ Every push to `main` triggers this sequence:
 
 Each stage only runs if the previous stage succeeded, and the `get-image-*` steps decouple the version produced by promotion from the version passed into the next test stage. This means a slow extended-test run always picks up the most recently promoted image, not necessarily the one from the same pipeline run.
 
-See [Pipeline Model](../explanation/pipeline-model.md) for a detailed explanation of how promotion, environments, and the registry path conventions work together.
+See [Pipeline model](../explanation/pipeline-model.md) for a detailed explanation of how promotion, environments, and the registry path conventions work together. See [Make targets](../explanation/make-targets.md) for the full list of targets and environment variables available in each stage.

@@ -4,7 +4,7 @@ Pass the `artifacts` input to a P2P workflow to upload files produced by your ma
 
 ## The `artifacts` input format
 
-`artifacts` is a YAML string mapping each make command name to a list of path globs. After a command runs, the workflow collects files matching the globs and uploads them as a named artifact.
+`artifacts` is a YAML string mapping each make target name to a list of path globs. After a target runs, the workflow collects files matching the globs and uploads them as a named artifact.
 
 Pass it under the `with:` block of your workflow call:
 
@@ -59,3 +59,4 @@ Artifacts are retained for 14 days. If no files match the configured globs, the 
 
 - [p2p-workflow-fastfeedback reference](../reference/p2p-workflow-fastfeedback.md) — `artifacts` input details
 - [p2p-workflow-extended-test reference](../reference/p2p-workflow-extended-test.md) — `artifacts` input details
+- [p2p-execute-command reference](../reference/p2p-execute-command.md) — underlying executor `artifacts` input details

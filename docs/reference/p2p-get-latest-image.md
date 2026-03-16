@@ -47,3 +47,9 @@ The workflow calls `gcloud artifacts docker images list` for `<registry>/<regist
 1. Extracts the version core (e.g. `1.2.3`) and pre-release identifier (e.g. `alpha.1`) from each tag.
 2. Sorts first by name prefix, then by numeric version core components, then by whether a pre-release suffix is present (release versions rank above pre-release), then by the pre-release components.
 3. Reverses the sort and returns the first (highest) entry.
+
+## See also
+
+- [p2p-get-latest-image-extended-test reference](p2p-get-latest-image-extended-test.md)
+- [p2p-get-latest-image-prod reference](p2p-get-latest-image-prod.md)
+- [Pipeline model](../explanation/pipeline-model.md)

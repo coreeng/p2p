@@ -2,7 +2,7 @@
 
 The P2P pipeline uses GitHub environments and repository variables to model deployment targets. Each GitHub environment maps to a specific cloud project and cluster. Repository-level variables define which environments participate in each pipeline stage.
 
-See [`../how-to/use-multiple-environments.md`](../how-to/use-multiple-environments.md) for step-by-step setup. See [`../reference/p2p-execute-command.md`](../reference/p2p-execute-command.md) for the full workflow input reference.
+See [How to use multiple environments](../how-to/use-multiple-environments.md) for step-by-step setup. See [p2p-execute-command reference](../reference/p2p-execute-command.md) for the full workflow input reference.
 
 ## GitHub environments
 
@@ -105,7 +105,7 @@ For platform-level workflows, Azure auth uses `AZURE_CLIENT_ID`, `AZURE_TENANT_I
 
 ## Overriding the default matrix with `source` and `destination`
 
-The fast-feedback, extended-test, and prod workflow inputs accept `source` and `destination` parameters that override the repository-level matrix variables.
+The fast-feedback, extended-test, and prod workflow inputs accept `source` and `destination` inputs that override the repository-level matrix variables.
 
 - On `p2p-workflow-fastfeedback`, `source` overrides `FAST_FEEDBACK` and `destination` overrides `EXTENDED_TEST`.
 - On `p2p-workflow-extended-test`, `source` overrides `EXTENDED_TEST` and `destination` overrides `PROD`.
@@ -157,3 +157,9 @@ Images are stored at:
 
 - Dev fast-feedback: `europe-west2-docker.pkg.dev/my-team-dev-1a2b3c/tenant/my-team/fast-feedback/<image>:<version>`
 - Prod: `europe-west2-docker.pkg.dev/my-team-prod-4d5e6f/tenant/my-team/prod/<image>:<version>`
+
+## See also
+
+- [How to use multiple environments](../how-to/use-multiple-environments.md)
+- [p2p-execute-command reference](../reference/p2p-execute-command.md)
+- [Pipeline model](pipeline-model.md)

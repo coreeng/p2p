@@ -69,4 +69,6 @@ If `container_registry_url` is omitted, `docker login` is called without a regis
 ## Reference
 
 - [p2p-workflow-fastfeedback reference](../reference/p2p-workflow-fastfeedback.md) — full list of secrets and inputs
+- [p2p-workflow-extended-test reference](../reference/p2p-workflow-extended-test.md) — full list of secrets and inputs
+- [p2p-workflow-prod reference](../reference/p2p-workflow-prod.md) — full list of secrets and inputs
 - [p2p-execute-command reference](../reference/p2p-execute-command.md) — underlying command executor secrets and inputs

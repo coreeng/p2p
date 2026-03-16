@@ -2,7 +2,7 @@
 
 The `p2p-version` workflow produces a semantic version string for each pipeline run. The version drives image tagging in the registry and determines which commit the pipeline checks out when deploying.
 
-See [`../reference/p2p-version.md`](../reference/p2p-version.md) for full input/output reference. See [`../how-to/customise-versioning.md`](../how-to/customise-versioning.md) for customisation patterns.
+See [p2p-version reference](../reference/p2p-version.md) for full input/output reference. See [How to customise versioning](../how-to/customise-versioning.md) for customisation patterns.
 
 ## Tag lookup
 

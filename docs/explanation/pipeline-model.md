@@ -17,7 +17,7 @@ On success and on `main` branch or tag, the pipeline runs `p2p-promote-to-extend
 
 The `source` input (default: `${{ vars.FAST_FEEDBACK }}`) controls which environments run the fast-feedback jobs. The `destination` input (default: `${{ vars.EXTENDED_TEST }}`) controls which environments receive the promoted image.
 
-See [`../reference/p2p-workflow-fastfeedback.md`](../reference/p2p-workflow-fastfeedback.md).
+See [p2p-workflow-fastfeedback reference](../reference/p2p-workflow-fastfeedback.md).
 
 ### Extended-test
 
@@ -29,7 +29,7 @@ The stage only runs on `main` branch. Before executing, the workflow resolves th
 
 The `source` input (default: `${{ vars.EXTENDED_TEST }}`) controls the test environments. The `destination` input (default: `${{ vars.PROD }}`) controls the promotion targets.
 
-See [`../reference/p2p-workflow-extended-test.md`](../reference/p2p-workflow-extended-test.md).
+See [p2p-workflow-extended-test reference](../reference/p2p-workflow-extended-test.md).
 
 ### Prod
 
@@ -41,7 +41,7 @@ The stage only runs on `main` branch. Before executing, the workflow resolves th
 
 The `source` input (default: `${{ vars.PROD }}`) controls which environments receive the deployment.
 
-See [`../reference/p2p-workflow-prod.md`](../reference/p2p-workflow-prod.md).
+See [p2p-workflow-prod reference](../reference/p2p-workflow-prod.md).
 
 ## Image flow between registries
 
@@ -113,4 +113,12 @@ The `cancel-in-progress` flag is set to `false`. When two pipeline runs target t
 
 The extended-test and prod stages are triggered independently of the fast-feedback stage (typically on a separate schedule or workflow dispatch). They do not receive the version directly from fast-feedback. Instead, they call `p2p-get-latest-image-extended-test` or `p2p-get-latest-image-prod` to query the Artifact Registry for the most recently promoted image in the relevant registry path. The returned version is then passed into the stage's execute-command jobs.
 
-See [`../reference/p2p-get-latest-image-extended-test.md`](../reference/p2p-get-latest-image-extended-test.md) and [`../reference/p2p-get-latest-image-prod.md`](../reference/p2p-get-latest-image-prod.md).
+See [p2p-get-latest-image-extended-test reference](../reference/p2p-get-latest-image-extended-test.md) and [p2p-get-latest-image-prod reference](../reference/p2p-get-latest-image-prod.md).
+
+## See also
+
+- [How to use multiple environments](../how-to/use-multiple-environments.md)
+- [How to skip stages on pull requests](../how-to/skip-stages-on-prs.md)
+- [Versioning](versioning.md)
+- [Environment configuration](environment-configuration.md)
+- [Make targets](make-targets.md)

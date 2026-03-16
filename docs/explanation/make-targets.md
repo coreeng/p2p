@@ -1,8 +1,8 @@
 # Make targets
 
-The P2P pipeline calls your `Makefile` at each stage. The pipeline passes a defined set of environment variables to every target and expects targets to be present for the stages you want to exercise. Targets that are absent from the Makefile cause the pipeline step to succeed and continue rather than fail.
+The P2P pipeline calls the tenant's `Makefile` at each stage. The pipeline passes a defined set of environment variables to every target and expects targets to be present for the stages that are in use. Targets that are absent from the Makefile cause the pipeline step to succeed and continue rather than fail.
 
-See [`../reference/p2p-execute-command.md`](../reference/p2p-execute-command.md) and [`../reference/p2p-promote-image.md`](../reference/p2p-promote-image.md) for full workflow reference.
+See [p2p-execute-command reference](../reference/p2p-execute-command.md) and [p2p-promote-image reference](../reference/p2p-promote-image.md) for full workflow reference.
 
 ## Expected targets per stage
 
@@ -108,7 +108,7 @@ These variables allow promotion targets to authenticate to both the source and d
 
 ## Minimal Makefile example
 
-The following Makefile shows all standard P2P targets with placeholder implementations. Replace the placeholder commands with your actual build, test, and deploy logic.
+The following Makefile shows all standard P2P targets with placeholder implementations. Replace the placeholder commands with the actual build, test, and deploy logic.
 
 ```makefile
 IMAGE := $(P2P_REGISTRY_FAST_FEEDBACK)/my-svc
@@ -162,3 +162,10 @@ p2p-promote-to-prod:
 	  docker://$(SOURCE_REGISTRY)/extended-test/my-svc:$(VERSION) \
 	  docker://$(P2P_REGISTRY_PROD)/my-svc:$(VERSION)
 ```
+
+## See also
+
+- [How to use a custom build tool](../how-to/use-a-custom-build-tool.md)
+- [Pipeline model](pipeline-model.md)
+- [p2p-execute-command reference](../reference/p2p-execute-command.md)
+- [p2p-promote-image reference](../reference/p2p-promote-image.md)

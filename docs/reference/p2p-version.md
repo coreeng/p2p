@@ -51,3 +51,8 @@ jobs:
 **When the current commit already has the latest tag**: tag creation is skipped and `version` is set to the existing version (i.e. `previous_version`).
 
 In all cases, `previous_version` is the numeric part of the highest existing semver tag (e.g. `1.2.3`), or `0.0.0` if no tags exist.
+
+## See also
+
+- [How to customise versioning](../how-to/customise-versioning.md)
+- [Versioning explanation](../explanation/versioning.md)

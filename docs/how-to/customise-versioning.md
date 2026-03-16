@@ -48,4 +48,4 @@ prod:
 
 ---
 
-For the full version workflow input reference, see [../reference/p2p-version.md](../reference/p2p-version.md). For a conceptual overview of how versioning works, see [../explanation/versioning.md](../explanation/versioning.md).
+For the full version workflow input reference, see the [p2p-version reference](../reference/p2p-version.md). For a conceptual overview of how versioning works, see [Versioning](../explanation/versioning.md).
