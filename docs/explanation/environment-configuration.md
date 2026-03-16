@@ -87,6 +87,20 @@ For platform-level workflows (not P2P execute-command), AWS auth uses `AWS_ROLE_
 
 For platform-level workflows, Azure auth uses `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and `AZURE_SUBSCRIPTION_ID`.
 
+## Resolving configuration with the `resolve-platform-config` action
+
+The `resolve-platform-config` action is a reusable composite action that resolves environment configuration and exports all platform and P2P variables in a single step. It replaces the manual setup that `p2p-execute-command` performs internally, making the same variables available to custom workflows and jobs that do not call `p2p-execute-command`.
+
+The action supports three configuration modes:
+
+- **`github-env`** (default) — reads variables from GitHub environment settings, the same mechanism described in [Per-environment variables](#per-environment-variables) above. The action exports only P2P convenience variables; the platform fields are already present in the job environment.
+- **`repo-file`** — reads a YAML config file checked into the repository. The file contains an `environments` map keyed by environment name, with each entry holding the platform fields (`projectId`, `projectNumber`, `region`, domains). This mode removes the dependency on GitHub environment variables entirely.
+- **`central-repo`** — fetches the config file from a separate repository via sparse checkout. Each environment has its own file. This mode suits organizations that manage environment configuration centrally across many repositories.
+
+In all three modes the action computes the same derived authentication variables (`REGISTRY`, `SERVICE_ACCOUNT`, `WORKLOAD_IDENTITY_PROVIDER`) and the full set of P2P convenience variables (`P2P_TENANT_NAME`, `P2P_APP_NAME`, `P2P_VERSION`, registry paths, and namespace variants). These match the variables that `p2p.mk` produces, so Makefiles work identically whether they run locally or in CI.
+
+See [resolve-platform-config reference](../reference/resolve-platform-config.md) for the complete input, output, and variable reference.
+
 ## How `TENANT_NAME` maps to platform resources
 
 `TENANT_NAME` is the single identifier that ties together all platform resources for a tenancy.
