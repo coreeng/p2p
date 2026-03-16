@@ -11,7 +11,7 @@
 >
 > This branch may change or be removed without notice. Do not use it in production workflows.
 
-By default, P2P workflows invoke `make` to run build targets. The `build-tool`, `build-tool-args`, and `build-target-args` inputs allow you to swap in a different tool or pass extra flags.
+By default, P2P workflows invoke `make` to run build targets. Use the `build-tool`, `build-tool-args`, and `build-target-args` inputs to swap in a different tool or pass extra flags.
 
 ## 1. Swap `make` for another tool
 

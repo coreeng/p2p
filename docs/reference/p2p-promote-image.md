@@ -29,7 +29,7 @@ jobs:
 | `version` | string | No | `''` | Artifact version passed as `P2P_VERSION`. |
 | `region` | string | No | `europe-west2` | GCP region. Overridden by the `REGION` repository/environment variable when set. |
 | `working-directory` | string | No | `'.'` | Directory from which the `make` target is executed. |
-| `checkout-version` | string | No | `''` | Git ref to check out. When `dry-run` is `true`, always checks out the default ref. |
+| `checkout-version` | string | No | `''` | Git ref to check out. Ignored when `dry-run` is `true`; the workflow checks out the default ref. |
 | `dry-run` | boolean | No | `false` | When `true`, skips GCP authentication, skopeo login, and the `make` invocation. |
 
 ## Secrets

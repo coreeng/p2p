@@ -107,11 +107,11 @@ Every job within `p2p-execute-command` uses a concurrency group keyed on:
 <github_env>/<tenant_name>-<subnamespace>
 ```
 
-Since each application has its own application tenant, the tenant name uniquely identifies the app. The `cancel-in-progress` flag is set to `false`. When two pipeline runs target the same environment, tenant, and subnamespace simultaneously, the second run queues rather than cancelling the first. This prevents in-flight deployments from being interrupted by newer commits.
+Since each application has its own application tenant, the tenant name uniquely identifies the app. The pipeline sets `cancel-in-progress` to `false`, so when two runs target the same environment, tenant, and subnamespace simultaneously, the second run queues rather than cancels the first. This keeps in-flight deployments safe from interruption by newer commits.
 
 ## Role of `p2p-get-latest-image-*` workflows
 
-The extended-test and prod stages are triggered independently of the fast-feedback stage (typically on a separate schedule or workflow dispatch). They do not receive the version directly from fast-feedback. Instead, they call `p2p-get-latest-image-extended-test` or `p2p-get-latest-image-prod` to query the Artifact Registry for the most recently promoted image in the relevant registry path. The returned version is then passed into the stage's execute-command jobs.
+The extended-test and prod stages are triggered independently of the fast-feedback stage — typically on a separate schedule or workflow dispatch — and receive no version string from fast-feedback. Each stage calls `p2p-get-latest-image-extended-test` or `p2p-get-latest-image-prod` to query the Artifact Registry for the most recently promoted image in the relevant registry path, then passes that version into the stage's execute-command jobs.
 
 See [p2p-get-latest-image-extended-test reference](../reference/p2p-get-latest-image-extended-test.md) and [p2p-get-latest-image-prod reference](../reference/p2p-get-latest-image-prod.md).
 

@@ -39,7 +39,7 @@ jobs:
 
 | Name | Required | Description |
 |------|----------|-------------|
-| `env_vars` | No | Key-value pairs injected as environment variables into make targets. Multi-line values are not supported; use single-line `KEY=value` pairs. |
+| `env_vars` | No | Single-line `KEY=value` pairs exported as environment variables into make targets. |
 | `container_registry_user` | No | Username for authenticating to the container registry. |
 | `container_registry_pat` | No | Personal access token for authenticating to the container registry. |
 | `container_registry_url` | No | URL of the container registry. |
@@ -54,10 +54,10 @@ This workflow defines no outputs.
 ```
 run-tests     Runs p2p-extended-test make target.
               Only runs on main-branch.
-              checkout-version is constructed as version-prefix + version.
+              checkout-version = version-prefix + version.
 └── promote   Promotes from source to destination environments.
               Only runs on main-branch.
-              checkout-version is constructed as version-prefix + version.
+              checkout-version = version-prefix + version.
 
 notify-failure  (needs: run-tests, promote; runs on main-branch when any job fails)
 ```

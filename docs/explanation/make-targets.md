@@ -1,6 +1,6 @@
 # Make targets
 
-The P2P pipeline calls the tenant's `Makefile` at each stage. The pipeline passes a defined set of environment variables to every target and expects targets to be present for the stages that are in use. Targets that are absent from the Makefile cause the pipeline step to succeed and continue rather than fail.
+The P2P pipeline calls the tenant's `Makefile` at each stage, passing a set of environment variables to every target and expecting targets to be present for the stages in use. A missing target causes the pipeline step to succeed rather than fail.
 
 See [p2p-execute-command reference](../reference/p2p-execute-command.md) and [p2p-promote-image reference](../reference/p2p-promote-image.md) for full workflow reference.
 
@@ -67,13 +67,13 @@ Each application has its own application tenant, so app name always equals tenan
 
 ## kubectl access
 
-Every target runs with a kubeconfig already configured for the tenant's GKE cluster. The context is set to the subnamespace for the current step. For example, `p2p-functional` runs with the current namespace set to `P2P_NAMESPACE_FUNCTIONAL`.
+Every target runs with a kubeconfig pre-configured for the tenant's GKE cluster, with the context set to the subnamespace for the current step. For example, `p2p-functional` runs with the current namespace set to `P2P_NAMESPACE_FUNCTIONAL`.
 
 Targets can call `kubectl` directly without any additional setup.
 
 ## Subnamespace lifecycle
 
-The pipeline creates subnamespaces automatically before calling the relevant make target (unless `skip-subnamespaces-create` is set). Subnamespaces are Hierarchical Namespace Controller (HNC) `SubnamespaceAnchor` resources created under the tenant's root namespace. They persist across runs.
+The pipeline creates subnamespaces automatically before calling the relevant make target (unless `skip-subnamespaces-create` is set). Each subnamespace is a Hierarchical Namespace Controller (HNC) `SubnamespaceAnchor` resource under the tenant's root namespace, and persists across runs.
 
 | Target | Subnamespace used |
 |--------|------------------|
@@ -86,7 +86,7 @@ The pipeline creates subnamespaces automatically before calling the relevant mak
 
 ## Optional targets
 
-If a make target does not exist in the Makefile, `make` exits with a non-zero code for that target. The pipeline treats a missing target as a no-op and continues to the next step. This means:
+When a make target is absent from the Makefile, `make` exits with a non-zero code and the pipeline treats it as a no-op, continuing to the next step. This means:
 
 - A project that has no integration tests can simply omit `p2p-integration` from its Makefile.
 - A project that has no extended tests can omit `p2p-extended-test`.
@@ -104,11 +104,11 @@ The `p2p-promote-image` workflow sets additional variables when calling `p2p-pro
 | `SOURCE_AUTH_OVERRIDE` | Path to the source GCP credentials file |
 | `DEST_AUTH_OVERRIDE` | Path to the destination GCP credentials file |
 
-These variables allow promotion targets to authenticate to both the source and destination registries when copying images. A typical promotion target uses skopeo or `docker buildx imagetools` with these tokens.
+Promotion targets use these variables to authenticate to both source and destination registries when copying images — typically with skopeo or `docker buildx imagetools`.
 
 ## Minimal Makefile example
 
-The following Makefile shows the standard P2P structure. It uses the `p2p.mk` helper for consistent variable naming and the dependency-chain pattern for p2p targets. Replace the placeholder commands with actual build, test, and deploy logic.
+The following Makefile shows the standard P2P structure, using the `p2p.mk` helper for consistent variable naming and the dependency-chain pattern for p2p targets. Placeholder commands mark where actual build, test, and deploy logic belongs.
 
 ```makefile
 # App and tenant name must match the Core Platform tenancy

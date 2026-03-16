@@ -40,7 +40,7 @@ jobs:
 
 | Name | Required | Description |
 |------|----------|-------------|
-| `env_vars` | No | Key-value pairs injected as environment variables into make targets. Multi-line values are not supported; use single-line `KEY=value` pairs. |
+| `env_vars` | No | Single-line `KEY=value` pairs exported as environment variables into make targets. |
 | `container_registry_user` | No | Username for authenticating to the container registry. |
 | `container_registry_pat` | No | Personal access token for authenticating to the container registry. |
 | `container_registry_url` | No | URL of the container registry. |
@@ -50,7 +50,7 @@ jobs:
 
 | Name | Description |
 |------|-------------|
-| `version` | Echoes the `version` input unchanged, allowing downstream workflows to chain on this workflow's output. |
+| `version` | The `version` input, passed through unchanged for downstream workflows to consume. |
 
 ## Job Graph
 

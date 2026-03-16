@@ -22,9 +22,9 @@ jobs:
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `version` | `string` | No | `''` | Version identifier passed to the `p2p-prod` make target and included in Slack notifications. Unlike other orchestrator workflows, this input is optional. |
+| `version` | `string` | No | `''` | Version identifier passed to the `p2p-prod` make target and included in Slack notifications. Optional, unlike other orchestrator workflows. |
 | `version-prefix` | `string` | No | `v` | Prefix prepended to `version` to form the `checkout-version` ref (e.g., `v` + `1.2.3` = `v1.2.3`). |
-| `dry-run` | `boolean` | No | `false` | When `true`, runs commands without making persistent changes. The success Slack notification is suppressed when `dry-run` is `true`. |
+| `dry-run` | `boolean` | No | `false` | When `true`, runs commands without making persistent changes and skips the success Slack notification. |
 | `main-branch` | `string` | No | `refs/heads/main` | Full ref of the main branch, used to gate the deploy job and Slack alerts. |
 | `region` | `string` | No | `europe-west2` | Cloud region used by the `p2p-prod` make target. |
 | `source` | `string` | No | `${{ vars.PROD }}` | JSON matrix of deploy environments for the prod stage. |
@@ -37,7 +37,7 @@ jobs:
 
 | Name | Required | Description |
 |------|----------|-------------|
-| `env_vars` | No | Key-value pairs injected as environment variables into the make target. Multi-line values are not supported; use single-line `KEY=value` pairs. |
+| `env_vars` | No | Single-line `KEY=value` pairs exported as environment variables into the make target. |
 | `container_registry_user` | No | Username for authenticating to the container registry. |
 | `container_registry_pat` | No | Personal access token for authenticating to the container registry. |
 | `container_registry_url` | No | URL of the container registry. |
@@ -52,13 +52,13 @@ This workflow defines no outputs.
 ```
 prod-deploy     Runs p2p-prod make target.
                 Only runs on main-branch.
-                checkout-version is constructed as version-prefix + version.
+                checkout-version = version-prefix + version.
 
 notify-failure  (needs: prod-deploy; runs on main-branch when prod-deploy fails)
 notify-success  (needs: prod-deploy; runs on main-branch when prod-deploy succeeds and dry-run=false)
 ```
 
-`notify-failure` and `notify-success` are independent of each other and run after `prod-deploy` completes. This workflow is unique among the orchestrator workflows in that it sends a Slack notification on successful deployment in addition to the standard failure alert.
+`notify-failure` and `notify-success` are independent of each other and run after `prod-deploy` completes. Unlike other orchestrator workflows, this workflow sends a Slack notification on successful deployment as well as on failure.
 
 ## See also
 

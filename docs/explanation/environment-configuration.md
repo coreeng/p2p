@@ -14,11 +14,11 @@ Create one GitHub environment per deployment target. Common examples:
 | `gcp-staging` | Extended-test workloads in a separate project |
 | `gcp-prod` | Production workloads |
 
-GitHub environment protection rules (required reviewers, deployment branches) apply normally. The P2P workflows reference environments by name through the matrix variables described below.
+GitHub environment protection rules (required reviewers, deployment branches) apply normally; P2P workflows reference environments by name through the matrix variables described below.
 
 ## Repository variables
 
-Four repository-level variables control which environments participate in each stage. All four use a JSON matrix format compatible with GitHub Actions `strategy.matrix`.
+Four repository-level variables control which environments participate in each stage; all four use a JSON matrix format compatible with GitHub Actions `strategy.matrix`.
 
 ### `FAST_FEEDBACK`
 
@@ -111,7 +111,7 @@ The fast-feedback, extended-test, and prod workflow inputs accept `source` and `
 - On `p2p-workflow-extended-test`, `source` overrides `EXTENDED_TEST` and `destination` overrides `PROD`.
 - On `p2p-workflow-prod`, `source` overrides `PROD`.
 
-This allows a single repository to run the same pipeline against different environment sets (e.g., multi-region deployments) by passing explicit JSON matrices at call time.
+A single repository can therefore run the same pipeline against different environment sets — such as multi-region deployments — by passing explicit JSON matrices at call time.
 
 ## Complete GCP example
 

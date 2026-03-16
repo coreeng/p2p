@@ -6,13 +6,13 @@ See [p2p-version reference](../reference/p2p-version.md) for full input/output r
 
 ## Tag lookup
 
-The workflow fetches the full git history (`fetch-depth: 0`) and scans all existing tags. It looks for tags matching the pattern `<version-prefix><major>.<minor>.<patch>` using the regex `^<version-prefix>[0-9]+\.[0-9]+\.[0-9]+$`. Tags are sorted with `--version-sort` in descending order and the highest matching tag is selected as the previous version.
+The workflow fetches the full git history (`fetch-depth: 0`) and scans all existing tags. It looks for tags matching the pattern `<version-prefix><major>.<minor>.<patch>` using the regex `^<version-prefix>[0-9]+\.[0-9]+\.[0-9]+$`. Tags are sorted with `--version-sort` in descending order; the workflow selects the highest matching tag as the previous version.
 
 If no matching tag exists, the previous version defaults to `<version-prefix>0.0.0`.
 
 ## Semver increment
 
-The workflow always increments the patch component. Given a previous version of `1.2.3`, the next version is `1.2.4`. Major and minor increments are not performed automatically; they require manual tagging.
+The workflow always increments the patch component. Given a previous version of `1.2.3`, the next version is `1.2.4`. Major and minor increments require manual tagging.
 
 ## Behaviour on the main branch
 
@@ -21,7 +21,7 @@ When the pipeline runs on `main` (or the configured `main-branch` input) and the
 1. Creates a new git tag `<version-prefix><next-patch>` on the current commit.
 2. Outputs the new version (e.g., `1.2.4`) as the `version` output.
 
-When the current commit already has the latest tag, the workflow outputs the existing version without creating a new tag. This handles reruns and scenarios where the pipeline is triggered on a commit that was already tagged.
+When the current commit already carries the latest tag, the workflow outputs the existing version without creating a new one — covering reruns and pipelines triggered on an already-tagged commit.
 
 ## Behaviour on PR branches
 
@@ -36,7 +36,7 @@ The `version-prefix` input (default: `v`) prepends a string to every version num
 
 ## The `previous_version` output
 
-The workflow always emits a `previous_version` output. This is the version before the patch increment, with the prefix stripped. It equals the highest existing tag's version or `0.0.0` if no tags exist. It is available regardless of branch or whether a new tag was created.
+The workflow always emits a `previous_version` output: the version before the patch increment, with the prefix stripped. The value equals the highest existing tag's version, or `0.0.0` when no tags exist, and is available on any branch regardless of whether a new tag was created.
 
 ## Version and image tags
 
@@ -53,4 +53,4 @@ Promotion targets retag or copy the image using the same version string:
 <registry>/prod/<image>:<version>
 ```
 
-On `main`, the version is a clean semver string (e.g., `1.2.4`). On PR branches, the version includes the git hash (e.g., `1.2.3-a3f8c2d1...`), making PR images distinguishable from released images and preventing them from being selected as the latest promoted version by `p2p-get-latest-image-*`.
+On `main`, the version is a clean semver string (e.g., `1.2.4`). On PR branches, the version includes the git hash (e.g., `1.2.3-a3f8c2d1...`), making PR images distinguishable from released images and ensuring `p2p-get-latest-image-*` never selects them as the latest promoted version.

@@ -28,19 +28,19 @@ jobs:
 | `app-name` | string | No | `''` | Application name. Must equal the tenant name (each application has its own application tenant). Falls back to `TENANT_NAME` when empty. |
 | `tenant-name` | string | No | `''` | Tenant name. Must equal `app-name`. Falls back to the `TENANT_NAME` repository/environment variable when not set. |
 | `version` | string | Yes | — | Artifact version passed to the `make` target via `P2P_VERSION`. |
-| `checkout-version` | string | No | `''` | Git ref to check out. When `dry-run` is `true`, always checks out the default ref. |
-| `zone` | string | No | `europe-west2-a` | GCP zone. Declared but currently unused by the workflow steps. |
-| `pre-targets` | string | No | `''` | Make targets to run before the main command. Declared but currently unused by the workflow steps. |
-| `post-targets` | string | No | `''` | Make targets to run after the main command. Declared but currently unused by the workflow steps. |
+| `checkout-version` | string | No | `''` | Git ref to check out. Ignored when `dry-run` is `true`; the workflow checks out the default ref. |
+| `zone` | string | No | `europe-west2-a` | GCP zone. Accepted but unused by the workflow. |
+| `pre-targets` | string | No | `''` | Make targets to run before the main command. Accepted but unused by the workflow. |
+| `post-targets` | string | No | `''` | Make targets to run after the main command. Accepted but unused by the workflow. |
 | `working-directory` | string | No | `'.'` | Directory from which the `make` target is executed. |
 | `skip-subnamespaces-create` | boolean | No | `false` | When `true`, skips automatic subnamespace creation even if `subnamespace` is set. |
-| `artifacts` | string | No | `''` | YAML-formatted map of command names to artifact paths. Paths matching the active `command` are uploaded after the run. Does not support multi-line values within individual path entries. |
+| `artifacts` | string | No | `''` | YAML-formatted map of command names to artifact paths. Paths matching the active `command` are uploaded after the run. Single-line path entries only. |
 
 ## Secrets
 
 | Name | Required | Description |
 |------|----------|-------------|
-| `env_vars` | No | Newline-delimited `KEY=VALUE` pairs decoded into the job environment before the `make` invocation. Multi-line values within a single entry are not supported. |
+| `env_vars` | No | Newline-delimited `KEY=VALUE` pairs decoded into the job environment before the `make` invocation. Single-line entries only. |
 | `container_registry_user` | No | Username for an additional container registry login. |
 | `container_registry_pat` | No | Password/PAT for an additional container registry login. Required when `container_registry_user` is set. |
 | `container_registry_url` | No | URL of the additional container registry. |

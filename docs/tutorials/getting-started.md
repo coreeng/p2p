@@ -11,7 +11,7 @@ You'll set up a CI workflow that builds, tests, and promotes your application on
 
 ## Step 1: Create your Makefile
 
-Create a `Makefile` at the root of your repository. The `p2p-build` and `p2p-functional` targets are the minimum required for fast-feedback. The `REGISTRY` and `VERSION` variables are injected by the platform at runtime.
+Create a `Makefile` at the root of your repository. The `p2p-build` and `p2p-functional` targets are the minimum required for fast-feedback. The platform injects the `REGISTRY` and `VERSION` variables at runtime.
 
 ```makefile
 # App and tenant name must match your Core Platform tenancy
@@ -53,7 +53,7 @@ run-functional:
 	bash scripts/helm-test.sh functional "$(p2p_namespace)" "$(p2p_app_name)" true
 ```
 
-The `p2p.mk` helper provides variables like `p2p_image_tag`, `p2p_image_cache`, `p2p_namespace`, and `p2p_app_name` derived from your `P2P_TENANT_NAME`, `P2P_APP_NAME`, and the pipeline environment. The p2p targets (`p2p-build`, `p2p-functional`) are defined as dependency chains — each step runs in order.
+The `p2p.mk` helper provides variables like `p2p_image_tag`, `p2p_image_cache`, `p2p_namespace`, and `p2p_app_name` derived from your `P2P_TENANT_NAME`, `P2P_APP_NAME`, and the pipeline environment. The p2p targets (`p2p-build`, `p2p-functional`) chain their steps in order.
 
 ## Step 2: Create your workflow file
 
@@ -110,9 +110,9 @@ In the GitHub Actions UI you'll see:
 
 ## What happens next
 
-On a pull request, the pipeline runs build, functional, nft, and integration tests but skips the promote step. On a push to `main`, promote runs and the image becomes available to the next pipeline stage.
+On a pull request, the pipeline runs build, functional, nft, and integration tests but skips promote. On a push to `main`, promote runs and the next pipeline stage can pull the image.
 
-The `p2p-nft` and `p2p-integration` targets are optional. If they don't exist in your `Makefile`, those steps exit successfully and the pipeline continues.
+The `p2p-nft` and `p2p-integration` targets are optional. Define them only when you need them; the pipeline exits those steps successfully and continues when they are absent.
 
 See [Pipeline model](../explanation/pipeline-model.md) for the full picture of how stages, environments, and promotion interact. See [Make targets](../explanation/make-targets.md) for the complete list of targets and the environment variables available to them.
 

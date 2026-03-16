@@ -4,7 +4,7 @@ Two inputs let you reduce what runs on pull requests: `dry-run` skips cloud auth
 
 ## 1. Use `dry-run` for syntax testing
 
-Set `dry-run: true` to skip cloud authentication and build tool invocation. The workflow still runs checkout and environment setup, so it is useful for validating workflow syntax without needing cloud credentials.
+Set `dry-run: true` to skip cloud authentication and build tool invocation. The workflow still runs checkout and environment setup, making it useful for validating workflow syntax without cloud credentials.
 
 ```yaml
 fastfeedback:
@@ -28,7 +28,7 @@ fastfeedback:
 
 ## 3. Combine both inputs
 
-You can use `dry-run` and `skip-fastfeedback-integration-on-prs` together. A common pattern is to enable `dry-run` only on PRs using a conditional expression while also skipping integration tests:
+Use `dry-run` and `skip-fastfeedback-integration-on-prs` together. A common pattern is to enable `dry-run` only on PRs using a conditional expression while also skipping integration tests:
 
 ```yaml
 fastfeedback:

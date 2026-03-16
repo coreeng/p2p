@@ -20,9 +20,9 @@ secrets:
 
 Each line becomes an environment variable in the runner, masked in logs.
 
-### Caveat: multi-line values are not supported
+### Caveat: `env_vars` supports single-line values only
 
-`env_vars` splits on newlines to parse key/value pairs. Values that themselves contain newlines will be parsed incorrectly.
+`env_vars` splits on newlines to parse key/value pairs. Values containing newlines are parsed incorrectly.
 
 This works:
 
@@ -43,7 +43,7 @@ env_vars: |
   -----END CERTIFICATE-----
 ```
 
-**Workaround:** base64-encode multi-line values before storing them as secrets, then decode inside your Makefile:
+**Workaround:** Base64-encode multi-line values before storing them as secrets, then decode inside your Makefile:
 
 ```makefile
 p2p-build:

@@ -47,7 +47,7 @@ jobs:
 
 ### Internal Workflows
 
-These are called by the primary workflows. You do not normally call them directly.
+The primary workflows call these. Call them only through the primary workflows.
 
 | Workflow | Purpose |
 |----------|---------|

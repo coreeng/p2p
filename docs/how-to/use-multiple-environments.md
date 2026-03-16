@@ -46,7 +46,7 @@ fastfeedback:
 
 ## 4. Skip subnamespace creation
 
-Set `skip-subnamespaces-create: true` when you manage namespaces yourself and do not want the workflow to create them.
+Set `skip-subnamespaces-create: true` when you manage namespaces yourself and want the workflow to leave them unchanged.
 
 ```yaml
 fastfeedback:

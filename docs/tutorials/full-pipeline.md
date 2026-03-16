@@ -87,7 +87,7 @@ run-%:
 
 ## Step 2: Create the extended-test workflow
 
-Extended tests typically run on a schedule rather than on every push — for example, overnight when the cluster is quieter and longer-running tests won't block development.
+Extended tests typically run on a schedule rather than on every push — for example, overnight when the cluster is quieter and longer-running tests run without blocking development.
 
 Create `.github/workflows/extended-test.yaml`:
 
@@ -187,7 +187,7 @@ Each stage picks up the most recently promoted image independently. A slow exten
 
 The `workflow_dispatch` trigger on extended-test and prod lets you run them manually when you need to deploy outside the schedule.
 
-See [Pipeline model](../explanation/pipeline-model.md) for a detailed explanation of how promotion, environments, and the registry path conventions work together. See [Make targets](../explanation/make-targets.md) for the full list of targets and environment variables available in each stage.
+See [Pipeline model](../explanation/pipeline-model.md) for how promotion, environments, and registry path conventions work together. See [Make targets](../explanation/make-targets.md) for the full list of targets and environment variables available in each stage.
 
 ## Multi-component repositories
 

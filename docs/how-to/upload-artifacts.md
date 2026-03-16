@@ -53,7 +53,7 @@ Each uploaded artifact is named:
 
 For example: `p2p-build-fast-feedback-run12-attempt1`.
 
-Artifacts are retained for 14 days. If no files match the configured globs, the upload step emits a warning but does not fail the workflow.
+Artifacts are retained for 14 days. If no files match the configured globs, the upload step emits a warning and the workflow continues.
 
 ## Reference
 

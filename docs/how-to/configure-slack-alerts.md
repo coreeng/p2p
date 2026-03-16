@@ -92,7 +92,7 @@ get-latest:
 | `p2p-get-latest-image-extended-test` | On main branch | No |
 | `p2p-get-latest-image-prod` | On main branch | No |
 
-If `slack_webhook_url` is not set or is empty, all notification steps are silently skipped.
+When `slack_webhook_url` is omitted or empty, all notification steps are silently skipped.
 
 ## Reference
 
