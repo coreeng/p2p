@@ -54,6 +54,24 @@ on:
         required: false
         type: boolean
         default: false
+      build-tool:
+        description: |
+          The build tool to invoke targets with
+        required: false
+        type: string
+        default: 'make'
+      build-tool-args:
+        description: |
+          Arguments passed to the build tool before the target
+        required: false
+        type: string
+        default: ''
+      build-target-args:
+        description: |
+          Arguments passed after the target
+        required: false
+        type: string
+        default: ''
 
 jobs:
   prod-deploy:
@@ -80,6 +98,9 @@ jobs:
       working-directory: ${{ inputs.working-directory }}
       checkout-version: ${{ inputs.version-prefix }}${{ inputs.version }}
       skip-subnamespaces-create: ${{ inputs.skip-subnamespaces-create }}
+      build-tool: ${{ inputs.build-tool }}
+      build-tool-args: ${{ inputs.build-tool-args }}
+      build-target-args: ${{ inputs.build-target-args }}
 
   notify-failure:
     needs: [prod-deploy]
