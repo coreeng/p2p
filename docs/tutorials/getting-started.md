@@ -5,7 +5,7 @@ You'll set up a CI workflow that builds, tests, and promotes your application on
 ## Prerequisites
 
 - A GitHub repository
-- A CECG Core Platform tenancy
+- A Core Platform tenancy
 - GitHub environments and variables configured (see [Environment Configuration](../explanation/environment-configuration.md) for the full list)
 - At minimum: one environment (e.g., `gcp-dev`), and repo variables `FAST_FEEDBACK` and `TENANT_NAME`
 

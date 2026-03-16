@@ -1,6 +1,6 @@
 # P2P — Reusable GitHub Actions Workflows
 
-Reusable CI/CD workflows for CECG Core Platform tenants.
+Reusable CI/CD workflows for Core Platform tenants.
 
 ## Quick Start
 
@@ -73,10 +73,10 @@ Before calling the workflows, set up the following:
 
   | Variable | Description |
   |----------|-------------|
-  | `BASE_DOMAIN` | External base domain, e.g. `gcp-dev.cecg.platform.cecg.io` |
-  | `INTERNAL_SERVICES_DOMAIN` | Internal services domain, e.g. `gcp-dev-internal.cecg.platform.cecg.io` |
+  | `BASE_DOMAIN` | External base domain, e.g. `dev.example.com` |
+  | `INTERNAL_SERVICES_DOMAIN` | Internal services domain, e.g. `dev-internal.example.com` |
   | `DPLATFORM` | Environment name from platform-environments, e.g. `gcp-dev` |
-  | `PROJECT_ID` | GCP project ID, e.g. `core-platform-efb3c84c` |
+  | `PROJECT_ID` | GCP project ID, e.g. `my-project-abc123` |
   | `PROJECT_NUMBER` | GCP project number for the project above |
   | `REGION` | GCP region, e.g. `europe-west2` |
 
