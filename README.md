@@ -1,212 +1,92 @@
-# CECG Core Platform P2P 
+# P2P — Reusable GitHub Actions Workflows
 
-This is a reusable Github Actions P2P for CECG's Core Platform
+Reusable CI/CD workflows for Core Platform tenants.
 
-## Version 1
+## Quick Start
 
-Supported quality gates:
-* fastfeedback
-
-
-Usage:
+Add this to `.github/workflows/p2p.yaml` in your repository:
 
 ```yaml
-push:
-    branches:
-      - main
+on:
+  push:
+    branches: [main]
   pull_request:
-    branches:
-      - main
+    branches: [main]
 
 permissions:
   contents: read
   id-token: write
 
 jobs:
+  # Compute the next semantic version from git tags
   version:
     uses: coreeng/p2p/.github/workflows/p2p-version.yaml@v1
     secrets:
-      git-token: ${{ secrets.GITHUB_TOKEN }} 
+      git-token: ${{ secrets.GITHUB_TOKEN }}
 
+  # Build, test, and promote to extended-test registry
   fastfeedback:
     needs: [version]
     uses: coreeng/p2p/.github/workflows/p2p-workflow-fastfeedback.yaml@v1
     with:
       version: ${{ needs.version.outputs.version }}
 ```
-## Additional Fields
 
-In addition to the above mentioned fields there are a few optional on all jobs:
+## Workflows
 
+### Primary Workflows
 
-```yaml
-fastfeedback:
-    needs: [version]
-    uses: coreeng/p2p/.github/workflows/p2p-workflow-fastfeedback.yaml@v1
-    with:
-      dry-run: false
-      working-directory: "."
-      main-branch: main
-      version-prefix: v
-    secrets:
-      container_registry_user: ${{ secrets.CONTAINER_REGISTRY_USER }}
-      container_registry_pat: ${{ secrets.CONTAINER_REGISTRY_PAT }}
-      env_vars: |
-          SECRET_USER=${{ secrets.SECRET_USER }}
-          SECRET_PASSWORD=${{ secrets.SECRET_PASSWORD }}        
-```
+| Workflow | Purpose |
+|----------|---------|
+| [p2p-version](docs/reference/p2p-version.md) | Semantic versioning from git tags |
+| [p2p-workflow-fastfeedback](docs/reference/p2p-workflow-fastfeedback.md) | Build, test (functional + NFT + integration), promote |
+| [p2p-workflow-extended-test](docs/reference/p2p-workflow-extended-test.md) | Run extended tests, promote to prod registry |
+| [p2p-workflow-prod](docs/reference/p2p-workflow-prod.md) | Deploy to production |
+| [p2p-get-latest-image-extended-test](docs/reference/p2p-get-latest-image-extended-test.md) | Resolve latest image version in extended-test registry |
+| [p2p-get-latest-image-prod](docs/reference/p2p-get-latest-image-prod.md) | Resolve latest image version in prod registry |
 
-### Artifact uploads (artifacts)
+### Internal Workflows
 
-Both the fastfeedback and extended-test workflows support an optional `artifacts` input.
+The primary workflows call these. Call them only through the primary workflows.
 
-- Type: `string`
-- Format: YAML mapping from **command name** (e.g. `p2p-build`, `p2p-functional`, `p2p-nft`, `p2p-integration`, `p2p-extended-test`) to a **list of path/glob patterns** to upload.
-- Behavior:
-  - If `artifacts` is not set or does not contain a key for the current command, no artifacts are uploaded.
-  - When configured, artifacts from matching paths are uploaded per job after `make <command>` completes.
-  - Paths are interpreted **relative to the `working-directory` input** of the reusable workflow (default `.` / repo root). For example, if you set `working-directory: ./service`, then an artifact path `path/to/reports/**` refers to `service/path/to/report/**` in the repository.
+| Workflow | Purpose |
+|----------|---------|
+| [p2p-execute-command](docs/reference/p2p-execute-command.md) | Leaf executor — runs a build tool target in a configured environment |
+| [p2p-promote-image](docs/reference/p2p-promote-image.md) | Authenticates to source/dest registries and runs the promotion make target |
+| [p2p-get-latest-image](docs/reference/p2p-get-latest-image.md) | Base workflow for querying latest image version from artifact registry |
 
-Example opting in for fastfeedback:
+## Prerequisites
 
-```yaml
-fastfeedback:
-  needs: [version]
-  uses: coreeng/p2p/.github/workflows/p2p-workflow-fastfeedback.yaml@v1
-  with:
-    version: ${{ needs.version.outputs.version }}
-    artifacts: |
-      p2p-build:
-        - reports/build/**
-      p2p-functional:
-        - reports/functional/**
-        - reports/shared/**
-      p2p-nft:
-        - reports/nft/**
-      p2p-integration:
-        - reports/integration/**
-```
+Before calling the workflows, set up the following:
 
-Example opting in for extended-test:
+- **GitHub environments** — at least one for fast-feedback (e.g., `gcp-dev`). See [Environment Configuration](docs/explanation/environment-configuration.md) for details.
+- **Repository variables:**
 
-```yaml
-extended-test:
-  needs: [fastfeedback]
-  uses: coreeng/p2p/.github/workflows/p2p-workflow-extended-test.yaml@v1
-  with:
-    version: ${{ needs.version.outputs.version }}
-    artifacts: |
-      p2p-extended-test:
-        - reports/extended/**
-```
-### secrets.env_vars
+  | Variable | Format | Example |
+  |----------|--------|---------|
+  | `FAST_FEEDBACK` | JSON matrix | `{"include": [{"deploy_env": "gcp-dev"}]}` |
+  | `EXTENDED_TEST` | JSON matrix | `{"include": [{"deploy_env": "gcp-dev"}]}` |
+  | `PROD` | JSON matrix | `{"include": [{"deploy_env": "gcp-prod"}]}` |
+  | `TENANT_NAME` | string | `my-tenant` |
 
-This is a way you can pass secrets to be exposed as environment variables for your makefile to use. This will also ensure
-your secrets stay secret and hidden from any inputs on the CI jobs.
+- **Per-environment variables** (set on each GitHub environment):
 
-### secrets.container_registry_user && container_registry_pat
+  | Variable | Description |
+  |----------|-------------|
+  | `BASE_DOMAIN` | External base domain, e.g. `dev.example.com` |
+  | `INTERNAL_SERVICES_DOMAIN` | Internal services domain, e.g. `dev-internal.example.com` |
+  | `DPLATFORM` | Environment name from platform-environments, e.g. `gcp-dev` |
+  | `PROJECT_ID` | Core Platform GCP project ID, e.g. `core-platform-dev-1a2b3c` |
+  | `PROJECT_NUMBER` | GCP project number for the project above |
+  | `REGION` | GCP region, e.g. `europe-west2` |
 
-These will be used to authenticate to tenant provided registry with tenant's own account. Check the documentation on how to generate these for dockerhub.
+See [Environment Configuration](docs/explanation/environment-configuration.md) for details.
 
-### secrets.container_registry_url
+## Documentation
 
-Tenant provided registry url. If unspecified, the default of dockerhub will be used
-
-### secrets.slack_webhook_url
-
-Optional Slack Incoming Webhook URL used for failure alerts.
-
-- If set, P2P reusable workflows will send Slack alerts when they fail on the default branch.
-- Additionally, the prod reusable workflow will send a Slack alert when prod succeeds (skips `dry-run`).
-- Recommended: store it as a repo secret named `P2P_SLACK_WEBHOOK_URL`, and pass it through to the reusable workflows as `slack_webhook_url`.
-
-### dry_run
-
-Typically used for syntax testing. Will run most jobs without actually connecting to them or calling the makefile tasks.
-Defaults to false
-
-### working-directory
-
-Used to specify where your makefile is. Defaults tot he root of the project.
-
-### main-branch
-
-The default main branch. This is used to on p2p fast feedback to trigger promotion to extended-test, as other branches won't be promoted.
-
-### version-prefix
-By default, version will be created and used assuming `v` prefix, such as `v0.25.0`. You can override this to the desired value, for example, if you have multiple projects on the same repo, since tags will be created based on this prefix.
- 
-### Application Versioning
-
-The `p2p-version` workflow has the following behaviour:
-
-* When on the main branch:
-  * If no versions exist, it starts with v0.0.0
-  * If the version exists, it tags the next patch version
-  * Always sets the output version
-* When not on the main build
-  * Never tags
-  * Uses the previous tagged version, defaulting to v0.0.0, and adds the git short hash to the end
-
-### GitHub Variables
-
-#### Environments
-
-Create your environments with the following variables:
-* BASE_DOMAIN e.g. gcp-dev.cecg.platform.cecg.io
-* INTERNAL_SERVICES_DOMAIN e.g. gcp-dev-internal.cecg.platform.cecg.io
-* DPLATFORM environment name from platform-environments e.g. gcp-dev
-* PROJECT_ID project id from platform environments e.g. core-platform-efb3c84c
-* PROJECT_NUMBER project number for the project id above
-
-Usually you need at least two environments e.g.
-
-* `gcp-dev`
-* `gcp-prod`
-
-
-For an instance of the CECG Core Platform on GCP.
-
-A single dev environment is enough for fastfeedback.
-
-Set the following repository variables (these may be set globally for your org):
-
-* `FAST_FEEDBACK` to {"include": [{"deploy_env": "gcp-dev"}]}
-* `EXTENDED_TEST` to {"include": [{"deploy_env": "gcp-dev"}]}
-* `PROD` to {"include": [{"deploy_env": "gcp-prod"}]}
-And specifically for your app set:
-
-* `TENANT_NAME` as configured in your tenancy in platform environments
-
-### Make tasks
-
-Available env vars for all envs:
-
-* `REGISTRY` that you're authenticated to
-* `INTERNAL_SERVICES_DOMAIN` to access internal services like Grafana
-
-Every task will have kubectl access as your tenant
-
-#### p2p-build
-#### p2p-functional
-#### p2p-integration 
-#### p2p-nft
-#### p2p-promote-to-extended-test
-
-If you want to execute task after the `extended-test` or `prod` promotion, you can, by setting a dependency on your promotion task, for example:
-```
-.PHONY: p2p-promote-to-extended-test
-p2p-promote-to-extended-test: promote-image-to-extended-tests deploy-to-dev
-...
-
-### Inputs
-
-#### Inputs: Miscellaneous
--   `working-directory`: (Optional) Relative directory where workflow will run. For example:
-
-    ```text
-    working-directory: ./dir_1/subdir_2
-    ```
-
-    Without this input, the workflow will run on the root directory of your repository. 
-     > **⚠️ NOTE!** Changing the working-directory, instructs the workflow to search for a Makefile in that directory. All subsequent commands within the `Makefile` will subsequently need to be relative to the specified `working-directory`.
+| Category | What's inside |
+|----------|---------------|
+| [Tutorials](docs/tutorials/) | Step-by-step guides to get running |
+| [How-to Guides](docs/how-to/) | Solve specific problems: secrets, artifacts, Slack alerts, environments, versioning |
+| [Reference](docs/reference/) | Complete inputs/outputs/secrets for every workflow |
+| [Explanation](docs/explanation/) | Concepts: pipeline model, versioning, environments, make targets |
