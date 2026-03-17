@@ -13,13 +13,6 @@ jest.mock('@actions/core', () => ({
 function makeInputs(overrides: Partial<ActionInputs> = {}): ActionInputs {
   return {
     environment: 'gcp-dev',
-    configMode: 'repo-file',
-    repoFilePath: '.p2p.yaml',
-    centralRepoName: '',
-    centralRepoOwner: '',
-    centralRepoToken: '',
-    centralRepoPathPattern: 'environments/{env}/config.yaml',
-    fields: 'full',
     appName: '',
     version: '',
     ...overrides,

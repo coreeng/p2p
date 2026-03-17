@@ -2,7 +2,7 @@
   "name": "resolve-platform-config",
   "version": "1.0.0",
   "private": true,
-  "description": "Resolves platform config from GitHub Environments, repo file, or central repo",
+  "description": "Resolves platform configuration and exports derived auth and P2P convenience variables",
   "main": "dist/index.js",
   "scripts": {
     "build": "ncc build src/index.ts -o dist --source-map --license licenses.txt",
@@ -11,13 +11,10 @@
     "all": "npm run lint && npm run test && npm run build"
   },
   "dependencies": {
-    "@actions/core": "^1.11.1",
-    "@actions/github": "^6.0.0",
-    "js-yaml": "^4.1.0"
+    "@actions/core": "^1.11.1"
   },
   "devDependencies": {
     "@types/jest": "^29.5.0",
-    "@types/js-yaml": "^4.0.9",
     "@types/node": "^24.0.0",
     "@vercel/ncc": "^0.38.3",
     "eslint": "^9.0.0",

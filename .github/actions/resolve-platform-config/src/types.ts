@@ -7,32 +7,6 @@ export class ConfigError extends Error {
 
 export interface ActionInputs {
   environment: string;
-  configMode: '' | 'github-env' | 'repo-file' | 'central-repo';
-  repoFilePath: string;
-  centralRepoName: string;
-  centralRepoOwner: string;
-  centralRepoToken: string;
-  centralRepoPathPattern: string;
-  fields: 'core' | 'full';
   appName: string;
   version: string;
-}
-
-export interface EnvironmentConfig {
-  platform: {
-    projectId: string;
-    projectNumber: string;
-    region: string;
-  };
-  ingressDomains?: Array<{ domain: string }>;
-  internalServices?: { domain: string };
-}
-
-export interface ConfigFile {
-  environments: Record<string, EnvironmentConfig>;
-}
-
-export interface FieldMapping {
-  envVar: string;
-  path: string;
 }

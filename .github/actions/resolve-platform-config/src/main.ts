@@ -1,24 +1,51 @@
 import * as core from '@actions/core';
-import { ActionInputs, EnvironmentConfig } from './types';
+import { ActionInputs } from './types';
 import { validateInputs } from './validate';
-import { resolveRepoFile } from './resolve-repo-file';
-import { resolveCentralRepo } from './resolve-central-repo';
-import { extractAndExportFields } from './extract-fields';
 import { exportP2PConvenienceVars } from './p2p-vars';
 
 function getInputs(): ActionInputs {
   return {
     environment: core.getInput('environment'),
-    configMode: core.getInput('config-mode') as ActionInputs['configMode'],
-    repoFilePath: core.getInput('repo-file-path'),
-    centralRepoName: core.getInput('central-repo-name'),
-    centralRepoOwner: core.getInput('central-repo-owner'),
-    centralRepoToken: core.getInput('central-repo-token'),
-    centralRepoPathPattern: core.getInput('central-repo-path-pattern'),
-    fields: core.getInput('fields') as ActionInputs['fields'],
     appName: core.getInput('app-name'),
     version: core.getInput('version'),
   };
+}
+
+function exportDerivedVars(environment: string): void {
+  const tenantName = process.env.TENANT_NAME;
+  if (!tenantName) {
+    core.warning(
+      'TENANT_NAME is not set in the job environment — derived vars (REGISTRY, SERVICE_ACCOUNT, WORKLOAD_IDENTITY_PROVIDER) will be incorrect'
+    );
+  }
+
+  const region = process.env.REGION;
+  const projectId = process.env.PROJECT_ID;
+  const projectNumber = process.env.PROJECT_NUMBER;
+
+  if (region && projectId && tenantName) {
+    core.exportVariable(
+      'REGISTRY',
+      `${region}-docker.pkg.dev/${projectId}/tenant/${tenantName}`
+    );
+  }
+
+  if (tenantName && projectId) {
+    core.exportVariable(
+      'SERVICE_ACCOUNT',
+      `p2p-${tenantName}@${projectId}.iam.gserviceaccount.com`
+    );
+  }
+
+  if (projectNumber && tenantName) {
+    core.exportVariable(
+      'WORKLOAD_IDENTITY_PROVIDER',
+      `projects/${projectNumber}/locations/global/workloadIdentityPools/p2p-${tenantName}/providers/p2p-${tenantName}`
+    );
+  }
+
+  core.exportVariable('DPLATFORM', environment);
+  core.exportVariable('PLATFORM_ENVIRONMENT', environment);
 }
 
 export async function run(): Promise<void> {
@@ -26,20 +53,7 @@ export async function run(): Promise<void> {
     const inputs = getInputs();
     validateInputs(inputs);
 
-    if (inputs.configMode === '' || inputs.configMode === 'github-env') {
-      core.notice(`Config mode: ${inputs.configMode || '(default: github-env implicit)'}`);
-      core.setOutput('resolved', 'false');
-    } else {
-      let config: EnvironmentConfig;
-      if (inputs.configMode === 'repo-file') {
-        config = resolveRepoFile(inputs.repoFilePath, inputs.environment);
-      } else {
-        config = await resolveCentralRepo(inputs);
-      }
-      extractAndExportFields(config, inputs);
-      core.setOutput('resolved', 'true');
-    }
-
+    exportDerivedVars(inputs.environment);
     exportP2PConvenienceVars(inputs);
   } catch (error) {
     if (error instanceof Error) {
