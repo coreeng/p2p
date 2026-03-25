@@ -203,7 +203,7 @@ jobs:
     steps:
       - id: slack-alert
         name: Slack alert
-        uses: slackapi/slack-github-action@v2
+        uses: slackapi/slack-github-action@v3
         if: env.SLACK_WEBHOOK_URL != ''
         with:
           webhook: ${{ env.SLACK_WEBHOOK_URL }}
