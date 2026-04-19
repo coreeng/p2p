@@ -29,13 +29,13 @@ on:
         required: false
         type: string
         default: europe-west2
+      github_env:
+        required: true
+        type: string
       working-directory:
         required: false
         type: string
         default: '.'
-      environment:
-        required: true
-        type: string
 
 jobs:
   get-latest-image:
@@ -43,7 +43,7 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       version: ${{ steps.get-latest-image.outputs.version }}
-    environment: ${{ fromJson(inputs.environment).include[0]['deploy_env'] }}
+    environment: ${{ inputs.github_env }}
     env:
       BASE_DOMAIN: ${{ vars.BASE_DOMAIN }}
       INTERNAL_SERVICES_DOMAIN: ${{ vars.INTERNAL_SERVICES_DOMAIN }}
@@ -53,7 +53,7 @@ jobs:
       REGION: ${{ vars.REGION || inputs.region }}
       REGISTRY: ${{ vars.REGION || inputs.region }}-docker.pkg.dev/${{ vars.PROJECT_ID }}/tenant/${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}
       SERVICE_ACCOUNT: p2p-${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}@${{ vars.PROJECT_ID }}.iam.gserviceaccount.com
-      ENV_NAME: ${{ fromJson(inputs.environment).include[0]['deploy_env'] }}
+      ENV_NAME: ${{ inputs.github_env }}
       TENANT_NAME: ${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}
       WORKLOAD_IDENTITY_PROVIDER: projects/${{ vars.PROJECT_NUMBER }}/locations/global/workloadIdentityPools/p2p-${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}/providers/p2p-${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}
       REGISTRY_PATH: ${{ inputs.registry-path }}
