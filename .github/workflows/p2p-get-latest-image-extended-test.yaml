@@ -52,7 +52,7 @@ jobs:
       matrix: ${{ fromJSON(inputs.environment) }}
       fail-fast: false
     with:
-      environment: ${{ inputs.environment }}
+      github_env: ${{ matrix.deploy_env }}
       registry-path: ${{ inputs.registry-path }}
       tenant-name: ${{ inputs.tenant-name }}
       image-name: ${{ inputs.image-name }}
