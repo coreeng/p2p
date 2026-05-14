@@ -54,10 +54,38 @@ on:
         required: false
         type: boolean
         default: false
+      security-scan-fail-on-findings:
+        description: |
+          If true, the image-scan job fails the workflow when blocking findings are detected
+        required: false
+        type: boolean
+        default: false
 
 jobs:
+  image-scan:
+    if: success() && github.ref == inputs.main-branch
+    uses: ./.github/workflows/p2p-workflow-image-scan.yaml
+    secrets:
+      env_vars: ${{ secrets.env_vars }}
+      container_registry_user: ${{ secrets.container_registry_user }}
+      container_registry_pat: ${{ secrets.container_registry_pat }}
+      container_registry_url: ${{ secrets.container_registry_url }}
+    strategy:
+      matrix: ${{ fromJSON(inputs.source) }}
+      fail-fast: false
+    with:
+      pipeline-stage: prod
+      github_env: ${{ matrix.deploy_env }}
+      tenant-name: ${{ inputs.tenant-name }}
+      version: ${{ inputs.version }}
+      region: ${{ inputs.region }}
+      working-directory: ${{ inputs.working-directory }}
+      dry-run: ${{ inputs.dry-run }}
+      fail-on-findings: ${{ inputs.security-scan-fail-on-findings }}
+
   prod-deploy:
     name: prod-deploy
+    needs: [image-scan]
     if: success() && github.ref == inputs.main-branch
     uses: ./.github/workflows/p2p-execute-command.yaml
     secrets:
@@ -82,7 +110,7 @@ jobs:
       skip-subnamespaces-create: ${{ inputs.skip-subnamespaces-create }}
 
   notify-failure:
-    needs: [prod-deploy]
+    needs: [image-scan, prod-deploy]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     if: always() && github.ref == inputs.main-branch && contains(needs.*.result, 'failure')

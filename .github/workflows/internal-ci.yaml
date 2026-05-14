@@ -58,6 +58,39 @@ jobs:
       dry-run: true
       version: ${{ needs.test_version.outputs.version }}
 
+  test_image_scan:
+    needs: [test_version]
+    uses: ./.github/workflows/p2p-workflow-image-scan.yaml
+    secrets:
+      env_vars: |
+        TEST_VARIABLE=value
+    with:
+      dry-run: true
+      pipeline-stage: fast-feedback
+      version: ${{ needs.test_version.outputs.version }}
+
+  test_image_scan_extended_test:
+    needs: [test_version]
+    uses: ./.github/workflows/p2p-workflow-image-scan.yaml
+    secrets:
+      env_vars: |
+        TEST_VARIABLE=value
+    with:
+      dry-run: true
+      pipeline-stage: extended-test
+      version: ${{ needs.test_version.outputs.version }}
+
+  test_image_scan_prod:
+    needs: [test_version]
+    uses: ./.github/workflows/p2p-workflow-image-scan.yaml
+    secrets:
+      env_vars: |
+        TEST_VARIABLE=value
+    with:
+      dry-run: true
+      pipeline-stage: prod
+      version: ${{ needs.test_version.outputs.version }}
+
   get_image_extended_test:
     uses: ./.github/workflows/p2p-get-latest-image-extended-test.yaml
     secrets:

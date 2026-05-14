@@ -13,6 +13,10 @@ p2p-build: ## Build phase
 	echo $(REGISTRY)
 	echo $(VERSION)
 
+.PHONY: p2p-images
+p2p-images: ## Print image names (used by image-scan workflow)
+	@echo "p2p"
+
 .PHONY: p2p-functional
 p2p-functional: ## Execute functional tests
 	echo "##### EXECUTING P2P-FUNCTIONAL #####"

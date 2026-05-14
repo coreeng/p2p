@@ -1,0 +1,470 @@
+on:
+  workflow_call:
+    secrets:
+      env_vars:
+        required: false
+      container_registry_user:
+        required: false
+      container_registry_pat:
+        required: false
+      container_registry_url:
+        required: false
+    inputs:
+      github_env:
+        required: false
+        type: string
+        default: ''
+      pipeline-stage:
+        description: 'fast-feedback | extended-test | prod'
+        required: true
+        type: string
+      version:
+        required: true
+        type: string
+      tenant-name:
+        required: false
+        type: string
+        default: ''
+      region:
+        required: false
+        type: string
+        default: europe-west2
+      working-directory:
+        required: false
+        type: string
+        default: '.'
+      dry-run:
+        required: false
+        type: boolean
+        default: false
+      fail-on-findings:
+        required: false
+        type: boolean
+        default: false
+      severity:
+        required: false
+        type: string
+        default: 'CRITICAL,HIGH'
+      blocking-severity:
+        required: false
+        type: string
+        default: 'CRITICAL'
+      ignore-unfixed:
+        required: false
+        type: boolean
+        default: true
+      timeout-minutes:
+        required: false
+        type: number
+        default: 20
+
+jobs:
+  image-scan:
+    name: 'image-scan (${{ inputs.github_env }})'
+    runs-on: ubuntu-24.04
+    environment: ${{ inputs.github_env }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    env:
+      PROJECT_ID: ${{ vars.PROJECT_ID }}
+      PROJECT_NUMBER: ${{ vars.PROJECT_NUMBER }}
+      REGION: ${{ vars.REGION || inputs.region }}
+      VERSION: ${{ inputs.version }}
+      SERVICE_ACCOUNT: p2p-${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}@${{ vars.PROJECT_ID }}.iam.gserviceaccount.com
+      TENANT_NAME: ${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}
+      WORKLOAD_IDENTITY_PROVIDER: projects/${{ vars.PROJECT_NUMBER }}/locations/global/workloadIdentityPools/p2p-${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}/providers/p2p-${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Authenticate to Google Cloud
+        id: auth
+        if: ${{ inputs.dry-run == false }}
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ env.SERVICE_ACCOUNT }}
+          project_id: ${{ env.PROJECT_ID }}
+          token_format: access_token
+          access_token_lifetime: 3600s
+
+      - name: Login to Artifact Registry
+        if: ${{ inputs.dry-run == false }}
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGION }}-docker.pkg.dev
+          username: oauth2accesstoken
+          password: ${{ steps.auth.outputs.access_token }}
+
+      - name: Login to tenant provided registry
+        env:
+          REGISTRY_USER: ${{ secrets.container_registry_user }}
+          REGISTRY_PAT: ${{ secrets.container_registry_pat }}
+          REGISTRY_URL: ${{ secrets.container_registry_url }}
+        if: ${{ inputs.dry-run == false && env.REGISTRY_USER && env.REGISTRY_PAT }}
+        run: |
+          echo "${REGISTRY_PAT}" | docker login "${REGISTRY_URL}" -u "${REGISTRY_USER}" --password-stdin
+
+      - id: resolve-images
+        name: Resolve image references
+        uses: actions/github-script@v7
+        env:
+          PIPELINE_STAGE: ${{ inputs.pipeline-stage }}
+          WORKING_DIR: ${{ inputs.working-directory }}
+        with:
+          script: |
+            const { execFileSync } = require('child_process');
+            const stage = process.env.PIPELINE_STAGE;
+            if (!['fast-feedback', 'extended-test', 'prod'].includes(stage)) {
+              core.setFailed(`Unknown pipeline-stage '${stage}'. Expected: fast-feedback|extended-test|prod.`);
+              return;
+            }
+            const registry = `${process.env.REGION}-docker.pkg.dev/${process.env.PROJECT_ID}/tenant/${process.env.TENANT_NAME}/${stage}`;
+            const images = execFileSync('make', ['--no-print-directory', 'p2p-images'], {
+              encoding: 'utf8',
+              cwd: process.env.WORKING_DIR,
+            }).trim().split(/\s+/).filter(Boolean);
+            if (images.length === 0) {
+              core.setFailed('make p2p-images returned no images; nothing to scan.');
+              return;
+            }
+            const refs = images.map(img => `${registry}/${img}:${process.env.VERSION}`);
+            core.setOutput('image-refs', refs.join('\n'));
+            core.info('Resolved image references:');
+            refs.forEach(r => core.info(`  - ${r}`));
+
+      - name: Install Trivy
+        if: ${{ inputs.dry-run == false }}
+        uses: aquasecurity/setup-trivy@v0.2.6
+        with:
+          version: v0.70.0
+          cache: true
+
+      - id: scan
+        name: Scan images
+        if: ${{ inputs.dry-run == false }}
+        uses: actions/github-script@v7
+        env:
+          IMAGE_REFS: ${{ steps.resolve-images.outputs.image-refs }}
+          SEVERITY: ${{ inputs.severity }}
+          IGNORE_UNFIXED: ${{ inputs.ignore-unfixed }}
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const { execFileSync } = require('child_process');
+
+            const refs = process.env.IMAGE_REFS.split('\n').filter(Boolean);
+            const reportsDir = path.join(process.env.RUNNER_TEMP, 'trivy');
+            const reportList = path.join(reportsDir, 'reports.txt');
+            fs.mkdirSync(reportsDir, { recursive: true });
+            fs.writeFileSync(reportList, '');
+            core.setOutput('reports-dir', reportsDir);
+            core.setOutput('report-list', reportList);
+
+            const sanitize = s => s.replace(/[\/:@]/g, '_');
+            const ignoreUnfixed = process.env.IGNORE_UNFIXED === 'true';
+
+            for (const ref of refs) {
+              const raw = execFileSync('docker', ['buildx', 'imagetools', 'inspect', '--raw', ref], { encoding: 'utf8' });
+              const manifest = JSON.parse(raw);
+              const platforms = manifest.manifests
+                ? manifest.manifests
+                    .filter(m => m.platform.os !== 'unknown' || m.platform.architecture !== 'unknown')
+                    .map(m => `${m.platform.os}/${m.platform.architecture}` +
+                              (m.platform.variant ? `/${m.platform.variant}` : ''))
+                : [null];
+              if (platforms.length === 0) {
+                core.setFailed(`Could not enumerate platforms for ${ref}.`);
+                return;
+              }
+              for (const plat of platforms) {
+                const out = path.join(reportsDir, `${sanitize(ref)}-${plat ? sanitize(plat) : 'single'}.json`);
+                const args = ['image'];
+                if (plat) args.push('--platform', plat);
+                args.push(
+                  '--format', 'json',
+                  '--severity', process.env.SEVERITY,
+                  ...(ignoreUnfixed ? ['--ignore-unfixed'] : []),
+                  '--scanners', 'vuln',
+                  '--exit-code', '0',
+                  '--output', out,
+                  ref,
+                );
+                core.info(`Scanning ${ref} (${plat ?? 'single-arch'})`);
+                execFileSync('trivy', args, { stdio: 'inherit' });
+                fs.appendFileSync(reportList, `${ref}\t${plat ?? '__SINGLE__'}\t${out}\n`);
+              }
+            }
+
+      - id: report
+        name: Build report
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          REPORT_LIST: ${{ steps.scan.outputs.report-list }}
+          BLOCKING_SEVERITY: ${{ inputs.blocking-severity }}
+          GITHUB_ENV_INPUT: ${{ inputs.github_env }}
+          VERSION: ${{ inputs.version }}
+          SEVERITY: ${{ inputs.severity }}
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const CANONICAL_SEVERITIES = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNKNOWN'];
+            const SEV_RANK = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3, UNKNOWN: 4 };
+            const SEV_EMOJI = { CRITICAL: '🔴', HIGH: '🟠', MEDIUM: '🟡', LOW: '🔵', UNKNOWN: '⚪' };
+            const blockingSet = new Set((process.env.BLOCKING_SEVERITY || '').split(',').map(s => s.trim()).filter(Boolean));
+            const requestedSet = new Set((process.env.SEVERITY || '').split(',').map(s => s.trim()).filter(Boolean));
+            const requestedSeverities = CANONICAL_SEVERITIES.filter(sev => requestedSet.has(sev));
+            const list = process.env.REPORT_LIST;
+            const listExists = !!(list && fs.existsSync(list) && fs.statSync(list).size > 0);
+            const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+
+            const escapeCell = (value) => {
+              const text = value === undefined || value === null || value === '' ? '-' : String(value);
+              return text.replace(/\|/g, '\\|');
+            };
+
+            const shortNameFromRef = (ref) => String(ref || '').split('/').pop().split(':')[0].split('@')[0];
+
+            const sourceFromTarget = (target) => {
+              const text = String(target || '');
+              const match = text.match(/^.+\((.+)\)$/);
+              return match ? match[1] : text;
+            };
+
+            const rowSort = (a, b) => (
+              (SEV_RANK[a.severity] ?? SEV_RANK.UNKNOWN) - (SEV_RANK[b.severity] ?? SEV_RANK.UNKNOWN)
+              || a.package.localeCompare(b.package)
+              || a.cve.localeCompare(b.cve)
+            );
+
+            let total = 0;
+            let blocking = 0;
+            const imageGroups = {};
+
+            if (listExists) {
+              const entries = fs.readFileSync(list, 'utf8').split('\n').filter(Boolean);
+              for (const line of entries) {
+                const [ref, plat, out] = line.split('\t');
+                if (!out || !fs.existsSync(out) || fs.statSync(out).size === 0) continue;
+                try {
+                  const shortName = shortNameFromRef(ref);
+                  if (!imageGroups[shortName]) {
+                    imageGroups[shortName] = {
+                      shortName,
+                      fullRef: ref,
+                      platforms: new Set(),
+                      rawRows: [],
+                    };
+                  }
+                  const group = imageGroups[shortName];
+                  if (!group.fullRef) group.fullRef = ref;
+                  if (plat && plat !== '__SINGLE__') group.platforms.add(plat);
+
+                  const report = JSON.parse(fs.readFileSync(out, 'utf8'));
+                  const results = Array.isArray(report.Results) ? report.Results : [];
+                  for (const res of results) {
+                    const source = sourceFromTarget(res?.Target) || '-';
+                    const vulns = Array.isArray(res?.Vulnerabilities) ? res.Vulnerabilities : [];
+                    for (const v of vulns) {
+                      const severity = CANONICAL_SEVERITIES.includes(v.Severity) ? v.Severity : 'UNKNOWN';
+                      const cve = v.VulnerabilityID || 'UNKNOWN';
+                      total += 1;
+                      if (blockingSet.has(severity)) blocking += 1;
+                      group.rawRows.push({
+                        severity,
+                        pkgName: v.PkgName || '-',
+                        installed: v.InstalledVersion || '-',
+                        fixed: v.FixedVersion || '-',
+                        cve,
+                        cveUrl: v.PrimaryURL || `https://avd.aquasec.com/nvd/${cve}`,
+                        source,
+                      });
+                    }
+                  }
+                } catch (error) {
+                  core.warning(`Failed to process Trivy report for ${ref} (${plat === '__SINGLE__' ? 'single-arch' : plat}): ${error.message}`);
+                }
+              }
+            }
+
+            const imageSummaries = Object.values(imageGroups)
+              .map(group => {
+                const dedup = new Map();
+                for (const rawRow of group.rawRows) {
+                  const key = [rawRow.severity, rawRow.installed, rawRow.fixed, rawRow.cve, rawRow.source].join('\u0000');
+                  if (!dedup.has(key)) {
+                    dedup.set(key, {
+                      severity: rawRow.severity,
+                      installed: rawRow.installed,
+                      fixed: rawRow.fixed,
+                      cve: rawRow.cve,
+                      cveUrl: rawRow.cveUrl,
+                      source: rawRow.source,
+                      packages: [],
+                      packageSet: new Set(),
+                      isBlocking: blockingSet.has(rawRow.severity),
+                      shortName: group.shortName,
+                    });
+                  }
+                  const row = dedup.get(key);
+                  if (!row.packageSet.has(rawRow.pkgName)) {
+                    row.packageSet.add(rawRow.pkgName);
+                    row.packages.push(rawRow.pkgName);
+                  }
+                }
+
+                const rows = Array.from(dedup.values())
+                  .map(row => ({
+                    severity: row.severity,
+                    package: row.packages.join(', '),
+                    installed: row.installed,
+                    fixed: row.fixed,
+                    cve: row.cve,
+                    cveUrl: row.cveUrl,
+                    source: row.source,
+                    isBlocking: row.isBlocking,
+                    shortName: row.shortName,
+                  }))
+                  .sort(rowSort);
+
+                const countsBySeverity = Object.fromEntries(CANONICAL_SEVERITIES.map(sev => [sev, 0]));
+                for (const row of rows) countsBySeverity[row.severity] += 1;
+
+                return {
+                  shortName: group.shortName,
+                  fullRef: group.fullRef,
+                  platforms: Array.from(group.platforms).sort((a, b) => a.localeCompare(b)),
+                  rows,
+                  countsBySeverity,
+                  blockingUnique: rows.filter(row => row.isBlocking).length,
+                  totalUnique: rows.length,
+                };
+              })
+              .filter(group => group.totalUnique > 0)
+              .sort((a, b) => (
+                b.blockingUnique - a.blockingUnique
+                || b.totalUnique - a.totalUnique
+                || a.shortName.localeCompare(b.shortName)
+              ));
+
+            const allUniqueRows = imageSummaries.flatMap(group => group.rows.map(row => ({ ...row, shortName: group.shortName })));
+            const totalUniqueRows = allUniqueRows.length;
+            const selectedRows = [
+              ...allUniqueRows.filter(row => row.isBlocking),
+              ...allUniqueRows.filter(row => !row.isBlocking),
+            ].slice(0, 100);
+            const selectedRowsByImage = new Map();
+            for (const row of selectedRows) {
+              const rows = selectedRowsByImage.get(row.shortName) || [];
+              rows.push(row);
+              selectedRowsByImage.set(row.shortName, rows);
+            }
+            for (const rows of selectedRowsByImage.values()) rows.sort(rowSort);
+
+            const envSuffix = process.env.GITHUB_ENV_INPUT ? ` (${process.env.GITHUB_ENV_INPUT})` : '';
+            const out = [`## Trivy image scan${envSuffix}`];
+
+            if (!listExists) {
+              out.push('', '_Scan skipped (dry-run or upstream failure)._');
+            } else {
+              out.push(
+                '',
+                `**Version:** \`${process.env.VERSION}\` · **Findings:** ${total} total · **Blocking:** ${blocking}`,
+                `**Severities reported:** \`${process.env.SEVERITY}\` · **Blocking severities:** \`${process.env.BLOCKING_SEVERITY}\``,
+                '',
+                `[📦 Download full Trivy reports](${runUrl})`,
+                '',
+              );
+
+              if (total === 0) {
+                out.push('_No vulnerabilities found at requested severities._');
+              } else {
+                if (imageSummaries.length > 0) {
+                  const summaryHeader = [
+                    'Image',
+                    ...requestedSeverities.map(sev => `${SEV_EMOJI[sev]} ${sev}`),
+                    'Total',
+                  ];
+                  out.push(
+                    `| ${summaryHeader.join(' | ')} |`,
+                    `| ${summaryHeader.map(() => '---').join(' | ')} |`,
+                    ...imageSummaries.map(group => {
+                      const counts = requestedSeverities.map(sev => String(group.countsBySeverity[sev] || 0));
+                      return `| \`${escapeCell(group.shortName)}\` | ${[...counts, String(group.totalUnique)].join(' | ')} |`;
+                    }),
+                    '',
+                  );
+                }
+
+                for (const group of imageSummaries) {
+                  const rows = selectedRowsByImage.get(group.shortName) || [];
+                  if (rows.length === 0) continue;
+
+                  const sevSummary = (requestedSeverities.length > 0 ? requestedSeverities : CANONICAL_SEVERITIES)
+                    .map(sev => `${SEV_EMOJI[sev]} ${group.countsBySeverity[sev] || 0}`)
+                    .join(' · ');
+                  const platformSuffix = group.platforms.length > 0 ? ` (${group.platforms.join(', ')})` : '';
+
+                  out.push(
+                    `<details><summary>${sevSummary} — <code>${group.shortName}</code>${platformSuffix}</summary>`,
+                    '',
+                    '| Severity | Package | Installed | Fixed | CVE | Source |',
+                    '|---|---|---|---|---|---|',
+                    ...rows.map(row => `| ${SEV_EMOJI[row.severity]} ${row.severity} | ${escapeCell(row.package)} | ${escapeCell(row.installed)} | ${escapeCell(row.fixed)} | [${row.cve}](${row.cveUrl}) | ${escapeCell(row.source)} |`),
+                    '',
+                    `Full ref: \`${group.fullRef}\``,
+                    '',
+                    '</details>',
+                    '',
+                  );
+                }
+
+                if (totalUniqueRows > 100) {
+                  out.push(`_Showing 100 of ${totalUniqueRows} findings — see the [full Trivy reports](${runUrl}) for the rest._`);
+                }
+              }
+            }
+
+            const md = out.join('\n').trimEnd() + '\n';
+            const reportPath = path.join(process.env.RUNNER_TEMP, 'trivy-report.md');
+            fs.writeFileSync(reportPath, md);
+            core.setOutput('report-path', reportPath);
+            core.setOutput('comment-path', reportPath);
+            core.setOutput('total-count', total);
+            core.setOutput('blocking-count', blocking);
+            await core.summary.addRaw(md).write();
+
+      - name: Post sticky PR comment
+        if: ${{ always() && github.event_name == 'pull_request' }}
+        continue-on-error: true
+        uses: marocchino/sticky-pull-request-comment@v3
+        with:
+          header: trivy-image-findings
+          path: ${{ steps.report.outputs.comment-path }}
+          recreate: true
+
+      - name: Upload Trivy JSON reports
+        if: ${{ always() && inputs.dry-run == false }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-reports-${{ inputs.github_env || 'local' }}
+          path: ${{ steps.scan.outputs.reports-dir }}
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Enforce policy
+        if: ${{ always() && inputs.dry-run == false }}
+        shell: bash
+        env:
+          BLOCKING: ${{ steps.report.outputs.blocking-count }}
+          TOTAL: ${{ steps.report.outputs.total-count }}
+          FAIL: ${{ inputs.fail-on-findings }}
+        run: |
+          set -euo pipefail
+          echo "Trivy: total=${TOTAL:-0}, blocking=${BLOCKING:-0}, fail-on-findings=${FAIL}"
+          if [ "${FAIL}" = "true" ] && [ "${BLOCKING:-0}" -gt 0 ]; then
+            echo "::error::${BLOCKING} blocking finding(s) detected; failing per fail-on-findings=true."
+            exit 1
+          fi
