@@ -437,7 +437,7 @@ jobs:
             await core.summary.addRaw(md).write();
 
       - name: Post sticky PR comment
-        if: ${{ always() && github.event_name == 'pull_request' }}
+        if: ${{ always() && github.event_name == 'pull_request' && inputs.dry-run == false }}
         continue-on-error: true
         uses: marocchino/sticky-pull-request-comment@v3
         with:
