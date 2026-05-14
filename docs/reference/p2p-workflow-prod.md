@@ -32,6 +32,7 @@ jobs:
 | `app-name` | `string` | No | `''` | Application name. Must equal the tenant name (each application has its own application tenant). |
 | `tenant-name` | `string` | No | `''` | Tenant name passed to the make target. |
 | `skip-subnamespaces-create` | `boolean` | No | `false` | Skips creating subnamespaces before running the make target. |
+| `security-scan-fail-on-findings` | `boolean` | No | `false` | When `true`, the `image-scan` job fails the workflow when blocking findings are detected. |
 
 ## Secrets
 
@@ -50,11 +51,16 @@ This workflow defines no outputs.
 ## Job Graph
 
 ```
-prod-deploy     Runs p2p-prod make target.
+image-scan      Calls p2p-workflow-image-scan against the prod-registry images.
+                Only runs on main-branch.
+                Fails the workflow on blocking findings when
+                security-scan-fail-on-findings=true (default: false).
+└── prod-deploy (needs: image-scan)
+                Runs p2p-prod make target.
                 Only runs on main-branch.
                 checkout-version = version-prefix + version.
 
-notify-failure  (needs: prod-deploy; runs on main-branch when prod-deploy fails)
+notify-failure  (needs: image-scan, prod-deploy; runs on main-branch when any job fails)
 notify-success  (needs: prod-deploy; runs on main-branch when prod-deploy succeeds and dry-run=false)
 ```
 
@@ -66,3 +72,5 @@ notify-success  (needs: prod-deploy; runs on main-branch when prod-deploy succee
 - [How to configure Slack alerts](../how-to/configure-slack-alerts.md)
 - [How to use multiple environments](../how-to/use-multiple-environments.md)
 - [How to customise versioning](../how-to/customise-versioning.md)
+- [How to triage security findings](../how-to/triage-security-findings.md)
+- [p2p-workflow-image-scan reference](p2p-workflow-image-scan.md)

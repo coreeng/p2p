@@ -34,6 +34,7 @@ jobs:
 | `tenant-name` | `string` | No | `''` | Tenant name passed to all make targets. |
 | `skip-subnamespaces-create` | `boolean` | No | `false` | Skips creating subnamespaces before running make targets. |
 | `artifacts` | `string` | No | `''` | Comma-separated list of artifact paths to upload after each stage. |
+| `security-scan-fail-on-findings` | `boolean` | No | `false` | When `true`, the `image-scan` job fails the workflow when blocking findings are detected. |
 
 ## Secrets
 
@@ -55,11 +56,18 @@ This workflow defines no outputs.
 run-tests     Runs p2p-extended-test make target.
               Only runs on main-branch.
               checkout-version = version-prefix + version.
-└── promote   Promotes from source to destination environments.
+└── promote   (needs: run-tests, image-scan)
+              Promotes from source to destination environments.
               Only runs on main-branch.
               checkout-version = version-prefix + version.
 
-notify-failure  (needs: run-tests, promote; runs on main-branch when any job fails)
+image-scan    (independent of run-tests; runs in parallel)
+              Calls p2p-workflow-image-scan against the source images.
+              Only runs on main-branch.
+              Fails the workflow on blocking findings when
+              security-scan-fail-on-findings=true (default: false).
+
+notify-failure  (needs: run-tests, image-scan, promote; runs on main-branch when any job fails)
 ```
 
 All jobs use a matrix derived from `source`. The `promote` job uses a matrix derived from `destination`.
@@ -71,3 +79,5 @@ All jobs use a matrix derived from `source`. The `promote` job uses a matrix der
 - [How to configure Slack alerts](../how-to/configure-slack-alerts.md)
 - [How to use multiple environments](../how-to/use-multiple-environments.md)
 - [How to customise versioning](../how-to/customise-versioning.md)
+- [How to triage security findings](../how-to/triage-security-findings.md)
+- [p2p-workflow-image-scan reference](p2p-workflow-image-scan.md)

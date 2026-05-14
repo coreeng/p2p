@@ -56,4 +56,4 @@ with:
 
 ---
 
-For the full input reference, see the [p2p-workflow-secret-scan reference](../reference/p2p-workflow-secret-scan.md). For an overview of the two scanning modes, see [secrets scanning](../explanation/secrets-scanning.md).
+For the full input reference, see the [p2p-workflow-secret-scan reference](../reference/p2p-workflow-secret-scan.md). For an overview of the two scanning modes, see [secrets scanning](../explanation/secrets-scanning.md). For how to read and triage findings, see [how to triage security findings](triage-security-findings.md).

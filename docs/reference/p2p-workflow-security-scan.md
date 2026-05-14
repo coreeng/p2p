@@ -83,6 +83,8 @@ For each stage, the umbrella calls [`p2p-get-latest-image`](p2p-get-latest-image
 ## See also
 
 - [p2p-workflow-secret-scan reference](p2p-workflow-secret-scan.md)
+- [p2p-workflow-image-scan reference](p2p-workflow-image-scan.md)
 - [p2p-get-latest-image reference](p2p-get-latest-image.md)
 - [Secrets scanning explanation](../explanation/secrets-scanning.md)
 - [How to enable scheduled secrets scanning](../how-to/enable-scheduled-secrets-scanning.md)
+- [Triage security findings (how-to)](../how-to/triage-security-findings.md)
