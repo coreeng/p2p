@@ -67,8 +67,8 @@ on:
         default: ''
       security-scan-fail-on-findings:
         description: |
-          If true, the security-scan job fails the workflow when blocking secret
-          findings are detected
+          If true, the secret-scan and image-scan jobs fail the workflow when
+          blocking findings are detected.
         required: false
         type: boolean
         default: false
@@ -100,8 +100,8 @@ jobs:
       skip-subnamespaces-create: ${{ inputs.skip-subnamespaces-create }}
       artifacts: ${{ inputs.artifacts }}
 
-  security-scan:
-    uses: ./.github/workflows/p2p-workflow-security-scan.yaml
+  secret-scan:
+    uses: ./.github/workflows/p2p-workflow-secret-scan.yaml
     with:
       scope: changes
       fail-on-findings: ${{ inputs.security-scan-fail-on-findings }}
@@ -206,7 +206,7 @@ jobs:
 
   promote:
     name: promote
-    needs: [integration-test, image-scan]
+    needs: [integration-test, image-scan, secret-scan]
     if: success() && ( github.ref == inputs.main-branch || github.ref_type == 'tag' )
     secrets:
       env_vars: ${{ secrets.env_vars }}
@@ -227,7 +227,7 @@ jobs:
       working-directory: ${{ inputs.working-directory }}
 
   notify-failure:
-    needs: [build, security-scan, image-scan, functional-test, nft-test, integration-test, promote]
+    needs: [build, secret-scan, image-scan, functional-test, nft-test, integration-test, promote]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     if: always() && github.ref == inputs.main-branch && contains(needs.*.result, 'failure')

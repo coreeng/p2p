@@ -1,6 +1,6 @@
 # How to Enable Scheduled Secrets Scanning
 
-Fast-feedback scans only cover commits introduced by a PR or push. To also scan the full history on a schedule — covering secrets committed before the workflow was adopted and dormant repositories that no longer receive PRs — add a per-repository wrapper that calls [`p2p-workflow-security-scan`](../reference/p2p-workflow-security-scan.md) on a cron with `scope: full-history`.
+Fast-feedback scans only cover commits introduced by a PR or push. To also scan the full history on a schedule — covering secrets committed before the workflow was adopted and dormant repositories that no longer receive PRs — add a per-repository wrapper that calls [`p2p-workflow-secret-scan`](../reference/p2p-workflow-secret-scan.md) on a cron with `scope: full-history`. To run secret-scan and per-stage image scans together on a single schedule, use the [scheduled security umbrella](../reference/p2p-workflow-security-scan.md) instead.
 
 GitHub requires schedule triggers to be declared in the consuming repository, so this wrapper lives in the application repo rather than in P2P.
 
@@ -22,7 +22,7 @@ permissions:
 
 jobs:
   secret-scan:
-    uses: coreeng/p2p/.github/workflows/p2p-workflow-security-scan.yaml@v1
+    uses: coreeng/p2p/.github/workflows/p2p-workflow-secret-scan.yaml@v1
     with:
       scope: full-history
       # Scheduled scans see the full history, including legacy findings.
@@ -56,4 +56,4 @@ with:
 
 ---
 
-For the full input reference, see the [p2p-workflow-security-scan reference](../reference/p2p-workflow-security-scan.md). For an overview of the two scanning modes, see [secrets scanning](../explanation/secrets-scanning.md).
+For the full input reference, see the [p2p-workflow-secret-scan reference](../reference/p2p-workflow-secret-scan.md). For an overview of the two scanning modes, see [secrets scanning](../explanation/secrets-scanning.md).
