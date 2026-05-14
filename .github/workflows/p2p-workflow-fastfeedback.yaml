@@ -65,6 +65,13 @@ on:
         required: false
         type: string
         default: ''
+      security-scan-fail-on-findings:
+        description: |
+          If true, the security-scan job fails the workflow when blocking secret
+          findings are detected
+        required: false
+        type: boolean
+        default: true
     outputs:
       version:
         value: ${{ inputs.version }}
@@ -92,6 +99,13 @@ jobs:
       working-directory: ${{ inputs.working-directory }}
       skip-subnamespaces-create: ${{ inputs.skip-subnamespaces-create }}
       artifacts: ${{ inputs.artifacts }}
+
+  security-scan:
+    uses: ./.github/workflows/p2p-workflow-security-scan.yaml
+    with:
+      scope: changes
+      fail-on-findings: ${{ inputs.security-scan-fail-on-findings }}
+      timeout-minutes: 10
 
   functional-test:
     needs: [build]
@@ -192,7 +206,7 @@ jobs:
       working-directory: ${{ inputs.working-directory }}
 
   notify-failure:
-    needs: [build, functional-test, nft-test, integration-test, promote]
+    needs: [build, security-scan, functional-test, nft-test, integration-test, promote]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     if: always() && github.ref == inputs.main-branch && contains(needs.*.result, 'failure')

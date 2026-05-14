@@ -1,6 +1,6 @@
 # p2p-workflow-fastfeedback
 
-> Runs build, functional, NFT, and integration tests in the fast-feedback environment, then promotes to extended-test on main or tag pushes.
+> Runs build, functional, NFT, and integration tests in the fast-feedback environment, then promotes to extended-test on main or tag pushes. Also runs a delta secrets scan in parallel with `build` on every PR and push.
 
 ## Usage
 
@@ -35,6 +35,7 @@ jobs:
 | `skip-fastfeedback-integration-on-prs` | `boolean` | No | `false` | When `true`, skips the `integration-test` job on pull requests (runs unconditionally on main or tags). |
 | `skip-subnamespaces-create` | `boolean` | No | `false` | Skips creating subnamespaces before running make targets. |
 | `artifacts` | `string` | No | `''` | Comma-separated list of artifact paths to upload after each stage. |
+| `security-scan-fail-on-findings` | `boolean` | No | `true` | When `true`, fails the workflow if the `security-scan` job detects a verifier-confirmed live secret. See [p2p-workflow-security-scan](p2p-workflow-security-scan.md) for the blocking policy. |
 
 ## Secrets
 
@@ -64,10 +65,15 @@ build
         └── promote       (needs: integration-test)
                           Runs only on main-branch or tag pushes.
 
-notify-failure        (needs: all jobs; runs on main-branch when any job fails)
+security-scan        (independent of build; runs in parallel)
+                     Calls p2p-workflow-security-scan with scope: changes.
+                     Fails the workflow on verified findings when
+                     security-scan-fail-on-findings=true (default).
+
+notify-failure       (needs: all jobs; runs on main-branch when any job fails)
 ```
 
-All jobs use a matrix derived from `source`. The `promote` job uses a matrix derived from `destination`.
+All jobs use a matrix derived from `source`. The `promote` job uses a matrix derived from `destination`. The `security-scan` job is not part of the matrix; it runs once per workflow.
 
 ## See also
 
@@ -76,3 +82,5 @@ All jobs use a matrix derived from `source`. The `promote` job uses a matrix der
 - [How to skip stages on pull requests](../how-to/skip-stages-on-prs.md)
 - [How to configure Slack alerts](../how-to/configure-slack-alerts.md)
 - [How to use multiple environments](../how-to/use-multiple-environments.md)
+- [Secrets scanning explanation](../explanation/secrets-scanning.md)
+- [p2p-workflow-security-scan reference](p2p-workflow-security-scan.md)
