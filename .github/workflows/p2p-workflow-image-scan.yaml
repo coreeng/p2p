@@ -132,6 +132,63 @@ jobs:
             core.info('Resolved image references:');
             refs.forEach(r => core.info(`  - ${r}`));
 
+      - id: pull-images
+        name: Pull images
+        if: ${{ inputs.dry-run == false }}
+        uses: actions/github-script@v7
+        env:
+          IMAGE_REFS: ${{ steps.resolve-images.outputs.image-refs }}
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const { execFileSync } = require('child_process');
+            const refs = process.env.IMAGE_REFS.split('\n').filter(Boolean);
+            const listPath = path.join(process.env.RUNNER_TEMP, 'pulled-images.txt');
+            fs.writeFileSync(listPath, '');
+            core.setOutput('list-path', listPath);
+            for (const ref of refs) {
+              // One inspect per ref: `{{json .}}` exposes `.manifest.manifests[]` for OCI indexes / Docker manifest
+              // lists, and `.manifest.digest` + `.image.{os,architecture,variant}` for single-manifest images.
+              let info;
+              try {
+                const out = execFileSync('docker', ['buildx', 'imagetools', 'inspect', ref, '--format', '{{json .}}'], { encoding: 'utf8' });
+                info = JSON.parse(out);
+              } catch (err) {
+                core.setFailed(`Could not inspect ${ref}: ${err.message}`);
+                return;
+              }
+              let entries;
+              if (Array.isArray(info.manifest?.manifests)) {
+                entries = info.manifest.manifests
+                  .filter(m => m.platform && m.platform.os !== 'unknown' && m.platform.architecture !== 'unknown')
+                  .map(m => ({
+                    platform: `${m.platform.os}/${m.platform.architecture}` +
+                              (m.platform.variant ? `/${m.platform.variant}` : ''),
+                    digest: m.digest,
+                  }));
+              } else {
+                const img = info.image;
+                if (!img || !img.os || !img.architecture || !info.manifest?.digest) {
+                  core.setFailed(`Could not resolve platform/digest for ${ref}.`);
+                  return;
+                }
+                entries = [{
+                  platform: `${img.os}/${img.architecture}` + (img.variant ? `/${img.variant}` : ''),
+                  digest: info.manifest.digest,
+                }];
+              }
+              if (entries.length === 0) {
+                core.setFailed(`Could not enumerate platforms for ${ref}.`);
+                return;
+              }
+              for (const { platform, digest } of entries) {
+                core.info(`Pulling ${ref} (${platform}) @ ${digest}`);
+                execFileSync('docker', ['pull', '--platform', platform, ref], { stdio: 'inherit' });
+                fs.appendFileSync(listPath, `${ref}\t${platform}\t${digest}\n`);
+              }
+            }
+
       - name: Install Trivy
         if: ${{ inputs.dry-run == false }}
         uses: aquasecurity/setup-trivy@v0.2.6
@@ -139,12 +196,20 @@ jobs:
           version: v0.70.0
           cache: true
 
+      - name: Install TruffleHog
+        if: ${{ inputs.dry-run == false }}
+        shell: bash
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/v3.95.3/scripts/install.sh \
+            | sh -s -- -b "$RUNNER_TEMP" v3.95.3
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+
       - id: scan
         name: Scan images
         if: ${{ inputs.dry-run == false }}
         uses: actions/github-script@v7
         env:
-          IMAGE_REFS: ${{ steps.resolve-images.outputs.image-refs }}
+          PULLED_LIST: ${{ steps.pull-images.outputs.list-path }}
           SEVERITY: ${{ inputs.severity }}
           IGNORE_UNFIXED: ${{ inputs.ignore-unfixed }}
         with:
@@ -153,7 +218,6 @@ jobs:
             const path = require('path');
             const { execFileSync } = require('child_process');
 
-            const refs = process.env.IMAGE_REFS.split('\n').filter(Boolean);
             const reportsDir = path.join(process.env.RUNNER_TEMP, 'trivy');
             const reportList = path.join(reportsDir, 'reports.txt');
             fs.mkdirSync(reportsDir, { recursive: true });
@@ -164,36 +228,65 @@ jobs:
             const sanitize = s => s.replace(/[\/:@]/g, '_');
             const ignoreUnfixed = process.env.IGNORE_UNFIXED === 'true';
 
-            for (const ref of refs) {
-              const raw = execFileSync('docker', ['buildx', 'imagetools', 'inspect', '--raw', ref], { encoding: 'utf8' });
-              const manifest = JSON.parse(raw);
-              const platforms = manifest.manifests
-                ? manifest.manifests
-                    .filter(m => m.platform.os !== 'unknown' || m.platform.architecture !== 'unknown')
-                    .map(m => `${m.platform.os}/${m.platform.architecture}` +
-                              (m.platform.variant ? `/${m.platform.variant}` : ''))
-                : [null];
-              if (platforms.length === 0) {
-                core.setFailed(`Could not enumerate platforms for ${ref}.`);
+            const list = process.env.PULLED_LIST;
+            const entries = fs.readFileSync(list, 'utf8').split('\n').filter(Boolean);
+            for (const line of entries) {
+              const [ref, plat, digest] = line.split('\t');
+              const target = `${ref}@${digest}`;
+              const out = path.join(reportsDir, `${sanitize(ref)}-${sanitize(plat)}.json`);
+              const args = [
+                'image',
+                '--format', 'json',
+                '--severity', process.env.SEVERITY,
+                ...(ignoreUnfixed ? ['--ignore-unfixed'] : []),
+                '--scanners', 'vuln',
+                '--exit-code', '0',
+                '--output', out,
+                target,
+              ];
+              core.info(`Scanning ${ref} (${plat}) @ ${digest}`);
+              execFileSync('trivy', args, { stdio: 'inherit' });
+              fs.appendFileSync(reportList, `${ref}\t${plat}\t${digest}\t${out}\n`);
+            }
+
+      - id: secret-scan
+        name: Scan images for secrets
+        if: ${{ inputs.dry-run == false }}
+        uses: actions/github-script@v7
+        env:
+          PULLED_LIST: ${{ steps.pull-images.outputs.list-path }}
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const { spawnSync } = require('child_process');
+
+            const reportsDir = path.join(process.env.RUNNER_TEMP, 'trufflehog-image');
+            const reportList = path.join(reportsDir, 'reports.txt');
+            fs.mkdirSync(reportsDir, { recursive: true });
+            fs.writeFileSync(reportList, '');
+            core.setOutput('reports-dir', reportsDir);
+            core.setOutput('report-list', reportList);
+
+            const sanitize = s => s.replace(/[\/:@]/g, '_');
+
+            const entries = fs.readFileSync(process.env.PULLED_LIST, 'utf8').split('\n').filter(Boolean);
+            for (const line of entries) {
+              const [ref, plat, digest] = line.split('\t');
+              const target = `docker://${ref}@${digest}`;
+              const out = path.join(reportsDir, `${sanitize(ref)}-${sanitize(plat)}.json`);
+              core.info(`Scanning ${ref} (${plat}) @ ${digest} for secrets`);
+              const proc = spawnSync(
+                'trufflehog',
+                ['docker', '--image', target, '--fail', '--json', '--no-update'],
+                { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 },
+              );
+              if (proc.status !== 0 && proc.status !== 183) {
+                core.setFailed(`trufflehog exited with ${proc.status}: ${proc.stderr || proc.error?.message || '(no stderr)'}`);
                 return;
               }
-              for (const plat of platforms) {
-                const out = path.join(reportsDir, `${sanitize(ref)}-${plat ? sanitize(plat) : 'single'}.json`);
-                const args = ['image'];
-                if (plat) args.push('--platform', plat);
-                args.push(
-                  '--format', 'json',
-                  '--severity', process.env.SEVERITY,
-                  ...(ignoreUnfixed ? ['--ignore-unfixed'] : []),
-                  '--scanners', 'vuln',
-                  '--exit-code', '0',
-                  '--output', out,
-                  ref,
-                );
-                core.info(`Scanning ${ref} (${plat ?? 'single-arch'})`);
-                execFileSync('trivy', args, { stdio: 'inherit' });
-                fs.appendFileSync(reportList, `${ref}\t${plat ?? '__SINGLE__'}\t${out}\n`);
-              }
+              fs.writeFileSync(out, proc.stdout || '');
+              fs.appendFileSync(reportList, `${ref}\t${plat}\t${digest}\t${out}\n`);
             }
 
       - id: report
@@ -202,6 +295,7 @@ jobs:
         uses: actions/github-script@v7
         env:
           REPORT_LIST: ${{ steps.scan.outputs.report-list }}
+          SECRET_REPORT_LIST: ${{ steps.secret-scan.outputs.report-list }}
           BLOCKING_SEVERITY: ${{ inputs.blocking-severity }}
           GITHUB_ENV_INPUT: ${{ inputs.github_env }}
           VERSION: ${{ inputs.version }}
@@ -246,7 +340,7 @@ jobs:
             if (listExists) {
               const entries = fs.readFileSync(list, 'utf8').split('\n').filter(Boolean);
               for (const line of entries) {
-                const [ref, plat, out] = line.split('\t');
+                const [ref, plat, digest, out] = line.split('\t');
                 if (!out || !fs.existsSync(out) || fs.statSync(out).size === 0) continue;
                 try {
                   const shortName = shortNameFromRef(ref);
@@ -260,7 +354,7 @@ jobs:
                   }
                   const group = imageGroups[shortName];
                   if (!group.fullRef) group.fullRef = ref;
-                  if (plat && plat !== '__SINGLE__') group.platforms.add(plat);
+                  if (plat) group.platforms.add(plat);
 
                   const report = JSON.parse(fs.readFileSync(out, 'utf8'));
                   const results = Array.isArray(report.Results) ? report.Results : [];
@@ -284,7 +378,38 @@ jobs:
                     }
                   }
                 } catch (error) {
-                  core.warning(`Failed to process Trivy report for ${ref} (${plat === '__SINGLE__' ? 'single-arch' : plat}): ${error.message}`);
+                  core.warning(`Failed to process Trivy report for ${ref} (${plat}): ${error.message}`);
+                }
+              }
+            }
+
+            const secretList = process.env.SECRET_REPORT_LIST;
+            const secretListExists = !!(secretList && fs.existsSync(secretList) && fs.statSync(secretList).size > 0);
+            const secretImageGroups = {};
+            let secretTotal = 0;
+            let secretBlocking = 0;
+            if (secretListExists) {
+              for (const line of fs.readFileSync(secretList, 'utf8').split('\n').filter(Boolean)) {
+                // Four tab-separated fields: original ref, platform, manifest digest, output path.
+                const [ref, plat, digest, out] = line.split('\t');
+                if (!out || !fs.existsSync(out)) continue;
+                const shortName = shortNameFromRef(ref);
+                if (!secretImageGroups[shortName]) {
+                  secretImageGroups[shortName] = { shortName, fullRef: ref, platforms: new Set(), rawRows: [] };
+                }
+                const group = secretImageGroups[shortName];
+                if (plat) group.platforms.add(plat);
+                for (const ln of fs.readFileSync(out, 'utf8').split('\n').filter(Boolean)) {
+                  let f;
+                  try { f = JSON.parse(ln); } catch (e) { continue; }
+                  const detector = f.DetectorName || f.DetectorType || 'unknown';
+                  const verified = f.Verified === true;
+                  const status = verified ? 'verified' : (f.VerificationError ? 'unknown' : 'unverified');
+                  const meta = (f.SourceMetadata && f.SourceMetadata.Data && f.SourceMetadata.Data.Docker) || {};
+                  const isBlocking = verified;
+                  secretTotal += 1;
+                  if (isBlocking) secretBlocking += 1;
+                  group.rawRows.push({ detector, status, layer: meta.layer || '-', path: meta.file || '-', isBlocking });
                 }
               }
             }
@@ -363,24 +488,73 @@ jobs:
             }
             for (const rows of selectedRowsByImage.values()) rows.sort(rowSort);
 
-            const envSuffix = process.env.GITHUB_ENV_INPUT ? ` (${process.env.GITHUB_ENV_INPUT})` : '';
-            const out = [`## Trivy image scan${envSuffix}`];
+            const secretRowSort = (a, b) => (
+              Number(b.isBlocking) - Number(a.isBlocking)
+              || a.detector.localeCompare(b.detector)
+              || a.path.localeCompare(b.path)
+            );
+            const secretSummaries = Object.values(secretImageGroups)
+              .map(group => {
+                const dedup = new Map();
+                for (const rawRow of group.rawRows) {
+                  const key = [rawRow.detector, rawRow.status, rawRow.layer, rawRow.path].join('\u0000');
+                  if (!dedup.has(key)) dedup.set(key, { ...rawRow, shortName: group.shortName });
+                }
+                const rows = Array.from(dedup.values()).sort(secretRowSort);
+                return {
+                  shortName: group.shortName,
+                  platforms: Array.from(group.platforms).sort((a, b) => a.localeCompare(b)),
+                  rows,
+                  blockingUnique: rows.filter(r => r.isBlocking).length,
+                  totalUnique: rows.length,
+                };
+              })
+              .filter(group => group.totalUnique > 0)
+              .sort((a, b) => (
+                b.blockingUnique - a.blockingUnique
+                || b.totalUnique - a.totalUnique
+                || a.shortName.localeCompare(b.shortName)
+              ));
 
-            if (!listExists) {
+            const allSecretRows = secretSummaries.flatMap(group => group.rows);
+            const totalSecretUnique = allSecretRows.length;
+            const selectedSecretRows = [
+              ...allSecretRows.filter(r => r.isBlocking),
+              ...allSecretRows.filter(r => !r.isBlocking),
+            ].slice(0, 100);
+            const selectedSecretsByImage = new Map();
+            for (const row of selectedSecretRows) {
+              const arr = selectedSecretsByImage.get(row.shortName) || [];
+              arr.push(row);
+              selectedSecretsByImage.set(row.shortName, arr);
+            }
+            for (const arr of selectedSecretsByImage.values()) arr.sort(secretRowSort);
+
+            const envSuffix = process.env.GITHUB_ENV_INPUT ? ` (${process.env.GITHUB_ENV_INPUT})` : '';
+            const out = [`## Image scan${envSuffix}`];
+
+            if (!listExists && !secretListExists) {
               out.push('', '_Scan skipped (dry-run or upstream failure)._');
+            } else if (total === 0 && secretTotal === 0) {
+              out.push(
+                '',
+                `**Version:** \`${process.env.VERSION}\` · **Vulnerabilities:** 0 · **Secrets:** 0`,
+                '',
+                '_No vulnerabilities or secrets found._',
+              );
             } else {
               out.push(
                 '',
-                `**Version:** \`${process.env.VERSION}\` · **Findings:** ${total} total · **Blocking:** ${blocking}`,
+                `**Version:** \`${process.env.VERSION}\` · **Vulnerabilities:** ${total} total · ${blocking} blocking`,
+                `· **Secrets:** ${secretTotal} total · ${secretBlocking} blocking`,
                 `**Severities reported:** \`${process.env.SEVERITY}\` · **Blocking severities:** \`${process.env.BLOCKING_SEVERITY}\``,
                 '',
-                `[📦 Download full Trivy reports](${runUrl})`,
+                `[📦 Download full reports](${runUrl})`,
                 '',
               );
 
-              if (total === 0) {
-                out.push('_No vulnerabilities found at requested severities._');
-              } else {
+              if (total > 0) {
+                out.push('### Vulnerabilities', '');
                 if (imageSummaries.length > 0) {
                   const summaryHeader = [
                     'Image',
@@ -425,6 +599,26 @@ jobs:
                   out.push(`_Showing 100 of ${totalUniqueRows} findings — see the [full Trivy reports](${runUrl}) for the rest._`);
                 }
               }
+
+              if (secretTotal > 0) {
+                out.push('### Secrets in image', '');
+                for (const group of secretSummaries) {
+                  const rows = selectedSecretsByImage.get(group.shortName) || [];
+                  if (rows.length === 0) continue;
+                  const platformSuffix = group.platforms.length > 0 ? ` (${group.platforms.join(', ')})` : '';
+                  out.push(
+                    `**\`${group.shortName}\`**${platformSuffix}`,
+                    '',
+                    '| Detector | Status | Layer | Path |',
+                    '|---|---|---|---|',
+                    ...rows.map(r => `| ${escapeCell(r.detector)} | ${r.status} | \`${escapeCell(r.layer)}\` | ${escapeCell(r.path)} |`),
+                    '',
+                  );
+                }
+                if (totalSecretUnique > 100) {
+                  out.push(`_Showing 100 of ${totalSecretUnique} secret findings — see the [full reports](${runUrl}) for the rest._`, '');
+                }
+              }
             }
 
             const md = out.join('\n').trimEnd() + '\n';
@@ -434,6 +628,8 @@ jobs:
             core.setOutput('comment-path', reportPath);
             core.setOutput('total-count', total);
             core.setOutput('blocking-count', blocking);
+            core.setOutput('secret-total-count', secretTotal);
+            core.setOutput('secret-blocking-count', secretBlocking);
             await core.summary.addRaw(md).write();
 
       - name: Post sticky PR comment
@@ -441,16 +637,18 @@ jobs:
         continue-on-error: true
         uses: marocchino/sticky-pull-request-comment@v3
         with:
-          header: trivy-image-findings
+          header: image-scan-findings
           path: ${{ steps.report.outputs.comment-path }}
           recreate: true
 
-      - name: Upload Trivy JSON reports
+      - name: Upload image-scan reports
         if: ${{ always() && inputs.dry-run == false }}
         uses: actions/upload-artifact@v4
         with:
-          name: trivy-reports-${{ inputs.github_env || 'local' }}
-          path: ${{ steps.scan.outputs.reports-dir }}
+          name: image-scan-reports-${{ inputs.github_env || 'local' }}
+          path: |
+            ${{ steps.scan.outputs.reports-dir }}
+            ${{ steps.secret-scan.outputs.reports-dir }}
           if-no-files-found: ignore
           retention-days: 30
 
@@ -460,11 +658,23 @@ jobs:
         env:
           BLOCKING: ${{ steps.report.outputs.blocking-count }}
           TOTAL: ${{ steps.report.outputs.total-count }}
+          SECRET_BLOCKING: ${{ steps.report.outputs.secret-blocking-count }}
+          SECRET_TOTAL: ${{ steps.report.outputs.secret-total-count }}
           FAIL: ${{ inputs.fail-on-findings }}
         run: |
           set -euo pipefail
-          echo "Trivy: total=${TOTAL:-0}, blocking=${BLOCKING:-0}, fail-on-findings=${FAIL}"
-          if [ "${FAIL}" = "true" ] && [ "${BLOCKING:-0}" -gt 0 ]; then
-            echo "::error::${BLOCKING} blocking finding(s) detected; failing per fail-on-findings=true."
-            exit 1
+          echo "Trivy: total=${TOTAL:-0}, blocking=${BLOCKING:-0}"
+          echo "TruffleHog: total=${SECRET_TOTAL:-0}, blocking=${SECRET_BLOCKING:-0}"
+          echo "fail-on-findings=${FAIL}"
+          if [ "${FAIL}" = "true" ]; then
+            failed=0
+            if [ "${BLOCKING:-0}" -gt 0 ]; then
+              echo "::error::${BLOCKING} blocking vulnerability finding(s) detected."
+              failed=1
+            fi
+            if [ "${SECRET_BLOCKING:-0}" -gt 0 ]; then
+              echo "::error::${SECRET_BLOCKING} verified secret finding(s) detected in image."
+              failed=1
+            fi
+            [ "${failed}" -eq 0 ] || exit 1
           fi
