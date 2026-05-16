@@ -118,8 +118,7 @@ See [Pipeline model](../explanation/pipeline-model.md) for the full picture of h
 
 ## Security scans
 
-Fast-feedback also calls `secret-scan` and `image-scan` automatically on each pull request and push.
-At this level, `security-scan-fail-on-findings` defaults to `false`, so the scans report findings without blocking by default.
+Fast-feedback also calls `secret-scan` and `image-scan` automatically on each pull request and push. The image scan covers both known CVEs and embedded secrets. At this level, `security-scan-fail-on-findings` defaults to `false`, so the scans report findings without blocking by default.
 
 Look in the workflow summary and uploaded artifact for the details, and on pull requests you'll also get a sticky comment with the latest results.
 See [Image scanning](../explanation/image-scanning.md), [Secrets scanning](../explanation/secrets-scanning.md), and [Triage security findings](../how-to/triage-security-findings.md) for what each scan checks and how to respond.

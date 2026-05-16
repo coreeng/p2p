@@ -1,6 +1,6 @@
 # Image scanning
 
-P2P provides platform-managed container image scanning so application teams use the same scanner everywhere. The reusable workflow is [`p2p-workflow-image-scan`](../reference/p2p-workflow-image-scan.md), and it installs and runs Trivy against the images for one pipeline stage and version.
+Image scanning is a two-tool stack. Trivy reports known CVEs in OS and language packages. TruffleHog reports secrets embedded anywhere in any layer of the built image, including intermediate layers that were squashed out of the final filesystem. Both tools run inside [`p2p-workflow-image-scan`](../reference/p2p-workflow-image-scan.md) against each image returned by `make p2p-images`.
 
 ## What gets scanned and when
 
@@ -10,9 +10,7 @@ The scheduled [`p2p-workflow-security-scan`](../reference/p2p-workflow-security-
 
 ## Blocking and reporting
 
-Image scanning is visibility-first by default. `security-scan-fail-on-findings` defaults to `false` in the stage workflows, and the scheduled umbrella hard-codes non-blocking scans, so findings are reported without automatically failing the run unless a caller opts in. This mirrors secrets scanning: in fast-feedback the same opt-in flag is passed to both scans, while the scheduled umbrella runs them as companion monitoring signals.
-
-Findings are written into the workflow summary, posted as a sticky pull request comment for PR runs, and uploaded as Trivy JSON artifacts.
+Image scanning is visibility-first by default. Both Trivy vulnerability findings and TruffleHog secret findings surface in the same sticky PR comment and the same workflow artifact. The workflow does not fail the job unless the caller sets `security-scan-fail-on-findings: true`, at which point a finding at or above `blocking-severity` (Trivy) **or** any `verified` TruffleHog finding will fail the run.
 
 ## See also
 

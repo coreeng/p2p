@@ -61,7 +61,7 @@ None. Results are surfaced via:
 
 - Each child job's workflow summary (`$GITHUB_STEP_SUMMARY`).
 - `secret-scan-findings` artifact (JSON) from the secret-scan job.
-- `trivy-reports-<github_env>` artifact per stage from each image-scan job.
+- `image-scan-reports-<github_env>` artifact per stage from each image-scan job. Contains `trivy/` (vulnerability JSON per image × platform) and `trufflehog-image/` (secret JSON-lines per image × platform) subdirectories.
 
 ## Job Graph
 

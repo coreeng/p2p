@@ -1,6 +1,6 @@
 # p2p-workflow-image-scan
 
-> Scans the container images produced by `make p2p-images` against Trivy and reports vulnerabilities. Produces a workflow summary, a sticky PR comment (on `pull_request` events), and a `trivy-reports-<github_env>` JSON artifact. Optionally fails the job on blocking findings.
+> Scans every image returned by `make p2p-images` for known vulnerabilities (Trivy) and embedded secrets (TruffleHog). Produces a workflow summary, a sticky PR comment (on `pull_request` events), and an `image-scan-reports-<github_env>` artifact. Optionally fails the job on blocking findings.
 
 ## Usage
 
@@ -53,8 +53,8 @@ jobs:
 This workflow defines no outputs. Results are surfaced via:
 
 - The workflow summary (`$GITHUB_STEP_SUMMARY`).
-- A sticky PR comment with `header: trivy-image-findings` on `pull_request` events when `dry-run: false`.
-- The `trivy-reports-<github_env>` artifact (raw Trivy JSON per image and platform), retained for 30 days.
+- A sticky PR comment with `header: image-scan-findings` on `pull_request` events when `dry-run: false`.
+- The `image-scan-reports-<github_env>` artifact, retained for 30 days. Contains a `trivy/` subdirectory (one Trivy JSON per image × platform) and a `trufflehog-image/` subdirectory (one TruffleHog JSON-lines file per image × platform).
 
 ## Permissions
 
@@ -75,11 +75,14 @@ image-scan
 ├── Login to Artifact Registry        (if dry-run=false)
 ├── Login to tenant provided registry (optional; if creds and dry-run=false)
 ├── Resolve image references
+├── Pull images                       (if dry-run=false)
 ├── Install Trivy                     (if dry-run=false)
-├── Scan images                       (if dry-run=false)
+├── Install TruffleHog                (if dry-run=false)
+├── Scan images (Trivy)               (if dry-run=false)
+├── Scan images (TruffleHog)          (if dry-run=false)
 ├── Build report                      (always)
 ├── Post sticky PR comment            (pull_request only; if dry-run=false)
-├── Upload Trivy JSON reports         (if dry-run=false)
+├── Upload image-scan reports         (if dry-run=false)
 └── Enforce policy                    (if dry-run=false)
 ```
 
@@ -97,13 +100,23 @@ If `make p2p-images` returns no names, the job fails — there is nothing to sca
 
 ## Report format
 
-The sticky comment and workflow summary contain:
+The sticky comment and workflow summary contain a unified header (version, vulnerability counts, secret counts, requested severities, blocking severities) followed by up to two tables.
 
-- A header line with the version, total findings, blocking count, requested severities, and blocking severities.
+**Vulnerabilities table** (rendered when Trivy finds at least one finding at the requested severities):
+
 - A per-image counts table (rows sorted by blocking count, then total, then name).
 - A `<details>` block per image with the deduplicated finding rows (Severity, Package, Installed, Fixed, CVE link, Source). Rows are sorted by severity, then package, then CVE.
 
-The comment is truncated to 100 rows total; the full set is always available in the JSON artifact.
+The vulnerabilities table is truncated to 100 rows total; the full set is always available in the artifact's `trivy/` subdirectory.
+
+**Secrets in image** rendering — one section per image (sorted by blocking then total findings), each with a heading naming the image and the platforms it was scanned on, followed by a deduplicated table. Columns:
+
+- `Detector` — TruffleHog detector that matched (e.g. `AWS`, `Slack`, `GitHub`).
+- `Status` — `verified` (TruffleHog successfully called the credential's verifier), `unknown` (verifier returned an error or timeout), or `unverified` (no verifier ran). Only `verified` rows are blocking.
+- `Layer` — digest of the image layer containing the secret.
+- `Path` — file path within the image where the secret was found.
+
+The secrets section is independently truncated at 100 rows total across all images; the rest are in the artifact's `trufflehog-image/` subdirectory.
 
 ## See also
 
