@@ -1,6 +1,6 @@
 # p2p-workflow-security-scan
 
-> Scheduled "umbrella" workflow that runs the full secret scan and per-stage image scans for the latest deployed version in each pipeline stage. Intended for a per-repository cron wrapper that fans out across `fast-feedback`, `extended-test`, and `prod`.
+> Scheduled "umbrella" workflow that runs full source security scanning and per-stage image scans for the latest deployed version in each pipeline stage. Intended for a per-repository cron wrapper that fans out across `fast-feedback`, `extended-test`, and `prod`.
 
 ## Usage
 
@@ -44,7 +44,7 @@ jobs:
 | `extended-test-github-env` | string | Yes | — | GitHub Environment name granting GCP auth for the `extended-test` registry path. |
 | `prod-github-env` | string | Yes | — | GitHub Environment name granting GCP auth for the `prod` registry path. |
 | `dry-run` | boolean | No | `false` | Passed through to child workflows; skips registry lookups and scans. |
-| `timeout-minutes` | number | No | `30` | Timeout for the `secret-scan` job. Image-scan jobs use their own default. |
+| `timeout-minutes` | number | No | `30` | Timeout for the `source-security-scan` job. Image-scan jobs use their own default. |
 
 ## Secrets
 
@@ -60,7 +60,7 @@ jobs:
 None. Results are surfaced via:
 
 - Each child job's workflow summary (`$GITHUB_STEP_SUMMARY`).
-- `secret-scan-findings` artifact (JSON) from the secret-scan job.
+- `source-security-scan-findings` artifact from the source-security-scan job. Contains redacted TruffleHog output, raw Trivy filesystem output, and normalized merged JSON.
 - `image-scan-reports-<github_env>` artifact per stage from each image-scan job. Contains `trivy/` (vulnerability JSON per image × platform) and `trufflehog-image/` (secret JSON-lines per image × platform) subdirectories.
 
 ## Job Graph
@@ -71,10 +71,10 @@ resolve-anchor-image
 ├── discover-version-extended-test ──► image-scan-extended-test
 └── discover-version-prod          ──► image-scan-prod
 
-secret-scan                                            (independent; runs in parallel)
+source-security-scan                                   (independent; runs in parallel)
 ```
 
-The secret-scan job runs in parallel with the per-stage chains. All child workflows are invoked with `fail-on-findings: false`, so the umbrella stays green regardless of findings; the reporting channels are the signal.
+The source-security-scan job runs in parallel with the per-stage chains. All child workflows are invoked with `fail-on-findings: false`, so the umbrella stays green regardless of findings; the reporting channels are the signal.
 
 ## Version discovery
 
@@ -82,9 +82,9 @@ For each stage, the umbrella calls [`p2p-get-latest-image`](p2p-get-latest-image
 
 ## See also
 
-- [p2p-workflow-secret-scan reference](p2p-workflow-secret-scan.md)
+- [p2p-workflow-source-security-scan reference](p2p-workflow-source-security-scan.md)
 - [p2p-workflow-image-scan reference](p2p-workflow-image-scan.md)
 - [p2p-get-latest-image reference](p2p-get-latest-image.md)
 - [Secrets scanning explanation](../explanation/secrets-scanning.md)
-- [How to enable scheduled secrets scanning](../how-to/enable-scheduled-secrets-scanning.md)
+- [How to enable scheduled source security scanning](../how-to/enable-scheduled-secrets-scanning.md)
 - [Triage security findings (how-to)](../how-to/triage-security-findings.md)

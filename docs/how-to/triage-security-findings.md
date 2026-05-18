@@ -8,16 +8,20 @@ On pull requests, the scanners upsert sticky comments in the PR conversation ins
 
 | Source | Sticky comment header | Artifact |
 |---|---|---|
-| Git tree secrets | `trufflehog-findings` | `secret-scan-findings` |
+| Source vulnerabilities | `source-security-scan-findings` | `source-security-scan-findings` |
+| Source restricted/forbidden licenses | `source-security-scan-findings` | `source-security-scan-findings` |
+| Git tree secrets | `source-security-scan-findings` | `source-security-scan-findings` |
 | Image vulnerabilities | `image-scan-findings` | `image-scan-reports-<env>` |
 | Image secrets | `image-scan-findings` (same comment) | `image-scan-reports-<env>` |
+
+Restricted and forbidden license findings are shown for triage only. Trivy's license classification is not a legal decision and is not a P2P-wide organization policy; confirm the finding against your organization's open-source policy before taking enforcement action.
+
+The source-security comment renders source vulnerabilities, restricted or forbidden licenses, and git-tree secrets under one header. Vulnerability rows include package, installed version, fixed version, CVE, and source where available. License rows identify the package and detected license. Git-tree secret rows show `Detector`, `Status`, `File`, `Line`, and `Commit`.
 
 The image-scan comment renders up to two tables under one header:
 
 - **Vulnerabilities**: a per-image summary table plus a `<details>` block per image with `Severity`, `Package`, `Installed`, `Fixed`, `CVE`, and `Source` columns. Sorted by severity, then package, then CVE; truncated to 100 rows.
 - **Secrets in image**: `Detector`, `Status`, `Layer`, `File`, `Path`. `Status` is `verified`, `unknown`, or `unverified`; only `verified` rows are blocking. Truncated independently at 100 rows.
-
-The git-tree secret-scan comment shows `Detector`, `Status`, `File`, `Line`, and `Commit`.
 
 ## 2. Download the full artifact
 
@@ -26,17 +30,19 @@ If the PR comment is truncated or you need raw data:
 1. Open the workflow run from the PR checks or the Actions tab.
 2. In the run summary, open the **Artifacts** section.
 3. Download:
+   - `source-security-scan-findings` for source-security output (contains redacted TruffleHog findings, raw Trivy filesystem output, and normalized merged JSON)
    - `image-scan-reports-<github_env>` for image-scan output (contains `trivy/` and `trufflehog-image/` subdirectories)
-   - `secret-scan-findings` for git-tree secret-scan output
 
-The image artifact contains raw Trivy JSON reports under `trivy/` and TruffleHog JSON-lines under `trufflehog-image/`, both keyed by image × platform. The secret artifact contains a redacted JSON array of git-tree findings.
+The image artifact contains raw Trivy JSON reports under `trivy/` and TruffleHog JSON-lines under `trufflehog-image/`, both keyed by image × platform. The source-security artifact contains scanner-native output plus normalized JSON for source vulnerabilities, source license findings, and git-tree secrets.
 
 ## 3. Remediate first when the scan is correct
 
 Preferred fixes:
 
 - For image findings, update the vulnerable package or base image so the next build produces a clean image.
-- For secret findings, remove the committed secret, rotate the credential, and replace it with a proper secret store or GitHub secret.
+- For source vulnerability findings, update the affected dependency or lockfile entry so the vulnerable version is no longer present.
+- For restricted or forbidden license findings, confirm the package and license against your organization's open-source policy before changing dependencies or taking enforcement action.
+- For git-tree secret findings, remove the committed secret, rotate the credential, and replace it with a proper secret store or GitHub secret.
 - For embedded secrets, rotate the credential first, identify which Dockerfile step introduced it (the `Layer` column points to the layer digest — match it against `docker history <image>`), scrub or rebuild from a fresh base, and re-push the image. A secret that appears in both the *Secrets scan* (git tree) and *Image scan* (Secrets in image) comments means the source is in the tracked tree — fix the git source first and the image side will resolve on the next build.
 
 ## 4. Temporarily stop findings from blocking the workflow
@@ -61,6 +67,6 @@ The same input exists on `p2p-workflow-extended-test` and `p2p-workflow-prod`.
 See also:
 
 - [p2p-workflow-image-scan reference](../reference/p2p-workflow-image-scan.md)
-- [p2p-workflow-secret-scan reference](../reference/p2p-workflow-secret-scan.md)
+- [p2p-workflow-source-security-scan reference](../reference/p2p-workflow-source-security-scan.md)
 - [Image scanning](../explanation/image-scanning.md)
 - [Secrets scanning](../explanation/secrets-scanning.md)

@@ -54,9 +54,9 @@ The primary workflows call these. Call them only through the primary workflows.
 | [p2p-execute-command](docs/reference/p2p-execute-command.md) | Leaf executor — runs a build tool target in a configured environment |
 | [p2p-promote-image](docs/reference/p2p-promote-image.md) | Authenticates to source/dest registries and runs the promotion make target |
 | [p2p-get-latest-image](docs/reference/p2p-get-latest-image.md) | Base workflow for querying latest image version from artifact registry |
-| [p2p-workflow-secret-scan](docs/reference/p2p-workflow-secret-scan.md) | Scans for committed secrets (delta on PR/push, full-history on schedule). Called by fast-feedback and by per-repository scheduled wrappers. |
+| [p2p-workflow-source-security-scan](docs/reference/p2p-workflow-source-security-scan.md) | Scans repository source for dependency vulnerabilities, restricted/forbidden licenses, and committed secrets; posts one compact sticky comment and uploads normalized findings. |
 | [p2p-workflow-image-scan](docs/reference/p2p-workflow-image-scan.md) | Scans built images for CVEs (Trivy) and embedded secrets (TruffleHog); posts a single sticky comment and uploads reports. Called by fast-feedback, extended-test, prod, and the scheduled security umbrella. |
-| [p2p-workflow-security-scan](docs/reference/p2p-workflow-security-scan.md) | Umbrella workflow for scheduled security scans. Runs secret-scan plus per-stage image-scans for the latest version in fast-feedback, extended-test, and prod. |
+| [p2p-workflow-security-scan](docs/reference/p2p-workflow-security-scan.md) | Umbrella workflow for scheduled security scans. Runs source-security-scan plus per-stage image-scans for the latest version in fast-feedback, extended-test, and prod. |
 
 ## Prerequisites
 

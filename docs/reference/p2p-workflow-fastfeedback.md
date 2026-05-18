@@ -1,6 +1,6 @@
 # p2p-workflow-fastfeedback
 
-> Runs build, functional, NFT, and integration tests in the fast-feedback environment, then promotes to extended-test on main or tag pushes. Also runs a delta secrets scan in parallel with `build` on every PR and push.
+> Runs build, functional, NFT, and integration tests in the fast-feedback environment, then promotes to extended-test on main or tag pushes. Also runs source security and image scans in parallel with `build` on every PR and push.
 
 ## Usage
 
@@ -35,7 +35,7 @@ jobs:
 | `skip-fastfeedback-integration-on-prs` | `boolean` | No | `false` | When `true`, skips the `integration-test` job on pull requests (runs unconditionally on main or tags). |
 | `skip-subnamespaces-create` | `boolean` | No | `false` | Skips creating subnamespaces before running make targets. |
 | `artifacts` | `string` | No | `''` | Comma-separated list of artifact paths to upload after each stage. |
-| `security-scan-fail-on-findings` | `boolean` | No | `false` | When `true`, fails the workflow if the `secret-scan` or `image-scan` job detects blocking findings. See [p2p-workflow-secret-scan](p2p-workflow-secret-scan.md) for the secrets blocking policy. |
+| `security-scan-fail-on-findings` | `boolean` | No | `false` | When `true`, fails the workflow if the `source-security-scan` or `image-scan` job detects blocking findings. See [p2p-workflow-source-security-scan](p2p-workflow-source-security-scan.md) for the source security blocking policy. |
 
 ## Secrets
 
@@ -62,7 +62,7 @@ build
     └── integration-test  (needs: functional-test, nft-test)
                           Skipped when skip-fastfeedback-integration-on-prs=true
                           AND ref is not main-branch AND ref_type is not tag.
-        └── promote       (needs: integration-test, image-scan, secret-scan)
+        └── promote       (needs: integration-test, image-scan, source-security-scan)
                           Runs only on main-branch or tag pushes.
 
 image-scan           (independent of build; runs in parallel)
@@ -70,15 +70,16 @@ image-scan           (independent of build; runs in parallel)
                      Fails the workflow on blocking findings when
                      security-scan-fail-on-findings=true (default: false).
 
-secret-scan          (independent of build; runs in parallel)
-                     Calls p2p-workflow-secret-scan with scope: changes.
-                     Fails the workflow on verified findings when
-                     security-scan-fail-on-findings=true (default: false).
+source-security-scan  (independent of build; runs in parallel)
+                      Calls p2p-workflow-source-security-scan with scope: changes.
+                      Reports source vulnerabilities, restricted/forbidden licenses,
+                      and git-tree secrets. Fails only on blocking vulnerabilities or
+                      verified secrets when security-scan-fail-on-findings=true.
 
 notify-failure       (needs: all jobs; runs on main-branch when any job fails)
 ```
 
-All jobs use a matrix derived from `source`. The `promote` job uses a matrix derived from `destination`. The `secret-scan` job is not part of the matrix; it runs once per workflow.
+All jobs use a matrix derived from `source`. The `promote` job uses a matrix derived from `destination`. The `source-security-scan` job is not part of the matrix; it runs once per workflow.
 
 ## See also
 
@@ -90,6 +91,6 @@ All jobs use a matrix derived from `source`. The `promote` job uses a matrix der
 - [How to triage security findings](../how-to/triage-security-findings.md)
 - [Secrets scanning explanation](../explanation/secrets-scanning.md)
 - [Image scanning explanation](../explanation/image-scanning.md)
-- [p2p-workflow-secret-scan reference](p2p-workflow-secret-scan.md)
+- [p2p-workflow-source-security-scan reference](p2p-workflow-source-security-scan.md)
 - [p2p-workflow-image-scan reference](p2p-workflow-image-scan.md)
 - [p2p-workflow-security-scan reference (scheduled umbrella)](p2p-workflow-security-scan.md)
