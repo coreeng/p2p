@@ -10,7 +10,7 @@ The scheduled [`p2p-workflow-security-scan`](../reference/p2p-workflow-security-
 
 ## Blocking and reporting
 
-Image scanning is visibility-first by default. Both Trivy vulnerability findings and TruffleHog secret findings surface in the same sticky PR comment and the same workflow artifact. The workflow does not fail the job unless the caller sets `security-scan-fail-on-findings: true`, at which point a finding at or above `blocking-severity` (Trivy) **or** any `verified` TruffleHog finding will fail the run.
+Image scanning is visibility-first by default. Both Trivy vulnerability findings and TruffleHog secret findings surface in the same sticky PR comment and the same workflow artifact. The workflow does not fail the job unless the caller sets `security-scan-fail-on-findings: true`, at which point a reported finding whose severity is listed in `blocking-severity` (Trivy) **or** any `verified` TruffleHog finding will fail the run.
 
 ## See also
 

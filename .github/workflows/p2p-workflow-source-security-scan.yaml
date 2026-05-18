@@ -260,6 +260,8 @@ jobs:
           BLOCKING_SEVERITY: ${{ inputs.blocking-severity }}
           DRY_RUN: ${{ inputs.dry-run }}
           ROOT: ${{ runner.temp }}/source-security
+          SECRET_SCAN_RESULT: ${{ needs.secret-scan.result }}
+          SCA_SCAN_RESULT: ${{ needs.sca-scan.result }}
         with:
           script: |
             const fs = require('fs');
@@ -305,6 +307,12 @@ jobs:
             const dryRun = process.env.DRY_RUN === 'true';
             const scannerWarnings = [];
             if (!dryRun) {
+              if (process.env.SECRET_SCAN_RESULT !== 'success') {
+                scannerWarnings.push(`TruffleHog job finished with result ${process.env.SECRET_SCAN_RESULT}; secret results may be incomplete.`);
+              }
+              if (process.env.SCA_SCAN_RESULT !== 'success') {
+                scannerWarnings.push(`Trivy job finished with result ${process.env.SCA_SCAN_RESULT}; vulnerability and license results may be incomplete.`);
+              }
               if (!fs.existsSync(trivyPath)) {
                 scannerWarnings.push('Trivy output was not available; vulnerability and license results may be incomplete.');
               }

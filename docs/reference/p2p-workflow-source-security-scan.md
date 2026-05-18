@@ -20,7 +20,7 @@ jobs:
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `scope` | string | Yes | - | `changes` for PR/push scanning or `full-history` for scheduled monitoring. TruffleHog uses this to choose git history scope. Trivy scans the checked-out source tree. |
-| `fail-on-findings` | boolean | No | `false` | When `true`, fails the job if any vulnerability at `blocking-severity` or verified secret is detected. License findings never block. |
+| `fail-on-findings` | boolean | No | `false` | When `true`, fails the job if any reported vulnerability at `blocking-severity` or verified secret is detected. License findings never block. |
 | `severity` | string | No | `CRITICAL,HIGH` | Comma-separated Trivy vulnerability severities to report, matching image scan semantics. |
 | `blocking-severity` | string | No | `CRITICAL` | Comma-separated vulnerability severities that count towards the blocking policy. Must be a subset of `severity` to have an effect. |
 | `ignore-unfixed` | boolean | No | `true` | Passed to Trivy vulnerability scanning. |
@@ -43,7 +43,7 @@ The workflow inherits permissions from the caller. Grant:
 | `report-file` | Path to the generated markdown report inside the runner workspace. |
 | `json-file` | Path to the normalized merged JSON report inside the runner workspace. |
 | `vulnerability-total` | Number of source vulnerability findings in the normalized report. |
-| `vulnerability-blocking` | Number of vulnerability findings whose severity is listed in `blocking-severity`. |
+| `vulnerability-blocking` | Number of reported vulnerability findings whose severity is listed in `blocking-severity`. |
 | `license-total` | Number of restricted or forbidden license findings in the normalized report. |
 | `secret-total` | Number of redacted TruffleHog findings in the normalized report. |
 | `secret-blocking` | Number of TruffleHog findings with `status: verified`. |
@@ -58,7 +58,7 @@ Results are also surfaced via:
 
 The workflow is visibility-first by default. When `fail-on-findings: true`, it fails only for:
 
-- Trivy vulnerability findings whose severity is listed in `blocking-severity`;
+- reported Trivy vulnerability findings whose severity is listed in `blocking-severity`;
 - TruffleHog findings with `status: verified`.
 
 Restricted and forbidden license findings are report-only, even when `fail-on-findings: true`. The source scan reports only HIGH and CRITICAL license classifications.

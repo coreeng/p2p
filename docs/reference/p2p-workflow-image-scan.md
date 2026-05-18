@@ -33,7 +33,7 @@ jobs:
 | `region` | string | No | `europe-west2` | GCP region for the Artifact Registry. Overridden by `vars.REGION` when set on the environment. |
 | `working-directory` | string | No | `.` | Directory from which `make p2p-images` is executed to discover image names. |
 | `dry-run` | boolean | No | `false` | When `true`, skips GCP auth, registry login, Trivy install, the scan itself, the sticky PR comment, the artifact upload, and the policy step. The `Build report` step still runs and produces a "Scan skipped" summary. |
-| `fail-on-findings` | boolean | No | `false` | When `true`, fails the job if any finding at a `blocking-severity` level is detected. |
+| `fail-on-findings` | boolean | No | `false` | When `true`, fails the job if any reported vulnerability at a `blocking-severity` level or verified image secret is detected. |
 | `severity` | string | No | `CRITICAL,HIGH` | Comma-separated Trivy severities to report. |
 | `blocking-severity` | string | No | `CRITICAL` | Comma-separated severities that count towards the blocking policy. Must be a subset of `severity` to have an effect. |
 | `ignore-unfixed` | boolean | No | `true` | When `true`, passes `--ignore-unfixed` to Trivy — only vulnerabilities with a fixed version are reported. |
