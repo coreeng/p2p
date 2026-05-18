@@ -92,12 +92,11 @@ jobs:
         name: TruffleHog OSS secrets scan
         if: ${{ inputs.dry-run == false }}
         shell: bash
-        continue-on-error: true
         env:
           SCOPE: ${{ inputs.scope }}
           BASE: ${{ steps.scan-range.outputs.base }}
         run: |
-          set +e
+          set -euo pipefail
           out="$RUNNER_TEMP/trufflehog-findings.ndjson"
           # Collect every finding regardless of verification state; the
           # blocking decision is taken downstream by classifying each
@@ -111,7 +110,6 @@ jobs:
           fi
           trufflehog "${ARGS[@]}" > "$out"
           echo "findings_file=$out" >> "$GITHUB_OUTPUT"
-          exit 0
 
       - id: redact
         name: Build redacted secret findings
@@ -171,6 +169,7 @@ jobs:
           name: source-security-internal-secret-findings
           path: ${{ steps.redact.outputs.redacted_file }}
           if-no-files-found: warn
+          retention-days: 1
 
   sca-scan:
     name: sca-scan
@@ -219,6 +218,7 @@ jobs:
           name: source-security-internal-trivy-findings
           path: ${{ steps.scan.outputs.trivy_file }}
           if-no-files-found: warn
+          retention-days: 1
 
   report:
     name: source-security-report
@@ -236,6 +236,7 @@ jobs:
     steps:
       - name: Download secret findings
         if: ${{ inputs.dry-run == false }}
+        continue-on-error: true
         uses: actions/download-artifact@v4
         with:
           name: source-security-internal-secret-findings
@@ -243,6 +244,7 @@ jobs:
 
       - name: Download Trivy findings
         if: ${{ inputs.dry-run == false }}
+        continue-on-error: true
         uses: actions/download-artifact@v4
         with:
           name: source-security-internal-trivy-findings
@@ -300,6 +302,16 @@ jobs:
             fs.mkdirSync(root, { recursive: true });
             const trivyPath = path.join(root, 'trivy', 'trivy-fs.json');
             const trufflehogPath = path.join(root, 'trufflehog', 'findings.ndjson');
+            const dryRun = process.env.DRY_RUN === 'true';
+            const scannerWarnings = [];
+            if (!dryRun) {
+              if (!fs.existsSync(trivyPath)) {
+                scannerWarnings.push('Trivy output was not available; vulnerability and license results may be incomplete.');
+              }
+              if (!fs.existsSync(trufflehogPath)) {
+                scannerWarnings.push('TruffleHog output was not available; secret results may be incomplete.');
+              }
+            }
             const reportSeveritySet = severitySet(process.env.SEVERITY || 'CRITICAL,HIGH');
             const blockingSeveritySet = severitySet(process.env.BLOCKING_SEVERITY || 'CRITICAL');
             const trivy = readJson(trivyPath, { Results: [] });
@@ -366,11 +378,17 @@ jobs:
             const out = ['## Source security scan', ''];
             out.push(process.env.SCOPE === 'changes' ? `Scan range: \`${process.env.BASE || '<initial>'}..HEAD\`` : 'Scan range: `<full history>`', '');
 
-            if (process.env.DRY_RUN === 'true') {
+            if (dryRun) {
               out.push('_Scan skipped (dry-run)._');
-            } else if (vulnerabilities.length === 0 && licenses.length === 0 && secrets.length === 0) {
-              out.push('No source security findings detected.');
             } else {
+              if (scannerWarnings.length > 0) {
+                out.push('### Scanner output warnings', '', ...scannerWarnings.map(warning => `- ${warning}`), '');
+              }
+            }
+
+            if (!dryRun && scannerWarnings.length === 0 && vulnerabilities.length === 0 && licenses.length === 0 && secrets.length === 0) {
+              out.push('No source security findings detected.');
+            } else if (!dryRun) {
               out.push(
                 '| Check | Total | Blocking |',
                 '|---|---:|---:|',
