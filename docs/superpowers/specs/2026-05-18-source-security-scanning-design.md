@@ -25,10 +25,11 @@ Adding Trivy filesystem scanning fills that source dependency gap. Because P2P i
 | SCA scanner | Run Trivy filesystem scanning with `--scanners vuln,license --format json` against the checked-out repository. |
 | Trivy secrets | Explicitly keep Trivy's secret scanner off; TruffleHog owns secrets. |
 | Misconfiguration scanner | Out of scope for v1. IaC/config scanning is useful, but it is a different policy surface from source dependency SCA. |
-| Vulnerabilities | Report `HIGH,CRITICAL` vulnerabilities by default, matching the compact style used by image scanning. |
+| Vulnerabilities | Use the same Trivy severity model as image scanning: report only severities listed in `severity` and default that input to `CRITICAL,HIGH`. |
+| Vulnerability blocking | Use the same blocking model as image scanning: only severities listed in `blocking-severity` count as blocking, and the default is `CRITICAL`. |
 | Licenses | Report only `HIGH,CRITICAL` license findings, which correspond to Trivy `Restricted` and `Forbidden` classifications. |
 | License blocking | Licenses are report-only. They never fail the workflow, even when `fail-on-findings` is true. |
-| Blocking | When `fail-on-findings` is true, block on high/critical vulnerability findings and verified TruffleHog secrets only. |
+| Blocking | When `fail-on-findings` is true, block on vulnerability findings at `blocking-severity` and verified TruffleHog secrets only. |
 | Comment | One sticky PR comment, `header: source-security-scan-findings`, styled like image scanning with a short summary and foldable details sections. |
 | Artifact | Upload one source security artifact containing raw scanner outputs and the normalized merged JSON. |
 
@@ -118,9 +119,11 @@ Each detail section should be omitted when that scanner has no relevant findings
 
 The workflow remains visibility-first by default. It reports findings but does not fail unless the caller opts into blocking through the existing `security-scan-fail-on-findings` path.
 
+Source SCA vulnerabilities should follow the same Trivy severity inputs as image scanning. The `severity` input controls which vulnerability severities are reported and defaults to `CRITICAL,HIGH`. The `blocking-severity` input controls which reported vulnerability severities count toward the fail gate and defaults to `CRITICAL`. `blocking-severity` must be a subset of `severity` to have an effect.
+
 When blocking is enabled:
 
-- a reported vulnerability at or above the configured blocking severity fails the workflow;
+- a reported vulnerability with a severity listed in `blocking-severity` fails the workflow;
 - a verified TruffleHog secret fails the workflow;
 - a license finding never fails the workflow.
 
@@ -164,6 +167,7 @@ source-security-findings.json
 - Unit-style validation of report generation with representative TruffleHog and Trivy JSON fixtures.
 - PR-run verification with:
   - no findings, confirming the compact clean comment;
-  - one high/critical dependency vulnerability, confirming the vulnerability details section and blocking behavior when enabled;
+  - one dependency vulnerability in `severity`, confirming the vulnerability details section;
+  - one dependency vulnerability in `blocking-severity`, confirming blocking behavior when enabled;
   - one high/critical license finding, confirming it appears in the license section but never blocks;
   - one verified secret, confirming the secret details section and blocking behavior when enabled.
