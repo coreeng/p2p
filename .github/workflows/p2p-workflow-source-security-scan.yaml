@@ -1,0 +1,479 @@
+on:
+  workflow_call:
+    inputs:
+      scope:
+        required: true
+        type: string
+      fail-on-findings:
+        required: false
+        type: boolean
+        default: false
+      severity:
+        required: false
+        type: string
+        default: 'CRITICAL,HIGH'
+      blocking-severity:
+        required: false
+        type: string
+        default: 'CRITICAL'
+      ignore-unfixed:
+        required: false
+        type: boolean
+        default: true
+      dry-run:
+        required: false
+        type: boolean
+        default: false
+      timeout-minutes:
+        required: false
+        type: number
+        default: 30
+    outputs:
+      report-file:
+        value: ${{ jobs.report.outputs.report-file }}
+      json-file:
+        value: ${{ jobs.report.outputs.json-file }}
+      vulnerability-total:
+        value: ${{ jobs.report.outputs.vulnerability-total }}
+      vulnerability-blocking:
+        value: ${{ jobs.report.outputs.vulnerability-blocking }}
+      license-total:
+        value: ${{ jobs.report.outputs.license-total }}
+      secret-total:
+        value: ${{ jobs.report.outputs.secret-total }}
+      secret-blocking:
+        value: ${{ jobs.report.outputs.secret-blocking }}
+
+jobs:
+  secret-scan:
+    name: secret-scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    outputs:
+      base: ${{ steps.scan-range.outputs.base }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: scan-range
+        name: Determine scan range
+        if: inputs.scope == 'changes'
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            # PR scan: diff PR branch against the target branch tip
+            echo "base=$PR_BASE_SHA" >> "$GITHUB_OUTPUT"
+          elif [ -n "$PUSH_BEFORE_SHA" ] && [ "$PUSH_BEFORE_SHA" != "0000000000000000000000000000000000000000" ]; then
+            # Push scan: diff the exact range that was just pushed
+            echo "base=$PUSH_BEFORE_SHA" >> "$GITHUB_OUTPUT"
+          elif git rev-parse HEAD^ >/dev/null 2>&1; then
+            # Fallback (e.g. workflow_dispatch, tags, brand-new branch): scan the latest commit
+            echo "base=$(git rev-parse HEAD^)" >> "$GITHUB_OUTPUT"
+          else
+            # Initial commit with no parent: scan just the single commit at HEAD
+            echo "base=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install TruffleHog
+        if: ${{ inputs.dry-run == false }}
+        shell: bash
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/v3.95.3/scripts/install.sh \
+            | sh -s -- -b "$RUNNER_TEMP" v3.95.3
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+
+      - id: scan
+        name: TruffleHog OSS secrets scan
+        if: ${{ inputs.dry-run == false }}
+        shell: bash
+        continue-on-error: true
+        env:
+          SCOPE: ${{ inputs.scope }}
+          BASE: ${{ steps.scan-range.outputs.base }}
+        run: |
+          set +e
+          out="$RUNNER_TEMP/trufflehog-findings.ndjson"
+          # Collect every finding regardless of verification state; the
+          # blocking decision is taken downstream by classifying each
+          # finding (verified / unknown / unverified) from redacted JSON.
+          ARGS=(git "file://$GITHUB_WORKSPACE" --json "--results=verified,unverified,unknown" --no-update)
+          if [ "$SCOPE" = "changes" ]; then
+            ARGS+=(--branch=HEAD)
+            if [ -n "$BASE" ]; then
+              ARGS+=(--since-commit="$BASE")
+            fi
+          fi
+          trufflehog "${ARGS[@]}" > "$out"
+          echo "findings_file=$out" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - id: redact
+        name: Build redacted secret findings
+        if: ${{ always() && inputs.dry-run == false }}
+        shell: bash
+        env:
+          FINDINGS: ${{ steps.scan.outputs.findings_file }}
+          SERVER_URL: ${{ github.server_url }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          redacted="$RUNNER_TEMP/findings.ndjson"
+          : > "$redacted"
+          if [ -s "$FINDINGS" ]; then
+            while IFS= read -r line; do
+              [ -z "$line" ] && continue
+              detector=$(jq -r '.DetectorName // .DetectorType // "unknown"' <<< "$line")
+              raw=$(jq -r '.Raw // ""' <<< "$line")
+              id=$(printf '%s\0%s' "$detector" "$raw" | sha256sum | cut -d' ' -f1)
+              jq -c \
+                --arg id "$id" \
+                --arg server "$SERVER_URL" \
+                --arg repo "$REPOSITORY" '
+                (.SourceMetadata.Data.Git.commit // "") as $commit |
+                (.SourceMetadata.Data.Git.file // "") as $file |
+                (.SourceMetadata.Data.Git.line // "") as $line |
+                ($file | split("/") | map(@uri) | join("/")) as $file_uri |
+                {
+                  id: $id,
+                  detector: (.DetectorName // .DetectorType // "unknown"),
+                  status: (
+                    if .Verified == true then "verified"
+                    elif (.VerificationError // null) != null then "unknown"
+                    else "unverified"
+                    end
+                  ),
+                  file: (if $file == "" then null else $file end),
+                  line: (if $line == "" then null else $line end),
+                  commit: (if $commit == "" then null else $commit end),
+                  url: (
+                    if $commit == "" then null
+                    else $server + "/" + $repo + "/blob/" + $commit
+                      + (if $file == "" then "" else "/" + $file_uri end)
+                      + (if $line == "" then "" else "#L" + ($line | tostring) end)
+                    end
+                  )
+                }
+              ' <<< "$line" >> "$redacted"
+            done < "$FINDINGS"
+          fi
+          echo "redacted_file=$redacted" >> "$GITHUB_OUTPUT"
+
+      - name: Upload redacted secret findings
+        if: ${{ always() && inputs.dry-run == false }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: source-security-internal-secret-findings
+          path: ${{ steps.redact.outputs.redacted_file }}
+          if-no-files-found: warn
+
+  sca-scan:
+    name: sca-scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Trivy
+        if: ${{ inputs.dry-run == false }}
+        uses: aquasecurity/setup-trivy@v0.2.6
+        with:
+          version: v0.70.0
+          cache: true
+
+      - id: scan
+        name: Trivy filesystem SCA scan
+        if: ${{ inputs.dry-run == false }}
+        shell: bash
+        env:
+          SEVERITY: ${{ inputs.severity }}
+          IGNORE_UNFIXED: ${{ inputs.ignore-unfixed }}
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/trivy-fs.json"
+          # License reporting is always HIGH,CRITICAL. The Trivy command must
+          # request the union so a caller narrowing vulnerability severity to
+          # CRITICAL does not suppress HIGH restricted-license results.
+          trivy_severity=$(printf '%s\nHIGH\nCRITICAL\n' "$SEVERITY" | tr ',' '\n' | awk 'NF && !seen[$0]++' | paste -sd, -)
+          args=(fs --format json --scanners "vuln,license" --severity "$trivy_severity" --exit-code 0 --output "$out")
+          if [ "$IGNORE_UNFIXED" = "true" ]; then
+            args+=(--ignore-unfixed)
+          fi
+          args+=("$GITHUB_WORKSPACE")
+          trivy "${args[@]}"
+          if [ ! -f "$out" ]; then
+            echo '{"Results":[]}' > "$out"
+          fi
+          echo "trivy_file=$out" >> "$GITHUB_OUTPUT"
+
+      - name: Upload Trivy findings
+        if: ${{ always() && inputs.dry-run == false }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: source-security-internal-trivy-findings
+          path: ${{ steps.scan.outputs.trivy_file }}
+          if-no-files-found: warn
+
+  report:
+    name: source-security-report
+    runs-on: ubuntu-24.04
+    needs: [secret-scan, sca-scan]
+    if: always()
+    outputs:
+      report-file: ${{ steps.report.outputs.report-file }}
+      json-file: ${{ steps.report.outputs.json-file }}
+      vulnerability-total: ${{ steps.report.outputs.vulnerability-total }}
+      vulnerability-blocking: ${{ steps.report.outputs.vulnerability-blocking }}
+      license-total: ${{ steps.report.outputs.license-total }}
+      secret-total: ${{ steps.report.outputs.secret-total }}
+      secret-blocking: ${{ steps.report.outputs.secret-blocking }}
+    steps:
+      - name: Download secret findings
+        if: ${{ inputs.dry-run == false }}
+        uses: actions/download-artifact@v4
+        with:
+          name: source-security-internal-secret-findings
+          path: ${{ runner.temp }}/source-security/trufflehog
+
+      - name: Download Trivy findings
+        if: ${{ inputs.dry-run == false }}
+        uses: actions/download-artifact@v4
+        with:
+          name: source-security-internal-trivy-findings
+          path: ${{ runner.temp }}/source-security/trivy
+
+      - id: report
+        name: Build source security report
+        uses: actions/github-script@v7
+        env:
+          SCOPE: ${{ inputs.scope }}
+          BASE: ${{ needs.secret-scan.outputs.base }}
+          SEVERITY: ${{ inputs.severity }}
+          BLOCKING_SEVERITY: ${{ inputs.blocking-severity }}
+          DRY_RUN: ${{ inputs.dry-run }}
+          ROOT: ${{ runner.temp }}/source-security
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            const CANONICAL_SEVERITIES = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNKNOWN'];
+            const SEV_RANK = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3, UNKNOWN: 4 };
+
+            const severitySet = value => new Set(String(value || '').split(',').map(s => s.trim()).filter(Boolean));
+            const normalizeSeverity = value => CANONICAL_SEVERITIES.includes(value) ? value : 'UNKNOWN';
+            const escapeCell = value => {
+              const text = value === undefined || value === null || value === '' ? '-' : String(value);
+              return text.replace(/\|/g, '\\|').replace(/[\r\n]/g, ' ');
+            };
+            const readJson = (file, fallback) => {
+              if (!file || !fs.existsSync(file) || fs.statSync(file).size === 0) return fallback;
+              return JSON.parse(fs.readFileSync(file, 'utf8'));
+            };
+            const readLines = file => {
+              if (!file || !fs.existsSync(file) || fs.statSync(file).size === 0) return [];
+              return fs.readFileSync(file, 'utf8').split('\n').filter(Boolean);
+            };
+            const findingWord = count => count === 1 ? 'finding' : 'findings';
+            const sortBySeverity = (a, b) => (
+              (SEV_RANK[a.severity] ?? SEV_RANK.UNKNOWN) - (SEV_RANK[b.severity] ?? SEV_RANK.UNKNOWN)
+              || a.package.localeCompare(b.package)
+              || (a.id || a.license || '').localeCompare(b.id || b.license || '')
+            );
+            const details = (summary, tableLines) => [
+              '<details>',
+              `<summary>${summary}</summary>`,
+              '',
+              ...tableLines,
+              '',
+              '</details>',
+              '',
+            ];
+
+            const root = process.env.ROOT;
+            fs.mkdirSync(root, { recursive: true });
+            const trivyPath = path.join(root, 'trivy', 'trivy-fs.json');
+            const trufflehogPath = path.join(root, 'trufflehog', 'findings.ndjson');
+            const reportSeveritySet = severitySet(process.env.SEVERITY || 'CRITICAL,HIGH');
+            const blockingSeveritySet = severitySet(process.env.BLOCKING_SEVERITY || 'CRITICAL');
+            const trivy = readJson(trivyPath, { Results: [] });
+            const vulnerabilities = [];
+            const licenses = [];
+
+            for (const result of Array.isArray(trivy.Results) ? trivy.Results : []) {
+              const source = result.Target || '-';
+              for (const vuln of Array.isArray(result.Vulnerabilities) ? result.Vulnerabilities : []) {
+                const severity = normalizeSeverity(vuln.Severity);
+                if (!reportSeveritySet.has(severity)) continue;
+                vulnerabilities.push({
+                  id: vuln.VulnerabilityID || 'UNKNOWN',
+                  package: vuln.PkgName || '-',
+                  installed: vuln.InstalledVersion || '-',
+                  fixed: vuln.FixedVersion || '-',
+                  severity,
+                  url: vuln.PrimaryURL || `https://avd.aquasec.com/nvd/${vuln.VulnerabilityID || 'UNKNOWN'}`,
+                  source,
+                  blocking: blockingSeveritySet.has(severity),
+                });
+              }
+              for (const license of Array.isArray(result.Licenses) ? result.Licenses : []) {
+                const severity = normalizeSeverity(license.Severity);
+                if (!['CRITICAL', 'HIGH'].includes(severity)) continue;
+                licenses.push({
+                  package: license.PkgName || '-',
+                  license: license.Name || license.ID || '-',
+                  classification: license.Category || '-',
+                  severity,
+                  source,
+                  blocking: false,
+                });
+              }
+            }
+
+            vulnerabilities.sort(sortBySeverity);
+            licenses.sort(sortBySeverity);
+
+            const secrets = [];
+            for (const line of readLines(trufflehogPath)) {
+              let secret;
+              try {
+                secret = JSON.parse(line);
+              } catch {
+                continue;
+              }
+              secrets.push({
+                id: secret.id,
+                detector: secret.detector || 'unknown',
+                status: secret.status || 'unverified',
+                file: secret.file || null,
+                line: secret.line || null,
+                commit: secret.commit || null,
+                url: secret.url || null,
+                blocking: secret.status === 'verified',
+              });
+            }
+            secrets.sort((a, b) => Number(b.blocking) - Number(a.blocking) || a.detector.localeCompare(b.detector) || String(a.file || '').localeCompare(String(b.file || '')));
+
+            const vulnerabilityBlocking = vulnerabilities.filter(v => v.blocking).length;
+            const secretBlocking = secrets.filter(s => s.blocking).length;
+            const normalized = { vulnerabilities, licenses, secrets };
+            const out = ['## Source security scan', ''];
+            out.push(process.env.SCOPE === 'changes' ? `Scan range: \`${process.env.BASE || '<initial>'}..HEAD\`` : 'Scan range: `<full history>`', '');
+
+            if (process.env.DRY_RUN === 'true') {
+              out.push('_Scan skipped (dry-run)._');
+            } else if (vulnerabilities.length === 0 && licenses.length === 0 && secrets.length === 0) {
+              out.push('No source security findings detected.');
+            } else {
+              out.push(
+                '| Check | Total | Blocking |',
+                '|---|---:|---:|',
+                `| Vulnerabilities | ${vulnerabilities.length} | ${vulnerabilityBlocking} |`,
+                `| Restricted/forbidden licenses | ${licenses.length} | 0 |`,
+                `| Secrets | ${secrets.length} | ${secretBlocking} |`,
+                '',
+                `**Severities reported:** \`${process.env.SEVERITY}\` · **Blocking severities:** \`${process.env.BLOCKING_SEVERITY}\``,
+                '',
+              );
+
+              if (vulnerabilities.length > 0) {
+                const rows = [
+                  '| Severity | Package | Installed | Fixed | ID | Source |',
+                  '|---|---|---|---|---|---|',
+                  ...vulnerabilities.slice(0, 100).map(v => `| ${v.severity} | ${escapeCell(v.package)} | ${escapeCell(v.installed)} | ${escapeCell(v.fixed)} | [${escapeCell(v.id)}](${v.url}) | ${escapeCell(v.source)} |`),
+                ];
+                out.push(...details(`Vulnerabilities: ${vulnerabilities.length} ${findingWord(vulnerabilities.length)}, ${vulnerabilityBlocking} blocking`, rows));
+              }
+
+              if (licenses.length > 0) {
+                const rows = [
+                  '| Severity | Package | License | Classification | Source |',
+                  '|---|---|---|---|---|',
+                  ...licenses.slice(0, 100).map(l => `| ${l.severity} | ${escapeCell(l.package)} | ${escapeCell(l.license)} | ${escapeCell(l.classification)} | ${escapeCell(l.source)} |`),
+                ];
+                out.push(...details(`Restricted/forbidden licenses: ${licenses.length} ${findingWord(licenses.length)}`, rows));
+              }
+
+              if (secrets.length > 0) {
+                const rows = [
+                  '| Detector | Status | File | Line | Commit |',
+                  '|---|---|---|---|---|',
+                  ...secrets.slice(0, 100).map(s => {
+                    const commit = s.commit ? (s.url ? `[${s.commit.slice(0, 12)}](${s.url})` : s.commit.slice(0, 12)) : '-';
+                    return `| ${escapeCell(s.detector)} | ${escapeCell(s.status)} | ${escapeCell(s.file)} | ${escapeCell(s.line)} | ${commit} |`;
+                  }),
+                ];
+                out.push(...details(`Secrets: ${secrets.length} ${findingWord(secrets.length)}, ${secretBlocking} blocking`, rows));
+              }
+
+              for (const [label, count] of [['vulnerability', vulnerabilities.length], ['license', licenses.length], ['secret', secrets.length]]) {
+                if (count > 100) out.push(`_Showing 100 of ${count} ${label} findings - see the full source security artifact for the rest._`, '');
+              }
+            }
+
+            const markdown = out.join('\n').trimEnd() + '\n';
+            const reportPath = path.join(root, 'source-security-report.md');
+            const jsonPath = path.join(root, 'source-security-findings.json');
+            fs.writeFileSync(reportPath, markdown);
+            fs.writeFileSync(jsonPath, JSON.stringify(normalized, null, 2) + '\n');
+            core.setOutput('report-file', reportPath);
+            core.setOutput('json-file', jsonPath);
+            core.setOutput('vulnerability-total', vulnerabilities.length);
+            core.setOutput('vulnerability-blocking', vulnerabilityBlocking);
+            core.setOutput('license-total', licenses.length);
+            core.setOutput('secret-total', secrets.length);
+            core.setOutput('secret-blocking', secretBlocking);
+            await core.summary.addRaw(markdown).write();
+
+      - name: Upsert sticky PR comment
+        if: ${{ always() && github.event_name == 'pull_request' && inputs.dry-run == false }}
+        continue-on-error: true
+        uses: marocchino/sticky-pull-request-comment@v3
+        with:
+          header: source-security-scan-findings
+          path: ${{ steps.report.outputs.report-file }}
+          recreate: true
+
+      - name: Upload source security artifact
+        if: ${{ always() && inputs.dry-run == false }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: source-security-scan-findings
+          path: |
+            ${{ runner.temp }}/source-security/trufflehog
+            ${{ runner.temp }}/source-security/trivy
+            ${{ steps.report.outputs.json-file }}
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Enforce scan policy
+        if: ${{ always() && inputs.dry-run == false }}
+        shell: bash
+        env:
+          FAIL: ${{ inputs.fail-on-findings }}
+          VULN_BLOCKING: ${{ steps.report.outputs.vulnerability-blocking }}
+          SECRET_BLOCKING: ${{ steps.report.outputs.secret-blocking }}
+        run: |
+          set -euo pipefail
+          echo "Trivy source vulnerabilities: total=${{ steps.report.outputs.vulnerability-total }}, blocking=${VULN_BLOCKING:-0}"
+          echo "Trivy restricted/forbidden licenses: total=${{ steps.report.outputs.license-total }}, blocking=0"
+          echo "TruffleHog secrets: total=${{ steps.report.outputs.secret-total }}, blocking=${SECRET_BLOCKING:-0}"
+          echo "fail-on-findings=${FAIL}"
+          if [ "$FAIL" = "true" ]; then
+            failed=0
+            if [ "${VULN_BLOCKING:-0}" -gt 0 ]; then
+              echo "::error::${VULN_BLOCKING} blocking source vulnerability finding(s) detected."
+              failed=1
+            fi
+            if [ "${SECRET_BLOCKING:-0}" -gt 0 ]; then
+              echo "::error::${SECRET_BLOCKING} verified secret finding(s) detected."
+              failed=1
+            fi
+            [ "$failed" -eq 0 ] || exit 1
+          fi
