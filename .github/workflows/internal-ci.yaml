@@ -58,6 +58,14 @@ jobs:
       dry-run: true
       version: ${{ needs.test_version.outputs.version }}
 
+  test_source_security_scan:
+    uses: ./.github/workflows/p2p-workflow-source-security-scan.yaml
+    with:
+      scope: changes
+      fail-on-findings: false
+      dry-run: true
+      timeout-minutes: 10
+
   test_image_scan:
     needs: [test_version]
     uses: ./.github/workflows/p2p-workflow-image-scan.yaml

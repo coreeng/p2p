@@ -50,11 +50,12 @@ on:
         default: 30
 
 jobs:
-  secret-scan:
-    uses: ./.github/workflows/p2p-workflow-secret-scan.yaml
+  source-security-scan:
+    uses: ./.github/workflows/p2p-workflow-source-security-scan.yaml
     with:
       scope: full-history
       fail-on-findings: false
+      dry-run: ${{ inputs.dry-run }}
       timeout-minutes: ${{ inputs.timeout-minutes }}
 
   # Resolve a single anchor image used to look up the latest version per
