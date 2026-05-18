@@ -31,7 +31,8 @@ Adding Trivy filesystem scanning fills that source dependency gap. Because P2P i
 | License blocking | Licenses are report-only. They never fail the workflow, even when `fail-on-findings` is true. |
 | Blocking | When `fail-on-findings` is true, block on vulnerability findings at `blocking-severity` and verified TruffleHog secrets only. |
 | Comment | One sticky PR comment, `header: source-security-scan-findings`, styled like image scanning with a short summary and foldable details sections. |
-| Artifact | Upload one source security artifact containing raw scanner outputs and the normalized merged JSON. |
+| Artifact | Upload one source security artifact containing redacted TruffleHog findings, raw Trivy filesystem output, and normalized merged JSON. |
+| Dry run | Match image-scan behavior: when `dry-run` is true, skip scanner installs, scans, sticky comment, public artifact upload, and policy enforcement. |
 
 ## Architecture
 
@@ -42,7 +43,7 @@ source-security-scan
 |   |-- Determine scan range              (changes scope only)
 |   |-- Install TruffleHog
 |   |-- Scan git history/tree
-|   `-- Upload/emit normalized secret JSON
+|   `-- Upload/emit redacted secret JSON
 |-- sca-scan
 |   |-- Checkout
 |   |-- Install Trivy
@@ -54,7 +55,7 @@ source-security-scan
     |-- Build compact markdown report
     |-- Write workflow summary
     |-- Upsert sticky PR comment          (pull_request only)
-    |-- Upload source security artifact
+    |-- Upload source security artifact     (skip on dry-run)
     `-- Enforce policy                    (if fail-on-findings)
 ```
 
@@ -113,13 +114,13 @@ Scan range: `<base>..HEAD`
 </details>
 ```
 
-Each detail section should be omitted when that scanner has no relevant findings. Long sections should be truncated in the comment, with the full raw and normalized data available in the artifact.
+Each detail section should be omitted when that scanner has no relevant findings. Long sections should be truncated in the comment, with the full redacted TruffleHog findings, raw Trivy output, and normalized data available in the artifact.
 
 ## Policy
 
 The workflow remains visibility-first by default. It reports findings but does not fail unless the caller opts into blocking through the existing `security-scan-fail-on-findings` path.
 
-Source SCA vulnerabilities should follow the same Trivy severity inputs as image scanning. The `severity` input controls which vulnerability severities are reported and defaults to `CRITICAL,HIGH`. The `blocking-severity` input controls which reported vulnerability severities count toward the fail gate and defaults to `CRITICAL`. `blocking-severity` must be a subset of `severity` to have an effect.
+Source SCA vulnerabilities should follow the same Trivy severity inputs as image scanning. The `severity` input controls which vulnerability severities are reported and defaults to `CRITICAL,HIGH`. The `blocking-severity` input controls which reported vulnerability severities count toward the fail gate and defaults to `CRITICAL`. `blocking-severity` must be a subset of `severity` to have an effect. License reporting is always `HIGH,CRITICAL`, even if a caller narrows vulnerability `severity`.
 
 When blocking is enabled:
 
@@ -139,7 +140,7 @@ trivy/trivy-fs.json
 source-security-findings.json
 ```
 
-`source-security-findings.json` should be a normalized merged structure with separate arrays for vulnerabilities, licenses, and secrets. Raw secret values must not be written to normalized JSON, the workflow summary, or the PR comment.
+`trufflehog/findings.ndjson` must be redacted before upload. `source-security-findings.json` should be a normalized merged structure with separate arrays for vulnerabilities, licenses, and secrets. Raw secret values must not be written to artifacts, normalized JSON, the workflow summary, or the PR comment.
 
 ## Risks
 

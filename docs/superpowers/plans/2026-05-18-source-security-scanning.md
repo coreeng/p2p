@@ -4,7 +4,7 @@
 
 **Goal:** Replace git-only secret scanning with a reusable source security scan that reports source dependency vulnerabilities, restricted/forbidden licenses, and committed secrets in one compact PR comment.
 
-**Architecture:** Add a new reusable GitHub workflow that runs TruffleHog and Trivy in parallel, then uses an embedded `actions/github-script` report step to normalize findings, render one compact markdown report, write one merged JSON artifact, and enforce the same severity/blocking model used by image scanning. This deliberately follows the existing `p2p-workflow-image-scan.yaml` pattern instead of adding a separate report script.
+**Architecture:** Add a new reusable GitHub workflow that runs TruffleHog and Trivy in parallel, then uses an embedded `actions/github-script` report step to normalize findings, render one compact markdown report, write one merged JSON artifact, and enforce the same severity/blocking model used by image scanning. This deliberately follows the existing `p2p-workflow-image-scan.yaml` pattern instead of adding a separate report script. The workflow includes a `dry-run` input so internal CI and dry-run fast-feedback do not run scanners, post comments, upload public findings artifacts, or enforce policy.
 
 **Tech Stack:** GitHub Actions reusable workflows, embedded `actions/github-script@v7`, TruffleHog OSS `git` scanner, Trivy `fs` scanner, `actionlint`, Markdown docs.
 
@@ -12,7 +12,7 @@
 
 ## File Structure
 
-- Create `.github/workflows/p2p-workflow-source-security-scan.yaml`: reusable workflow with `secret-scan`, `sca-scan`, and `report` jobs. The `report` job owns all embedded JavaScript for parsing, redaction, markdown rendering, normalized JSON, output counts, and policy inputs.
+- Create `.github/workflows/p2p-workflow-source-security-scan.yaml`: reusable workflow with `secret-scan`, `sca-scan`, and `report` jobs. The `report` job owns all embedded JavaScript for parsing, redaction, markdown rendering, normalized JSON, output counts, and policy inputs. Scanner jobs use internally named artifacts only to transfer redacted TruffleHog output and raw Trivy output into the final report job.
 - Delete `.github/workflows/p2p-workflow-secret-scan.yaml`: replaced by the source security workflow.
 - Modify `.github/workflows/p2p-workflow-fastfeedback.yaml`: replace `secret-scan` job with `source-security-scan`, keep source workflow severity defaults aligned with image scanning, and update `needs`.
 - Modify `.github/workflows/p2p-workflow-security-scan.yaml`: replace scheduled `secret-scan` job with `source-security-scan`.
@@ -54,6 +54,10 @@ on:
         required: false
         type: boolean
         default: true
+      dry-run:
+        required: false
+        type: boolean
+        default: false
       timeout-minutes:
         required: false
         type: number
@@ -62,9 +66,9 @@ on:
 
 - [ ] **Step 2: Add `secret-scan` job**
 
-Copy the checkout, scan-range, TruffleHog install, and TruffleHog scan steps from the existing `.github/workflows/p2p-workflow-secret-scan.yaml`. Keep `fetch-depth: 0`, `--results=verified,unverified,unknown`, and `continue-on-error: true`.
+Copy the checkout, scan-range, TruffleHog install, and TruffleHog scan steps from the existing `.github/workflows/p2p-workflow-secret-scan.yaml`. Keep `fetch-depth: 0`, `--results=verified,unverified,unknown`, and `continue-on-error: true`. Do not upload raw TruffleHog output because it can contain secret material; create and transfer a redacted NDJSON file instead.
 
-The job must expose the range and upload raw NDJSON:
+The job must expose the range and upload redacted NDJSON:
 
 ```yaml
 jobs:
@@ -100,6 +104,7 @@ jobs:
           fi
 
       - name: Install TruffleHog
+        if: ${{ inputs.dry-run == false }}
         shell: bash
         run: |
           curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/v3.95.3/scripts/install.sh \
@@ -108,6 +113,7 @@ jobs:
 
       - id: scan
         name: TruffleHog OSS secrets scan
+        if: ${{ inputs.dry-run == false }}
         shell: bash
         continue-on-error: true
         env:
@@ -127,12 +133,63 @@ jobs:
           echo "findings_file=$out" >> "$GITHUB_OUTPUT"
           exit 0
 
-      - name: Upload secret findings
-        if: always()
+      - id: redact
+        name: Build redacted secret findings
+        if: ${{ always() && inputs.dry-run == false }}
+        shell: bash
+        env:
+          FINDINGS: ${{ steps.scan.outputs.findings_file }}
+          SERVER_URL: ${{ github.server_url }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          redacted="$RUNNER_TEMP/findings.ndjson"
+          : > "$redacted"
+          if [ -s "$FINDINGS" ]; then
+            while IFS= read -r line; do
+              [ -z "$line" ] && continue
+              detector=$(jq -r '.DetectorName // .DetectorType // "unknown"' <<< "$line")
+              raw=$(jq -r '.Raw // ""' <<< "$line")
+              id=$(printf '%s\0%s' "$detector" "$raw" | sha256sum | cut -d' ' -f1)
+              jq -c \
+                --arg id "$id" \
+                --arg server "$SERVER_URL" \
+                --arg repo "$REPOSITORY" '
+                (.SourceMetadata.Data.Git.commit // "") as $commit |
+                (.SourceMetadata.Data.Git.file // "") as $file |
+                (.SourceMetadata.Data.Git.line // "") as $line |
+                ($file | split("/") | map(@uri) | join("/")) as $file_uri |
+                {
+                  id: $id,
+                  detector: (.DetectorName // .DetectorType // "unknown"),
+                  status: (
+                    if .Verified == true then "verified"
+                    elif (.VerificationError // null) != null then "unknown"
+                    else "unverified"
+                    end
+                  ),
+                  file: (if $file == "" then null else $file end),
+                  line: (if $line == "" then null else $line end),
+                  commit: (if $commit == "" then null else $commit end),
+                  url: (
+                    if $commit == "" then null
+                    else $server + "/" + $repo + "/blob/" + $commit
+                      + (if $file == "" then "" else "/" + $file_uri end)
+                      + (if $line == "" then "" else "#L" + ($line | tostring) end)
+                    end
+                  )
+                }
+              ' <<< "$line" >> "$redacted"
+            done < "$FINDINGS"
+          fi
+          echo "redacted_file=$redacted" >> "$GITHUB_OUTPUT"
+
+      - name: Upload redacted secret findings
+        if: ${{ always() && inputs.dry-run == false }}
         uses: actions/upload-artifact@v4
         with:
-          name: source-security-secret-findings
-          path: ${{ steps.scan.outputs.findings_file }}
+          name: source-security-internal-secret-findings
+          path: ${{ steps.redact.outputs.redacted_file }}
           if-no-files-found: warn
 ```
 
@@ -150,6 +207,7 @@ Add a parallel Trivy filesystem job:
         uses: actions/checkout@v4
 
       - name: Install Trivy
+        if: ${{ inputs.dry-run == false }}
         uses: aquasecurity/setup-trivy@v0.2.6
         with:
           version: v0.70.0
@@ -157,15 +215,19 @@ Add a parallel Trivy filesystem job:
 
       - id: scan
         name: Trivy filesystem SCA scan
+        if: ${{ inputs.dry-run == false }}
         shell: bash
-        continue-on-error: true
         env:
           SEVERITY: ${{ inputs.severity }}
           IGNORE_UNFIXED: ${{ inputs.ignore-unfixed }}
         run: |
-          set +e
+          set -euo pipefail
           out="$RUNNER_TEMP/trivy-fs.json"
-          args=(fs --format json --scanners vuln,license --severity "$SEVERITY" --exit-code 0 --output "$out")
+          # License reporting is always HIGH,CRITICAL. The Trivy command must
+          # request the union so a caller narrowing vulnerability severity to
+          # CRITICAL does not suppress HIGH restricted-license results.
+          trivy_severity=$(printf '%s\nHIGH\nCRITICAL\n' "$SEVERITY" | tr ',' '\n' | awk 'NF && !seen[$0]++' | paste -sd, -)
+          args=(fs --format json --scanners vuln,license --severity "$trivy_severity" --exit-code 0 --output "$out")
           if [ "$IGNORE_UNFIXED" = "true" ]; then
             args+=(--ignore-unfixed)
           fi
@@ -175,13 +237,12 @@ Add a parallel Trivy filesystem job:
             echo '{"Results":[]}' > "$out"
           fi
           echo "trivy_file=$out" >> "$GITHUB_OUTPUT"
-          exit 0
 
       - name: Upload Trivy findings
-        if: always()
+        if: ${{ always() && inputs.dry-run == false }}
         uses: actions/upload-artifact@v4
         with:
-          name: source-security-trivy-findings
+          name: source-security-internal-trivy-findings
           path: ${{ steps.scan.outputs.trivy_file }}
           if-no-files-found: warn
 ```
@@ -198,15 +259,17 @@ Add the final report job:
     if: always()
     steps:
       - name: Download secret findings
+        if: ${{ inputs.dry-run == false }}
         uses: actions/download-artifact@v4
         with:
-          name: source-security-secret-findings
+          name: source-security-internal-secret-findings
           path: ${{ runner.temp }}/source-security/trufflehog
 
       - name: Download Trivy findings
+        if: ${{ inputs.dry-run == false }}
         uses: actions/download-artifact@v4
         with:
-          name: source-security-trivy-findings
+          name: source-security-internal-trivy-findings
           path: ${{ runner.temp }}/source-security/trivy
 
       - id: report
@@ -217,12 +280,12 @@ Add the final report job:
           BASE: ${{ needs.secret-scan.outputs.base }}
           SEVERITY: ${{ inputs.severity }}
           BLOCKING_SEVERITY: ${{ inputs.blocking-severity }}
+          DRY_RUN: ${{ inputs.dry-run }}
           ROOT: ${{ runner.temp }}/source-security
         with:
           script: |
             const fs = require('fs');
             const path = require('path');
-            const crypto = require('crypto');
 ```
 
 - [ ] **Step 5: Add embedded JavaScript helpers**
@@ -270,8 +333,9 @@ Continue inside the same `script: |` block:
 
 ```js
             const root = process.env.ROOT;
+            fs.mkdirSync(root, { recursive: true });
             const trivyPath = path.join(root, 'trivy', 'trivy-fs.json');
-            const trufflehogPath = path.join(root, 'trufflehog', 'trufflehog-findings.ndjson');
+            const trufflehogPath = path.join(root, 'trufflehog', 'findings.ndjson');
             const reportSeveritySet = severitySet(process.env.SEVERITY || 'CRITICAL,HIGH');
             const blockingSeveritySet = severitySet(process.env.BLOCKING_SEVERITY || 'CRITICAL');
             const trivy = readJson(trivyPath, { Results: [] });
@@ -317,39 +381,23 @@ Continue inside the same `script: |` block:
 Continue inside the same `script: |` block:
 
 ```js
-            const secretStatus = finding => {
-              if (finding.Verified === true) return 'verified';
-              if (finding.VerificationError) return 'unknown';
-              return 'unverified';
-            };
-            const secretUrl = ({ commit, file, line }) => {
-              if (!commit) return null;
-              const filePath = file ? '/' + file.split('/').map(encodeURIComponent).join('/') : '';
-              const lineSuffix = line ? `#L${line}` : '';
-              return `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/blob/${commit}${filePath}${lineSuffix}`;
-            };
             const secrets = [];
             for (const line of readLines(trufflehogPath)) {
-              let finding;
+              let secret;
               try {
-                finding = JSON.parse(line);
+                secret = JSON.parse(line);
               } catch {
                 continue;
               }
-              const detector = finding.DetectorName || finding.DetectorType || 'unknown';
-              const raw = finding.Raw || '';
-              const id = crypto.createHash('sha256').update(`${detector}\0${raw}`).digest('hex');
-              const git = finding.SourceMetadata?.Data?.Git || {};
-              const status = secretStatus(finding);
               secrets.push({
-                id,
-                detector,
-                status,
-                file: git.file || null,
-                line: git.line || null,
-                commit: git.commit || null,
-                url: secretUrl({ commit: git.commit, file: git.file, line: git.line }),
-                blocking: status === 'verified',
+                id: secret.id,
+                detector: secret.detector || 'unknown',
+                status: secret.status || 'unverified',
+                file: secret.file || null,
+                line: secret.line || null,
+                commit: secret.commit || null,
+                url: secret.url || null,
+                blocking: secret.status === 'verified',
               });
             }
             secrets.sort((a, b) => Number(b.blocking) - Number(a.blocking) || a.detector.localeCompare(b.detector) || String(a.file || '').localeCompare(String(b.file || '')));
@@ -366,7 +414,9 @@ Continue inside the same `script: |` block:
             const out = ['## Source security scan', ''];
             out.push(process.env.SCOPE === 'changes' ? `Scan range: \`${process.env.BASE || '<initial>'}..HEAD\`` : 'Scan range: `<full history>`', '');
 
-            if (vulnerabilities.length === 0 && licenses.length === 0 && secrets.length === 0) {
+            if (process.env.DRY_RUN === 'true') {
+              out.push('_Scan skipped (dry-run)._');
+            } else if (vulnerabilities.length === 0 && licenses.length === 0 && secrets.length === 0) {
               out.push('No source security findings detected.');
             } else {
               out.push(
@@ -436,7 +486,7 @@ Add these steps after the embedded report:
 
 ```yaml
       - name: Upsert sticky PR comment
-        if: always() && github.event_name == 'pull_request'
+        if: ${{ always() && github.event_name == 'pull_request' && inputs.dry-run == false }}
         continue-on-error: true
         uses: marocchino/sticky-pull-request-comment@v3
         with:
@@ -445,7 +495,7 @@ Add these steps after the embedded report:
           recreate: true
 
       - name: Upload source security artifact
-        if: always()
+        if: ${{ always() && inputs.dry-run == false }}
         uses: actions/upload-artifact@v4
         with:
           name: source-security-scan-findings
@@ -457,7 +507,7 @@ Add these steps after the embedded report:
           retention-days: 30
 
       - name: Enforce scan policy
-        if: always()
+        if: ${{ always() && inputs.dry-run == false }}
         shell: bash
         env:
           FAIL: ${{ inputs.fail-on-findings }}
@@ -523,6 +573,7 @@ In `.github/workflows/p2p-workflow-fastfeedback.yaml`, replace:
     with:
       scope: changes
       fail-on-findings: ${{ inputs.security-scan-fail-on-findings }}
+      dry-run: ${{ inputs.dry-run }}
       timeout-minutes: 10
 ```
 
@@ -573,6 +624,7 @@ In `.github/workflows/p2p-workflow-security-scan.yaml`, replace the `secret-scan
     with:
       scope: full-history
       fail-on-findings: false
+      dry-run: ${{ inputs.dry-run }}
       timeout-minutes: ${{ inputs.timeout-minutes }}
 ```
 
@@ -586,6 +638,7 @@ Add this job to `.github/workflows/internal-ci.yaml` after `test_fastfeedback`:
     with:
       scope: changes
       fail-on-findings: false
+      dry-run: true
       timeout-minutes: 10
 ```
 
@@ -653,6 +706,7 @@ jobs:
 | `severity` | string | No | `CRITICAL,HIGH` | Comma-separated Trivy vulnerability severities to report, matching image scan semantics. |
 | `blocking-severity` | string | No | `CRITICAL` | Comma-separated vulnerability severities that count towards the blocking policy. Must be a subset of `severity` to have an effect. |
 | `ignore-unfixed` | boolean | No | `true` | Passed to Trivy vulnerability scanning. |
+| `dry-run` | boolean | No | `false` | When `true`, skips scanner installs, scans, sticky PR comments, artifact upload, and policy enforcement. The summary reports that the scan was skipped. |
 | `timeout-minutes` | number | No | `30` | Job timeout for scanner jobs. |
 
 ## Permissions
@@ -668,7 +722,7 @@ None. Results are surfaced via:
 
 - workflow summary;
 - sticky PR comment with `header: source-security-scan-findings` on `pull_request` events;
-- `source-security-scan-findings` artifact.
+- `source-security-scan-findings` artifact containing redacted TruffleHog findings, raw Trivy filesystem output, and normalized merged JSON.
 
 ## Blocking policy
 
@@ -678,6 +732,8 @@ The workflow is visibility-first by default. When `fail-on-findings: true`, it f
 - TruffleHog findings with `status: verified`.
 
 Restricted and forbidden license findings are report-only, even when `fail-on-findings: true`.
+
+Trivy license classifications are triage signals, not a P2P-wide legal policy. Organization-specific allow/deny policy is out of scope for this version.
 ```
 
 - [ ] **Step 2: Delete old secret reference**
@@ -698,6 +754,12 @@ In `docs/how-to/triage-security-findings.md`, replace the source table rows for 
 | Image secrets | `image-scan-findings` (same comment) | `image-scan-reports-<env>` |
 ```
 
+Add this caveat below the source-security table explanation:
+
+```markdown
+Restricted and forbidden license findings are shown for triage only. Trivy's license classification is not a legal decision and is not a P2P-wide organization policy; confirm the finding against your organization's open-source policy before taking enforcement action.
+```
+
 - [ ] **Step 4: Update fast-feedback reference**
 
 In `docs/reference/p2p-workflow-fastfeedback.md`, replace `secret-scan` wording with `source-security-scan` and describe:
@@ -715,7 +777,7 @@ source-security-scan  (independent of build; runs in parallel)
 In `docs/reference/p2p-workflow-security-scan.md`, replace `secret-scan` with `source-security-scan` in the summary, job graph, outputs, and see-also links. The outputs section must include:
 
 ```markdown
-- `source-security-scan-findings` artifact from the source-security-scan job. Contains raw TruffleHog output, raw Trivy filesystem output, and normalized merged JSON.
+- `source-security-scan-findings` artifact from the source-security-scan job. Contains redacted TruffleHog output, raw Trivy filesystem output, and normalized merged JSON.
 ```
 
 - [ ] **Step 6: Update README and explanation docs**
