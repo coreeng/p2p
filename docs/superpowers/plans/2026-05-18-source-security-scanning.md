@@ -4,17 +4,15 @@
 
 **Goal:** Replace git-only secret scanning with a reusable source security scan that reports source dependency vulnerabilities, restricted/forbidden licenses, and committed secrets in one compact PR comment.
 
-**Architecture:** Add a focused Node report module that normalizes TruffleHog and Trivy JSON into one markdown report plus one merged JSON artifact. Add a new reusable GitHub workflow that runs TruffleHog and Trivy in parallel, calls the report module in a final job, and enforces the same severity/blocking model used by image scanning. Update orchestrator workflows and docs to use `p2p-workflow-source-security-scan.yaml`.
+**Architecture:** Add a new reusable GitHub workflow that runs TruffleHog and Trivy in parallel, then uses an embedded `actions/github-script` report step to normalize findings, render one compact markdown report, write one merged JSON artifact, and enforce the same severity/blocking model used by image scanning. This deliberately follows the existing `p2p-workflow-image-scan.yaml` pattern instead of adding a separate report script.
 
-**Tech Stack:** GitHub Actions reusable workflows, TruffleHog OSS `git` scanner, Trivy `fs` scanner, Node.js 20 built-ins (`node:test`, `node:assert`, `node:fs`, `node:path`), `actionlint`, Markdown docs.
+**Tech Stack:** GitHub Actions reusable workflows, embedded `actions/github-script@v7`, TruffleHog OSS `git` scanner, Trivy `fs` scanner, `actionlint`, Markdown docs.
 
 ---
 
 ## File Structure
 
-- Create `.github/scripts/source-security-report.mjs`: pure report builder and CLI. Responsibilities: parse raw scanner files, apply severity filters, redact/normalize findings, render compact markdown with `<details>` sections, and write output files/counts.
-- Create `.github/scripts/source-security-report.test.mjs`: Node unit tests with inline fixtures for clean scans, vulnerability filtering/blocking, license report-only behavior, and verified secret blocking.
-- Create `.github/workflows/p2p-workflow-source-security-scan.yaml`: reusable workflow with `secret-scan`, `sca-scan`, and `report` jobs.
+- Create `.github/workflows/p2p-workflow-source-security-scan.yaml`: reusable workflow with `secret-scan`, `sca-scan`, and `report` jobs. The `report` job owns all embedded JavaScript for parsing, redaction, markdown rendering, normalized JSON, output counts, and policy inputs.
 - Delete `.github/workflows/p2p-workflow-secret-scan.yaml`: replaced by the source security workflow.
 - Modify `.github/workflows/p2p-workflow-fastfeedback.yaml`: replace `secret-scan` job with `source-security-scan`, keep source workflow severity defaults aligned with image scanning, and update `needs`.
 - Modify `.github/workflows/p2p-workflow-security-scan.yaml`: replace scheduled `secret-scan` job with `source-security-scan`.
@@ -23,382 +21,7 @@
 - Delete `docs/reference/p2p-workflow-secret-scan.md`: replaced by the source security reference.
 - Modify docs that mention secrets/security scanning: `README.md`, `docs/reference/p2p-workflow-fastfeedback.md`, `docs/reference/p2p-workflow-security-scan.md`, `docs/explanation/secrets-scanning.md`, `docs/explanation/image-scanning.md`, `docs/how-to/enable-scheduled-secrets-scanning.md`, `docs/how-to/triage-security-findings.md`, and `docs/tutorials/getting-started.md`.
 
-## Task 1: Report Module Tests
-
-**Files:**
-- Create: `.github/scripts/source-security-report.test.mjs`
-- Create: `.github/scripts/source-security-report.mjs`
-
-- [ ] **Step 1: Create the report module skeleton**
-
-Create `.github/scripts/source-security-report.mjs` with exported functions and a CLI guard. The first version can return empty results so tests fail on missing behavior rather than missing imports.
-
-```js
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-export const CANONICAL_SEVERITIES = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNKNOWN'];
-
-export function buildSourceSecurityReport(options) {
-  return {
-    markdown: '## Source security scan\n\nNo source security findings detected.\n',
-    normalized: { vulnerabilities: [], licenses: [], secrets: [] },
-    counts: {
-      vulnerabilityTotal: 0,
-      vulnerabilityBlocking: 0,
-      licenseTotal: 0,
-      secretTotal: 0,
-      secretBlocking: 0,
-    },
-  };
-}
-
-export function runCli(argv = process.argv, env = process.env) {
-  const args = Object.fromEntries(argv.slice(2).map(arg => {
-    const [key, ...rest] = arg.replace(/^--/, '').split('=');
-    return [key, rest.join('=')];
-  }));
-  const result = buildSourceSecurityReport({
-    trivyPath: args.trivy,
-    trufflehogPath: args.trufflehog,
-    changedFilesPath: args.changedFiles,
-    scope: args.scope || 'changes',
-    base: args.base || '',
-    severity: args.severity || 'CRITICAL,HIGH',
-    blockingSeverity: args.blockingSeverity || 'CRITICAL',
-    serverUrl: env.GITHUB_SERVER_URL || 'https://github.com',
-    repository: env.GITHUB_REPOSITORY || '',
-    runUrl: args.runUrl || '',
-  });
-  fs.mkdirSync(path.dirname(args.markdownOut), { recursive: true });
-  fs.mkdirSync(path.dirname(args.jsonOut), { recursive: true });
-  fs.writeFileSync(args.markdownOut, result.markdown);
-  fs.writeFileSync(args.jsonOut, JSON.stringify(result.normalized, null, 2) + '\n');
-  fs.writeFileSync(args.outputsOut, Object.entries(result.counts).map(([k, v]) => `${k}=${v}`).join('\n') + '\n');
-  return result;
-}
-
-const thisFile = fileURLToPath(import.meta.url);
-if (process.argv[1] === thisFile) {
-  runCli();
-}
-```
-
-- [ ] **Step 2: Write failing tests for clean output, severity filtering, license reporting, and secret blocking**
-
-Create `.github/scripts/source-security-report.test.mjs`:
-
-```js
-import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
-import test from 'node:test';
-import { buildSourceSecurityReport } from './source-security-report.mjs';
-
-function tmpFile(name, content) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'source-security-'));
-  const file = path.join(dir, name);
-  fs.writeFileSync(file, content);
-  return file;
-}
-
-const baseOptions = {
-  scope: 'changes',
-  base: 'abc123',
-  severity: 'CRITICAL,HIGH',
-  blockingSeverity: 'CRITICAL',
-  serverUrl: 'https://github.com',
-  repository: 'coreeng/example',
-  runUrl: 'https://github.com/coreeng/example/actions/runs/1',
-};
-
-test('clean scan renders a compact clean comment', () => {
-  const trivyPath = tmpFile('trivy.json', JSON.stringify({ Results: [] }));
-  const trufflehogPath = tmpFile('trufflehog.ndjson', '');
-  const result = buildSourceSecurityReport({ ...baseOptions, trivyPath, trufflehogPath });
-
-  assert.equal(result.counts.vulnerabilityTotal, 0);
-  assert.equal(result.counts.licenseTotal, 0);
-  assert.equal(result.counts.secretTotal, 0);
-  assert.match(result.markdown, /^## Source security scan/);
-  assert.match(result.markdown, /No source security findings detected\./);
-  assert.doesNotMatch(result.markdown, /<details>/);
-});
-
-test('vulnerability reporting uses severity and blocking-severity like image scan', () => {
-  const trivyPath = tmpFile('trivy.json', JSON.stringify({
-    Results: [{
-      Target: 'package-lock.json',
-      Vulnerabilities: [
-        { VulnerabilityID: 'CVE-1', PkgName: 'critical-lib', InstalledVersion: '1.0.0', FixedVersion: '1.0.1', Severity: 'CRITICAL', PrimaryURL: 'https://example.test/CVE-1' },
-        { VulnerabilityID: 'CVE-2', PkgName: 'high-lib', InstalledVersion: '2.0.0', FixedVersion: '2.0.1', Severity: 'HIGH', PrimaryURL: 'https://example.test/CVE-2' },
-        { VulnerabilityID: 'CVE-3', PkgName: 'medium-lib', InstalledVersion: '3.0.0', FixedVersion: '3.0.1', Severity: 'MEDIUM', PrimaryURL: 'https://example.test/CVE-3' },
-      ],
-    }],
-  }));
-  const result = buildSourceSecurityReport({ ...baseOptions, trivyPath, trufflehogPath: tmpFile('trufflehog.ndjson', '') });
-
-  assert.equal(result.counts.vulnerabilityTotal, 2);
-  assert.equal(result.counts.vulnerabilityBlocking, 1);
-  assert.match(result.markdown, /critical-lib/);
-  assert.match(result.markdown, /high-lib/);
-  assert.doesNotMatch(result.markdown, /medium-lib/);
-});
-
-test('high and critical licenses are reported but never blocking', () => {
-  const trivyPath = tmpFile('trivy.json', JSON.stringify({
-    Results: [{
-      Target: 'package-lock.json',
-      Licenses: [
-        { PkgName: 'restricted-lib', Name: 'GPL-2.0', Category: 'restricted', Severity: 'HIGH' },
-        { PkgName: 'forbidden-lib', Name: 'AGPL-3.0', Category: 'forbidden', Severity: 'CRITICAL' },
-        { PkgName: 'permissive-lib', Name: 'MIT', Category: 'permissive', Severity: 'LOW' },
-      ],
-    }],
-  }));
-  const result = buildSourceSecurityReport({ ...baseOptions, trivyPath, trufflehogPath: tmpFile('trufflehog.ndjson', '') });
-
-  assert.equal(result.counts.licenseTotal, 2);
-  assert.match(result.markdown, /Restricted\/forbidden licenses: 2 findings/);
-  assert.match(result.markdown, /restricted-lib/);
-  assert.match(result.markdown, /forbidden-lib/);
-  assert.doesNotMatch(result.markdown, /permissive-lib/);
-  assert.equal(result.normalized.licenses.every(l => l.blocking === false), true);
-});
-
-test('verified TruffleHog findings are blocking and raw secrets are redacted', () => {
-  const trufflehogLine = JSON.stringify({
-    DetectorName: 'AWS',
-    Raw: 'AKIAREDACTME',
-    Verified: true,
-    SourceMetadata: { Data: { Git: { commit: 'abcdef1234567890', file: 'config/secrets.yaml', line: 12 } } },
-  });
-  const result = buildSourceSecurityReport({
-    ...baseOptions,
-    trivyPath: tmpFile('trivy.json', JSON.stringify({ Results: [] })),
-    trufflehogPath: tmpFile('trufflehog.ndjson', `${trufflehogLine}\n`),
-  });
-
-  assert.equal(result.counts.secretTotal, 1);
-  assert.equal(result.counts.secretBlocking, 1);
-  assert.match(result.markdown, /Secrets: 1 finding, 1 blocking/);
-  assert.match(result.markdown, /config\/secrets.yaml/);
-  assert.doesNotMatch(JSON.stringify(result.normalized), /AKIAREDACTME/);
-});
-```
-
-- [ ] **Step 3: Run tests and verify they fail for missing behavior**
-
-Run:
-
-```bash
-rtk node --test .github/scripts/source-security-report.test.mjs
-```
-
-Expected: at least the vulnerability, license, and secret tests fail because the skeleton returns empty normalized data.
-
-## Task 2: Report Module Implementation
-
-**Files:**
-- Modify: `.github/scripts/source-security-report.mjs`
-- Modify: `.github/scripts/source-security-report.test.mjs`
-
-- [ ] **Step 1: Implement shared helpers**
-
-Add helpers to `.github/scripts/source-security-report.mjs`:
-
-```js
-const SEV_RANK = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3, UNKNOWN: 4 };
-
-function severitySet(csv) {
-  return new Set(String(csv || '').split(',').map(s => s.trim()).filter(Boolean));
-}
-
-function normalizeSeverity(value) {
-  return CANONICAL_SEVERITIES.includes(value) ? value : 'UNKNOWN';
-}
-
-function escapeCell(value) {
-  const text = value === undefined || value === null || value === '' ? '-' : String(value);
-  return text.replace(/\|/g, '\\|').replace(/[\r\n]/g, ' ');
-}
-
-function singular(count, one, many) {
-  return count === 1 ? one : many;
-}
-
-function readJson(file, fallback) {
-  if (!file || !fs.existsSync(file) || fs.statSync(file).size === 0) return fallback;
-  return JSON.parse(fs.readFileSync(file, 'utf8'));
-}
-
-function readLines(file) {
-  if (!file || !fs.existsSync(file) || fs.statSync(file).size === 0) return [];
-  return fs.readFileSync(file, 'utf8').split('\n').filter(Boolean);
-}
-```
-
-- [ ] **Step 2: Implement Trivy vulnerability and license normalization**
-
-Inside `buildSourceSecurityReport`, parse `trivyPath` and produce:
-
-```js
-const reportSeveritySet = severitySet(options.severity || 'CRITICAL,HIGH');
-const blockingSeveritySet = severitySet(options.blockingSeverity || 'CRITICAL');
-const trivy = readJson(options.trivyPath, { Results: [] });
-const results = Array.isArray(trivy.Results) ? trivy.Results : [];
-const vulnerabilities = [];
-const licenses = [];
-
-for (const result of results) {
-  const source = result.Target || '-';
-  for (const vuln of Array.isArray(result.Vulnerabilities) ? result.Vulnerabilities : []) {
-    const severity = normalizeSeverity(vuln.Severity);
-    if (!reportSeveritySet.has(severity)) continue;
-    vulnerabilities.push({
-      id: vuln.VulnerabilityID || 'UNKNOWN',
-      package: vuln.PkgName || '-',
-      installed: vuln.InstalledVersion || '-',
-      fixed: vuln.FixedVersion || '-',
-      severity,
-      url: vuln.PrimaryURL || `https://avd.aquasec.com/nvd/${vuln.VulnerabilityID || 'UNKNOWN'}`,
-      source,
-      blocking: blockingSeveritySet.has(severity),
-    });
-  }
-  for (const license of Array.isArray(result.Licenses) ? result.Licenses : []) {
-    const severity = normalizeSeverity(license.Severity);
-    if (!new Set(['CRITICAL', 'HIGH']).has(severity)) continue;
-    licenses.push({
-      package: license.PkgName || '-',
-      license: license.Name || license.ID || '-',
-      classification: license.Category || '-',
-      severity,
-      source,
-      blocking: false,
-    });
-  }
-}
-```
-
-Sort vulnerabilities by severity rank, then package, then id. Sort licenses by severity rank, then package, then license.
-
-- [ ] **Step 3: Implement TruffleHog normalization**
-
-Parse each NDJSON line in `trufflehogPath`. Use the existing secret workflow's status semantics and stable id strategy, but do not include `Raw` in output:
-
-```js
-import crypto from 'node:crypto';
-
-function secretStatus(finding) {
-  if (finding.Verified === true) return 'verified';
-  if (finding.VerificationError) return 'unknown';
-  return 'unverified';
-}
-
-function secretUrl({ serverUrl, repository, commit, file, line }) {
-  if (!commit || !repository) return null;
-  const filePath = file ? '/' + file.split('/').map(encodeURIComponent).join('/') : '';
-  const lineSuffix = line ? `#L${line}` : '';
-  return `${serverUrl}/${repository}/blob/${commit}${filePath}${lineSuffix}`;
-}
-```
-
-For each valid finding:
-
-```js
-const detector = finding.DetectorName || finding.DetectorType || 'unknown';
-const raw = finding.Raw || '';
-const id = crypto.createHash('sha256').update(`${detector}\0${raw}`).digest('hex');
-const git = finding.SourceMetadata?.Data?.Git || {};
-const status = secretStatus(finding);
-secrets.push({
-  id,
-  detector,
-  status,
-  file: git.file || null,
-  line: git.line || null,
-  commit: git.commit || null,
-  url: secretUrl({ serverUrl: options.serverUrl, repository: options.repository, commit: git.commit, file: git.file, line: git.line }),
-  blocking: status === 'verified',
-});
-```
-
-- [ ] **Step 4: Render compact markdown**
-
-Render:
-
-```markdown
-## Source security scan
-
-Scan range: `<base>..HEAD`
-
-| Check | Total | Blocking |
-|---|---:|---:|
-| Vulnerabilities | ... | ... |
-| Restricted/forbidden licenses | ... | 0 |
-| Secrets | ... | ... |
-```
-
-Then append details only for non-empty sections:
-
-```js
-function details(summary, tableLines) {
-  return [
-    '<details>',
-    `<summary>${summary}</summary>`,
-    '',
-    ...tableLines,
-    '',
-    '</details>',
-    '',
-  ];
-}
-```
-
-Use explicit tables with explicit separator rows:
-
-```markdown
-| Severity | Package | Installed | Fixed | ID | Source |
-|---|---|---|---|---|---|
-| Severity | Package | License | Classification | Source |
-|---|---|---|---|---|
-| Detector | Status | File | Line | Commit |
-|---|---|---|---|---|
-```
-
-For secrets, render the commit as a markdown link when `url` is present and a 12-character short SHA is available.
-
-- [ ] **Step 5: Add truncation**
-
-Limit each details table to 100 rows, preserving blocking rows first for vulnerabilities and secrets. Add the footer when truncated:
-
-```markdown
-_Showing 100 of 137 findings - see the full source security artifact for the rest._
-```
-
-- [ ] **Step 6: Run report tests**
-
-Run:
-
-```bash
-rtk node --test .github/scripts/source-security-report.test.mjs
-```
-
-Expected: all tests pass.
-
-- [ ] **Step 7: Commit report module**
-
-Run:
-
-```bash
-rtk git add .github/scripts/source-security-report.mjs .github/scripts/source-security-report.test.mjs
-rtk git commit -m "feat(source-security): add report builder"
-```
-
-## Task 3: New Source Security Workflow
+## Task 1: New Source Security Workflow
 
 **Files:**
 - Create: `.github/workflows/p2p-workflow-source-security-scan.yaml`
@@ -439,7 +62,9 @@ on:
 
 - [ ] **Step 2: Add `secret-scan` job**
 
-Copy the current TruffleHog checkout, range detection, install, scan, and JSON normalization logic from `.github/workflows/p2p-workflow-secret-scan.yaml`. Change outputs so downstream `report` can consume artifacts:
+Copy the checkout, scan-range, TruffleHog install, and TruffleHog scan steps from the existing `.github/workflows/p2p-workflow-secret-scan.yaml`. Keep `fetch-depth: 0`, `--results=verified,unverified,unknown`, and `continue-on-error: true`.
+
+The job must expose the range and upload raw NDJSON:
 
 ```yaml
 jobs:
@@ -449,12 +74,59 @@ jobs:
     timeout-minutes: ${{ inputs.timeout-minutes }}
     outputs:
       base: ${{ steps.scan-range.outputs.base }}
-      findings-artifact: source-security-secret-findings
-```
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-Upload the raw TruffleHog NDJSON as an artifact:
+      - id: scan-range
+        name: Determine scan range
+        if: inputs.scope == 'changes'
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            echo "base=$PR_BASE_SHA" >> "$GITHUB_OUTPUT"
+          elif [ -n "$PUSH_BEFORE_SHA" ] && [ "$PUSH_BEFORE_SHA" != "0000000000000000000000000000000000000000" ]; then
+            echo "base=$PUSH_BEFORE_SHA" >> "$GITHUB_OUTPUT"
+          elif git rev-parse HEAD^ >/dev/null 2>&1; then
+            echo "base=$(git rev-parse HEAD^)" >> "$GITHUB_OUTPUT"
+          else
+            echo "base=" >> "$GITHUB_OUTPUT"
+          fi
 
-```yaml
+      - name: Install TruffleHog
+        shell: bash
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/v3.95.3/scripts/install.sh \
+            | sh -s -- -b "$RUNNER_TEMP" v3.95.3
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+
+      - id: scan
+        name: TruffleHog OSS secrets scan
+        shell: bash
+        continue-on-error: true
+        env:
+          SCOPE: ${{ inputs.scope }}
+          BASE: ${{ steps.scan-range.outputs.base }}
+        run: |
+          set +e
+          out="$RUNNER_TEMP/trufflehog-findings.ndjson"
+          ARGS=(git "file://$GITHUB_WORKSPACE" --json "--results=verified,unverified,unknown" --no-update)
+          if [ "$SCOPE" = "changes" ]; then
+            ARGS+=(--branch=HEAD)
+            if [ -n "$BASE" ]; then
+              ARGS+=(--since-commit="$BASE")
+            fi
+          fi
+          trufflehog "${ARGS[@]}" > "$out"
+          echo "findings_file=$out" >> "$GITHUB_OUTPUT"
+          exit 0
+
       - name: Upload secret findings
         if: always()
         uses: actions/upload-artifact@v4
@@ -466,7 +138,7 @@ Upload the raw TruffleHog NDJSON as an artifact:
 
 - [ ] **Step 3: Add `sca-scan` job**
 
-Add a parallel Trivy job:
+Add a parallel Trivy filesystem job:
 
 ```yaml
   sca-scan:
@@ -499,7 +171,6 @@ Add a parallel Trivy job:
           fi
           args+=("$GITHUB_WORKSPACE")
           trivy "${args[@]}"
-          status=$?
           if [ ! -f "$out" ]; then
             echo '{"Results":[]}' > "$out"
           fi
@@ -515,9 +186,9 @@ Add a parallel Trivy job:
           if-no-files-found: warn
 ```
 
-- [ ] **Step 4: Add `report` job**
+- [ ] **Step 4: Add report job shell and downloads**
 
-Add a final job that downloads both artifacts and calls the report module:
+Add the final report job:
 
 ```yaml
   report:
@@ -526,9 +197,6 @@ Add a final job that downloads both artifacts and calls the report module:
     needs: [secret-scan, sca-scan]
     if: always()
     steps:
-      - name: Checkout report script
-        uses: actions/checkout@v4
-
       - name: Download secret findings
         uses: actions/download-artifact@v4
         with:
@@ -541,57 +209,239 @@ Add a final job that downloads both artifacts and calls the report module:
           name: source-security-trivy-findings
           path: ${{ runner.temp }}/source-security/trivy
 
-      - id: build-report
+      - id: report
         name: Build source security report
-        shell: bash
+        uses: actions/github-script@v7
         env:
           SCOPE: ${{ inputs.scope }}
           BASE: ${{ needs.secret-scan.outputs.base }}
           SEVERITY: ${{ inputs.severity }}
           BLOCKING_SEVERITY: ${{ inputs.blocking-severity }}
-        run: |
-          set -euo pipefail
-          root="$RUNNER_TEMP/source-security"
-          report="$root/source-security-report.md"
-          json="$root/source-security-findings.json"
-          outputs="$root/source-security-outputs.env"
-          node .github/scripts/source-security-report.mjs \
-            --trivy="$root/trivy/trivy-fs.json" \
-            --trufflehog="$root/trufflehog/trufflehog-findings.ndjson" \
-            --scope="$SCOPE" \
-            --base="$BASE" \
-            --severity="$SEVERITY" \
-            --blockingSeverity="$BLOCKING_SEVERITY" \
-            --runUrl="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
-            --markdownOut="$report" \
-            --jsonOut="$json" \
-            --outputsOut="$outputs"
-          cat "$outputs" >> "$GITHUB_OUTPUT"
-          {
-            echo "report_file=$report"
-            echo "json_file=$json"
-          } >> "$GITHUB_OUTPUT"
+          ROOT: ${{ runner.temp }}/source-security
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const crypto = require('crypto');
 ```
 
-- [ ] **Step 5: Add summary, sticky comment, artifact, and policy steps**
+- [ ] **Step 5: Add embedded JavaScript helpers**
 
-Add:
+Inside the `script: |` block, add these helpers:
+
+```js
+            const CANONICAL_SEVERITIES = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNKNOWN'];
+            const SEV_RANK = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3, UNKNOWN: 4 };
+
+            const severitySet = value => new Set(String(value || '').split(',').map(s => s.trim()).filter(Boolean));
+            const normalizeSeverity = value => CANONICAL_SEVERITIES.includes(value) ? value : 'UNKNOWN';
+            const escapeCell = value => {
+              const text = value === undefined || value === null || value === '' ? '-' : String(value);
+              return text.replace(/\|/g, '\\|').replace(/[\r\n]/g, ' ');
+            };
+            const readJson = (file, fallback) => {
+              if (!file || !fs.existsSync(file) || fs.statSync(file).size === 0) return fallback;
+              return JSON.parse(fs.readFileSync(file, 'utf8'));
+            };
+            const readLines = file => {
+              if (!file || !fs.existsSync(file) || fs.statSync(file).size === 0) return [];
+              return fs.readFileSync(file, 'utf8').split('\n').filter(Boolean);
+            };
+            const findingWord = count => count === 1 ? 'finding' : 'findings';
+            const sortBySeverity = (a, b) => (
+              (SEV_RANK[a.severity] ?? SEV_RANK.UNKNOWN) - (SEV_RANK[b.severity] ?? SEV_RANK.UNKNOWN)
+              || a.package.localeCompare(b.package)
+              || (a.id || a.license || '').localeCompare(b.id || b.license || '')
+            );
+            const details = (summary, tableLines) => [
+              '<details>',
+              `<summary>${summary}</summary>`,
+              '',
+              ...tableLines,
+              '',
+              '</details>',
+              '',
+            ];
+```
+
+- [ ] **Step 6: Add embedded Trivy parsing**
+
+Continue inside the same `script: |` block:
+
+```js
+            const root = process.env.ROOT;
+            const trivyPath = path.join(root, 'trivy', 'trivy-fs.json');
+            const trufflehogPath = path.join(root, 'trufflehog', 'trufflehog-findings.ndjson');
+            const reportSeveritySet = severitySet(process.env.SEVERITY || 'CRITICAL,HIGH');
+            const blockingSeveritySet = severitySet(process.env.BLOCKING_SEVERITY || 'CRITICAL');
+            const trivy = readJson(trivyPath, { Results: [] });
+            const vulnerabilities = [];
+            const licenses = [];
+
+            for (const result of Array.isArray(trivy.Results) ? trivy.Results : []) {
+              const source = result.Target || '-';
+              for (const vuln of Array.isArray(result.Vulnerabilities) ? result.Vulnerabilities : []) {
+                const severity = normalizeSeverity(vuln.Severity);
+                if (!reportSeveritySet.has(severity)) continue;
+                vulnerabilities.push({
+                  id: vuln.VulnerabilityID || 'UNKNOWN',
+                  package: vuln.PkgName || '-',
+                  installed: vuln.InstalledVersion || '-',
+                  fixed: vuln.FixedVersion || '-',
+                  severity,
+                  url: vuln.PrimaryURL || `https://avd.aquasec.com/nvd/${vuln.VulnerabilityID || 'UNKNOWN'}`,
+                  source,
+                  blocking: blockingSeveritySet.has(severity),
+                });
+              }
+              for (const license of Array.isArray(result.Licenses) ? result.Licenses : []) {
+                const severity = normalizeSeverity(license.Severity);
+                if (!['CRITICAL', 'HIGH'].includes(severity)) continue;
+                licenses.push({
+                  package: license.PkgName || '-',
+                  license: license.Name || license.ID || '-',
+                  classification: license.Category || '-',
+                  severity,
+                  source,
+                  blocking: false,
+                });
+              }
+            }
+
+            vulnerabilities.sort(sortBySeverity);
+            licenses.sort(sortBySeverity);
+```
+
+- [ ] **Step 7: Add embedded TruffleHog parsing**
+
+Continue inside the same `script: |` block:
+
+```js
+            const secretStatus = finding => {
+              if (finding.Verified === true) return 'verified';
+              if (finding.VerificationError) return 'unknown';
+              return 'unverified';
+            };
+            const secretUrl = ({ commit, file, line }) => {
+              if (!commit) return null;
+              const filePath = file ? '/' + file.split('/').map(encodeURIComponent).join('/') : '';
+              const lineSuffix = line ? `#L${line}` : '';
+              return `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/blob/${commit}${filePath}${lineSuffix}`;
+            };
+            const secrets = [];
+            for (const line of readLines(trufflehogPath)) {
+              let finding;
+              try {
+                finding = JSON.parse(line);
+              } catch {
+                continue;
+              }
+              const detector = finding.DetectorName || finding.DetectorType || 'unknown';
+              const raw = finding.Raw || '';
+              const id = crypto.createHash('sha256').update(`${detector}\0${raw}`).digest('hex');
+              const git = finding.SourceMetadata?.Data?.Git || {};
+              const status = secretStatus(finding);
+              secrets.push({
+                id,
+                detector,
+                status,
+                file: git.file || null,
+                line: git.line || null,
+                commit: git.commit || null,
+                url: secretUrl({ commit: git.commit, file: git.file, line: git.line }),
+                blocking: status === 'verified',
+              });
+            }
+            secrets.sort((a, b) => Number(b.blocking) - Number(a.blocking) || a.detector.localeCompare(b.detector) || String(a.file || '').localeCompare(String(b.file || '')));
+```
+
+- [ ] **Step 8: Add embedded markdown rendering and normalized JSON**
+
+Continue inside the same `script: |` block:
+
+```js
+            const vulnerabilityBlocking = vulnerabilities.filter(v => v.blocking).length;
+            const secretBlocking = secrets.filter(s => s.blocking).length;
+            const normalized = { vulnerabilities, licenses, secrets };
+            const out = ['## Source security scan', ''];
+            out.push(process.env.SCOPE === 'changes' ? `Scan range: \`${process.env.BASE || '<initial>'}..HEAD\`` : 'Scan range: `<full history>`', '');
+
+            if (vulnerabilities.length === 0 && licenses.length === 0 && secrets.length === 0) {
+              out.push('No source security findings detected.');
+            } else {
+              out.push(
+                '| Check | Total | Blocking |',
+                '|---|---:|---:|',
+                `| Vulnerabilities | ${vulnerabilities.length} | ${vulnerabilityBlocking} |`,
+                `| Restricted/forbidden licenses | ${licenses.length} | 0 |`,
+                `| Secrets | ${secrets.length} | ${secretBlocking} |`,
+                '',
+                `**Severities reported:** \`${process.env.SEVERITY}\` · **Blocking severities:** \`${process.env.BLOCKING_SEVERITY}\``,
+                '',
+              );
+
+              if (vulnerabilities.length > 0) {
+                const rows = [
+                  '| Severity | Package | Installed | Fixed | ID | Source |',
+                  '|---|---|---|---|---|---|',
+                  ...vulnerabilities.slice(0, 100).map(v => `| ${v.severity} | ${escapeCell(v.package)} | ${escapeCell(v.installed)} | ${escapeCell(v.fixed)} | [${escapeCell(v.id)}](${v.url}) | ${escapeCell(v.source)} |`),
+                ];
+                out.push(...details(`Vulnerabilities: ${vulnerabilities.length} ${findingWord(vulnerabilities.length)}, ${vulnerabilityBlocking} blocking`, rows));
+              }
+
+              if (licenses.length > 0) {
+                const rows = [
+                  '| Severity | Package | License | Classification | Source |',
+                  '|---|---|---|---|---|',
+                  ...licenses.slice(0, 100).map(l => `| ${l.severity} | ${escapeCell(l.package)} | ${escapeCell(l.license)} | ${escapeCell(l.classification)} | ${escapeCell(l.source)} |`),
+                ];
+                out.push(...details(`Restricted/forbidden licenses: ${licenses.length} ${findingWord(licenses.length)}`, rows));
+              }
+
+              if (secrets.length > 0) {
+                const rows = [
+                  '| Detector | Status | File | Line | Commit |',
+                  '|---|---|---|---|---|',
+                  ...secrets.slice(0, 100).map(s => {
+                    const commit = s.commit ? (s.url ? `[${s.commit.slice(0, 12)}](${s.url})` : s.commit.slice(0, 12)) : '-';
+                    return `| ${escapeCell(s.detector)} | ${escapeCell(s.status)} | ${escapeCell(s.file)} | ${escapeCell(s.line)} | ${commit} |`;
+                  }),
+                ];
+                out.push(...details(`Secrets: ${secrets.length} ${findingWord(secrets.length)}, ${secretBlocking} blocking`, rows));
+              }
+
+              for (const [label, count] of [['vulnerability', vulnerabilities.length], ['license', licenses.length], ['secret', secrets.length]]) {
+                if (count > 100) out.push(`_Showing 100 of ${count} ${label} findings - see the full source security artifact for the rest._`, '');
+              }
+            }
+
+            const markdown = out.join('\n').trimEnd() + '\n';
+            const reportPath = path.join(root, 'source-security-report.md');
+            const jsonPath = path.join(root, 'source-security-findings.json');
+            fs.writeFileSync(reportPath, markdown);
+            fs.writeFileSync(jsonPath, JSON.stringify(normalized, null, 2) + '\n');
+            core.setOutput('report-file', reportPath);
+            core.setOutput('json-file', jsonPath);
+            core.setOutput('vulnerability-total', vulnerabilities.length);
+            core.setOutput('vulnerability-blocking', vulnerabilityBlocking);
+            core.setOutput('license-total', licenses.length);
+            core.setOutput('secret-total', secrets.length);
+            core.setOutput('secret-blocking', secretBlocking);
+            await core.summary.addRaw(markdown).write();
+```
+
+- [ ] **Step 9: Add sticky comment, artifact, and policy steps**
+
+Add these steps after the embedded report:
 
 ```yaml
-      - name: Write workflow summary
-        if: always()
-        shell: bash
-        env:
-          REPORT: ${{ steps.build-report.outputs.report_file }}
-        run: cat "$REPORT" >> "$GITHUB_STEP_SUMMARY"
-
       - name: Upsert sticky PR comment
         if: always() && github.event_name == 'pull_request'
         continue-on-error: true
         uses: marocchino/sticky-pull-request-comment@v3
         with:
           header: source-security-scan-findings
-          path: ${{ steps.build-report.outputs.report_file }}
+          path: ${{ steps.report.outputs.report-file }}
           recreate: true
 
       - name: Upload source security artifact
@@ -602,7 +452,7 @@ Add:
           path: |
             ${{ runner.temp }}/source-security/trufflehog
             ${{ runner.temp }}/source-security/trivy
-            ${{ steps.build-report.outputs.json_file }}
+            ${{ steps.report.outputs.json-file }}
           if-no-files-found: warn
           retention-days: 30
 
@@ -611,10 +461,14 @@ Add:
         shell: bash
         env:
           FAIL: ${{ inputs.fail-on-findings }}
-          VULN_BLOCKING: ${{ steps.build-report.outputs.vulnerabilityBlocking }}
-          SECRET_BLOCKING: ${{ steps.build-report.outputs.secretBlocking }}
+          VULN_BLOCKING: ${{ steps.report.outputs.vulnerability-blocking }}
+          SECRET_BLOCKING: ${{ steps.report.outputs.secret-blocking }}
         run: |
           set -euo pipefail
+          echo "Trivy source vulnerabilities: total=${{ steps.report.outputs.vulnerability-total }}, blocking=${VULN_BLOCKING:-0}"
+          echo "Trivy restricted/forbidden licenses: total=${{ steps.report.outputs.license-total }}, blocking=0"
+          echo "TruffleHog secrets: total=${{ steps.report.outputs.secret-total }}, blocking=${SECRET_BLOCKING:-0}"
+          echo "fail-on-findings=${FAIL}"
           if [ "$FAIL" = "true" ]; then
             failed=0
             if [ "${VULN_BLOCKING:-0}" -gt 0 ]; then
@@ -629,11 +483,11 @@ Add:
           fi
 ```
 
-- [ ] **Step 6: Delete old secret workflow**
+- [ ] **Step 10: Delete old secret workflow**
 
 Remove `.github/workflows/p2p-workflow-secret-scan.yaml`.
 
-- [ ] **Step 7: Validate workflow syntax**
+- [ ] **Step 11: Validate workflow syntax**
 
 Run:
 
@@ -643,7 +497,7 @@ rtk actionlint .github/workflows/p2p-workflow-source-security-scan.yaml
 
 Expected: no output and exit code 0.
 
-- [ ] **Step 8: Commit workflow**
+- [ ] **Step 12: Commit workflow**
 
 Run:
 
@@ -652,7 +506,7 @@ rtk git add .github/workflows/p2p-workflow-source-security-scan.yaml .github/wor
 rtk git commit -m "feat(source-security): add reusable scan workflow"
 ```
 
-## Task 4: Wire Workflow Callers
+## Task 2: Wire Workflow Callers
 
 **Files:**
 - Modify: `.github/workflows/p2p-workflow-fastfeedback.yaml`
@@ -722,8 +576,6 @@ In `.github/workflows/p2p-workflow-security-scan.yaml`, replace the `secret-scan
       timeout-minutes: ${{ inputs.timeout-minutes }}
 ```
 
-Update the job graph comment/docs inside the file only if the workflow contains inline explanatory comments that name `secret-scan`.
-
 - [ ] **Step 4: Add internal CI dry-run call**
 
 Add this job to `.github/workflows/internal-ci.yaml` after `test_fastfeedback`:
@@ -756,7 +608,7 @@ rtk git add .github/workflows/p2p-workflow-fastfeedback.yaml .github/workflows/p
 rtk git commit -m "feat(source-security): wire workflow callers"
 ```
 
-## Task 5: Documentation Update
+## Task 3: Documentation Update
 
 **Files:**
 - Create: `docs/reference/p2p-workflow-source-security-scan.md`
@@ -898,7 +750,7 @@ Run:
 rtk rg -n "p2p-workflow-secret-scan|secret-scan-findings|trufflehog-findings|secret-scan\\b" README.md docs .github/workflows
 ```
 
-Expected: remaining occurrences are either historical text in design/plan docs or intentionally named internal job fragments inside source-security implementation. Update all user-facing current docs and workflows.
+Expected: remaining occurrences are historical text in `docs/superpowers/` or intentionally named internal job fragments inside source-security implementation. Update current user-facing docs and workflows.
 
 - [ ] **Step 9: Commit docs**
 
@@ -909,22 +761,12 @@ rtk git add README.md docs .github/workflows
 rtk git commit -m "docs(source-security): document source scanning workflow"
 ```
 
-## Task 6: Verification
+## Task 4: Verification
 
 **Files:**
-- All modified files from Tasks 1-5.
+- All modified files from Tasks 1-3.
 
-- [ ] **Step 1: Run Node tests**
-
-Run:
-
-```bash
-rtk node --test .github/scripts/source-security-report.test.mjs
-```
-
-Expected: all tests pass.
-
-- [ ] **Step 2: Run actionlint on all workflows**
+- [ ] **Step 1: Run actionlint on all workflows**
 
 Run:
 
@@ -934,7 +776,7 @@ rtk actionlint .github/workflows/*.yaml
 
 Expected: no output and exit code 0.
 
-- [ ] **Step 3: Run reference scan**
+- [ ] **Step 2: Run reference scan**
 
 Run:
 
@@ -944,7 +786,7 @@ rtk rg -n "p2p-workflow-secret-scan|secret-scan-findings|trufflehog-findings" RE
 
 Expected: no current user-facing references to the deleted workflow, artifact, or sticky comment header. Design and implementation plan files under `docs/superpowers/` may still reference historical names.
 
-- [ ] **Step 4: Check git diff**
+- [ ] **Step 3: Check git diff**
 
 Run:
 
@@ -953,9 +795,9 @@ rtk git diff --stat HEAD
 rtk git diff --check
 ```
 
-Expected: diff contains only source security scan changes, docs updates, and report tests. `git diff --check` has no whitespace errors.
+Expected: diff contains only source security scan changes and docs updates. `git diff --check` has no whitespace errors.
 
-- [ ] **Step 5: Confirm working tree state**
+- [ ] **Step 4: Confirm working tree state**
 
 Run:
 
@@ -968,5 +810,6 @@ Expected: only intentionally untracked user files remain. If any source security
 ## Self-Review
 
 - Spec coverage: the plan covers the new workflow name, TruffleHog secrets, Trivy `vuln,license`, Trivy secret scanner disabled, misconfiguration scanner out of scope, compact foldable comment, artifact layout, vulnerability `severity` and `blocking-severity`, license report-only behavior, caller wiring, docs, and verification.
+- Pattern consistency: the report logic is embedded in `actions/github-script`, matching the existing image scan report implementation.
 - Placeholder scan: no implementation step relies on unspecified policy or unnamed files.
-- Type consistency: report outputs use camelCase keys (`vulnerabilityBlocking`, `secretBlocking`) consistently between the script and workflow policy step.
+- Output consistency: report outputs use kebab-case keys (`vulnerability-blocking`, `secret-blocking`) consistently between the embedded script and workflow policy step.
