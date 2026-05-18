@@ -61,7 +61,7 @@ The workflow is visibility-first by default. When `fail-on-findings: true`, it f
 - Trivy vulnerability findings whose severity is listed in `blocking-severity`;
 - TruffleHog findings with `status: verified`.
 
-Restricted and forbidden license findings are report-only, even when `fail-on-findings: true`.
+Restricted and forbidden license findings are report-only, even when `fail-on-findings: true`. The source scan reports only HIGH and CRITICAL license classifications.
 
 Trivy license classifications are triage signals, not a P2P-wide legal policy. Organization-specific allow/deny policy is out of scope for this version.
 

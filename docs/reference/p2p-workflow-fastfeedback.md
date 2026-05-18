@@ -1,6 +1,6 @@
 # p2p-workflow-fastfeedback
 
-> Runs build, functional, NFT, and integration tests in the fast-feedback environment, then promotes to extended-test on main or tag pushes. Also runs source security and image scans in parallel with `build` on every PR and push.
+> Runs build, functional, NFT, and integration tests in the fast-feedback environment, then promotes to extended-test on main or tag pushes. Also runs source security scanning independently of `build`, and image scanning after `build` completes.
 
 ## Usage
 
@@ -65,7 +65,7 @@ build
         └── promote       (needs: integration-test, image-scan, source-security-scan)
                           Runs only on main-branch or tag pushes.
 
-image-scan           (independent of build; runs in parallel)
+image-scan           (needs: build)
                      Calls p2p-workflow-image-scan against the built images.
                      Fails the workflow on blocking findings when
                      security-scan-fail-on-findings=true (default: false).

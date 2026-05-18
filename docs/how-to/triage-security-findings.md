@@ -14,7 +14,7 @@ On pull requests, the scanners upsert sticky comments in the PR conversation ins
 | Image vulnerabilities | `image-scan-findings` | `image-scan-reports-<env>` |
 | Image secrets | `image-scan-findings` (same comment) | `image-scan-reports-<env>` |
 
-Restricted and forbidden license findings are shown for triage only. Trivy's license classification is not a legal decision and is not a P2P-wide organization policy; confirm the finding against your organization's open-source policy before taking enforcement action.
+Restricted and forbidden license findings are shown for triage only. The source scan reports only HIGH and CRITICAL license classifications. Trivy's license classification is not a legal decision and is not a P2P-wide organization policy; confirm the finding against your organization's open-source policy before taking enforcement action.
 
 The source-security comment renders source vulnerabilities, restricted or forbidden licenses, and git-tree secrets under one header. Vulnerability rows include package, installed version, fixed version, CVE, and source where available. License rows identify the package and detected license. Git-tree secret rows show `Detector`, `Status`, `File`, `Line`, and `Commit`.
 
@@ -43,7 +43,7 @@ Preferred fixes:
 - For source vulnerability findings, update the affected dependency or lockfile entry so the vulnerable version is no longer present.
 - For restricted or forbidden license findings, confirm the package and license against your organization's open-source policy before changing dependencies or taking enforcement action.
 - For git-tree secret findings, remove the committed secret, rotate the credential, and replace it with a proper secret store or GitHub secret.
-- For embedded secrets, rotate the credential first, identify which Dockerfile step introduced it (the `Layer` column points to the layer digest — match it against `docker history <image>`), scrub or rebuild from a fresh base, and re-push the image. A secret that appears in both the *Secrets scan* (git tree) and *Image scan* (Secrets in image) comments means the source is in the tracked tree — fix the git source first and the image side will resolve on the next build.
+- For embedded secrets, rotate the credential first, identify which Dockerfile step introduced it (the `Layer` column points to the layer digest — match it against `docker history <image>`), scrub or rebuild from a fresh base, and re-push the image. A secret that appears in both the *Source security scan* (git-tree secrets) and *Image scan* (Secrets in image) comments means the source is in the tracked tree — fix the git source first and the image side will resolve on the next build.
 
 ## 4. Temporarily stop findings from blocking the workflow
 

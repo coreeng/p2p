@@ -97,7 +97,7 @@ jobs:
           BASE: ${{ steps.scan-range.outputs.base }}
         run: |
           set -euo pipefail
-          out="$RUNNER_TEMP/trufflehog-findings.ndjson"
+          out="$RUNNER_TEMP/source-secret-findings.ndjson"
           # Collect every finding regardless of verification state; the
           # blocking decision is taken downstream by classifying each
           # finding (verified / unknown / unverified) from redacted JSON.
