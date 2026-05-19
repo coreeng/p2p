@@ -448,7 +448,7 @@ jobs:
                 '',
               );
 
-              if (vulnerabilities.length === 0 && licenses.length === 0 && secrets.length === 0) {
+              if (scannerWarnings.length === 0 && vulnerabilities.length === 0 && licenses.length === 0 && secrets.length === 0) {
                 out.push('_No source security findings detected._');
               }
 
