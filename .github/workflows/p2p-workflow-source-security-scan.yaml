@@ -272,7 +272,6 @@ jobs:
             const SEV_EMOJI = { CRITICAL: '🔴', HIGH: '🟠', MEDIUM: '🟡', LOW: '🔵', UNKNOWN: '⚪' };
 
             const severitySet = value => new Set(String(value || '').split(',').map(s => s.trim()).filter(Boolean));
-            const severityList = value => String(value || '').split(',').map(s => s.trim()).filter(Boolean);
             const normalizeSeverity = value => CANONICAL_SEVERITIES.includes(value) ? value : 'UNKNOWN';
             const escapeCell = value => {
               const text = value === undefined || value === null || value === '' ? '-' : String(value);
@@ -355,9 +354,8 @@ jobs:
             }
             const reportSeveritySet = severitySet(process.env.SEVERITY || 'CRITICAL,HIGH');
             const blockingSeveritySet = severitySet(process.env.BLOCKING_SEVERITY || 'CRITICAL');
-            const requestedSeverities = severityList(process.env.SEVERITY || 'CRITICAL,HIGH')
-              .map(normalizeSeverity)
-              .filter((sev, index, list) => list.indexOf(sev) === index);
+            const requestedSet = severitySet(process.env.SEVERITY || 'CRITICAL,HIGH');
+            const requestedSeverities = CANONICAL_SEVERITIES.filter(sev => requestedSet.has(sev));
             const trivy = readJson(trivyPath, { Results: [] });
             const vulnerabilities = [];
             const licenses = [];
@@ -489,7 +487,7 @@ jobs:
 
               if (licenses.length > 0) {
                 out.push('### Restricted/forbidden licenses', '');
-                const licenseSummarySeverities = ['HIGH', 'CRITICAL'];
+                const licenseSummarySeverities = ['CRITICAL', 'HIGH'];
                 const summaryHeader = ['Source', ...licenseSummarySeverities.map(sev => `${SEV_EMOJI[sev]} ${sev}`), 'Total'];
                 out.push(
                   `| ${summaryHeader.join(' | ')} |`,
