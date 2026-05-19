@@ -269,13 +269,16 @@ jobs:
 
             const CANONICAL_SEVERITIES = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNKNOWN'];
             const SEV_RANK = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3, UNKNOWN: 4 };
+            const SEV_EMOJI = { CRITICAL: '🔴', HIGH: '🟠', MEDIUM: '🟡', LOW: '🔵', UNKNOWN: '⚪' };
 
             const severitySet = value => new Set(String(value || '').split(',').map(s => s.trim()).filter(Boolean));
+            const severityList = value => String(value || '').split(',').map(s => s.trim()).filter(Boolean);
             const normalizeSeverity = value => CANONICAL_SEVERITIES.includes(value) ? value : 'UNKNOWN';
             const escapeCell = value => {
               const text = value === undefined || value === null || value === '' ? '-' : String(value);
               return text.replace(/\|/g, '\\|').replace(/[\r\n]/g, ' ');
             };
+            const code = value => `<code>${escapeCell(value)}</code>`;
             const readJson = (file, fallback) => {
               if (!file || !fs.existsSync(file) || fs.statSync(file).size === 0) return fallback;
               return JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -284,21 +287,51 @@ jobs:
               if (!file || !fs.existsSync(file) || fs.statSync(file).size === 0) return [];
               return fs.readFileSync(file, 'utf8').split('\n').filter(Boolean);
             };
-            const findingWord = count => count === 1 ? 'finding' : 'findings';
             const sortBySeverity = (a, b) => (
+              Number(b.blocking) - Number(a.blocking)
+              || (SEV_RANK[a.severity] ?? SEV_RANK.UNKNOWN) - (SEV_RANK[b.severity] ?? SEV_RANK.UNKNOWN)
+              || a.package.localeCompare(b.package)
+              || (a.id || a.license || '').localeCompare(b.id || b.license || '')
+            );
+            const sortBySeverityOnly = (a, b) => (
               (SEV_RANK[a.severity] ?? SEV_RANK.UNKNOWN) - (SEV_RANK[b.severity] ?? SEV_RANK.UNKNOWN)
               || a.package.localeCompare(b.package)
               || (a.id || a.license || '').localeCompare(b.id || b.license || '')
             );
-            const details = (summary, tableLines) => [
-              '<details>',
-              `<summary>${summary}</summary>`,
-              '',
-              ...tableLines,
-              '',
-              '</details>',
-              '',
-            ];
+            const groupBySource = rows => {
+              const groups = new Map();
+              for (const row of rows) {
+                const source = row.source || '-';
+                if (!groups.has(source)) groups.set(source, { source, rows: [] });
+                groups.get(source).rows.push(row);
+              }
+              return Array.from(groups.values()).map(group => {
+                const countsBySeverity = Object.fromEntries(CANONICAL_SEVERITIES.map(sev => [sev, 0]));
+                for (const row of group.rows) countsBySeverity[row.severity] += 1;
+                const blocking = group.rows.filter(row => row.blocking).length;
+                group.rows.sort(sortBySeverity);
+                return { ...group, countsBySeverity, blocking, total: group.rows.length };
+              }).sort((a, b) => (
+                b.blocking - a.blocking
+                || b.total - a.total
+                || a.source.localeCompare(b.source)
+              ));
+            };
+            const selectedRowsBySource = rows => {
+              const selected = [
+                ...rows.filter(row => row.blocking).sort(sortBySeverityOnly),
+                ...rows.filter(row => !row.blocking).sort(sortBySeverityOnly),
+              ].slice(0, 100);
+              const bySource = new Map();
+              for (const row of selected) {
+                const source = row.source || '-';
+                const sourceRows = bySource.get(source) || [];
+                sourceRows.push(row);
+                bySource.set(source, sourceRows);
+              }
+              for (const sourceRows of bySource.values()) sourceRows.sort(sortBySeverity);
+              return bySource;
+            };
 
             const root = process.env.ROOT;
             fs.mkdirSync(root, { recursive: true });
@@ -322,6 +355,9 @@ jobs:
             }
             const reportSeveritySet = severitySet(process.env.SEVERITY || 'CRITICAL,HIGH');
             const blockingSeveritySet = severitySet(process.env.BLOCKING_SEVERITY || 'CRITICAL');
+            const requestedSeverities = severityList(process.env.SEVERITY || 'CRITICAL,HIGH')
+              .map(normalizeSeverity)
+              .filter((sev, index, list) => list.indexOf(sev) === index);
             const trivy = readJson(trivyPath, { Results: [] });
             const vulnerabilities = [];
             const licenses = [];
@@ -383,8 +419,17 @@ jobs:
             const vulnerabilityBlocking = vulnerabilities.filter(v => v.blocking).length;
             const secretBlocking = secrets.filter(s => s.blocking).length;
             const normalized = { vulnerabilities, licenses, secrets };
+            const scanRange = process.env.SCOPE === 'changes' ? `${process.env.BASE || '<initial>'}..HEAD` : '<full history>';
+            const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+            const vulnerabilityGroups = groupBySource(vulnerabilities);
+            const selectedVulnerabilitiesBySource = selectedRowsBySource(vulnerabilities);
+            const licenseGroups = groupBySource(licenses);
+            const selectedLicensesBySource = selectedRowsBySource(licenses);
+            const selectedSecrets = [
+              ...secrets.filter(s => s.blocking),
+              ...secrets.filter(s => !s.blocking),
+            ].slice(0, 100);
             const out = ['## Source security scan', ''];
-            out.push(process.env.SCOPE === 'changes' ? `Scan range: \`${process.env.BASE || '<initial>'}..HEAD\`` : 'Scan range: `<full history>`', '');
 
             if (dryRun) {
               out.push('_Scan skipped (dry-run)._');
@@ -394,52 +439,104 @@ jobs:
               }
             }
 
-            if (!dryRun && scannerWarnings.length === 0 && vulnerabilities.length === 0 && licenses.length === 0 && secrets.length === 0) {
-              out.push('No source security findings detected.');
-            } else if (!dryRun) {
+            if (!dryRun) {
               out.push(
-                '| Check | Total | Blocking |',
-                '|---|---:|---:|',
-                `| Vulnerabilities | ${vulnerabilities.length} | ${vulnerabilityBlocking} |`,
-                `| Restricted/forbidden licenses | ${licenses.length} | 0 |`,
-                `| Secrets | ${secrets.length} | ${secretBlocking} |`,
-                '',
+                `**Scan range:** \`${scanRange}\` · **Vulnerabilities:** ${vulnerabilities.length} total · ${vulnerabilityBlocking} blocking`,
+                `· **Licenses:** ${licenses.length} total · 0 blocking`,
+                `· **Secrets:** ${secrets.length} total · ${secretBlocking} blocking`,
                 `**Severities reported:** \`${process.env.SEVERITY}\` · **Blocking severities:** \`${process.env.BLOCKING_SEVERITY}\``,
+                '',
+                `[📦 Download full reports](${runUrl})`,
                 '',
               );
 
+              if (vulnerabilities.length === 0 && licenses.length === 0 && secrets.length === 0) {
+                out.push('_No source security findings detected._');
+              }
+
               if (vulnerabilities.length > 0) {
-                const rows = [
-                  '| Severity | Package | Installed | Fixed | ID | Source |',
-                  '|---|---|---|---|---|---|',
-                  ...vulnerabilities.slice(0, 100).map(v => `| ${v.severity} | ${escapeCell(v.package)} | ${escapeCell(v.installed)} | ${escapeCell(v.fixed)} | [${escapeCell(v.id)}](${v.url}) | ${escapeCell(v.source)} |`),
-                ];
-                out.push(...details(`Vulnerabilities: ${vulnerabilities.length} ${findingWord(vulnerabilities.length)}, ${vulnerabilityBlocking} blocking`, rows));
+                out.push('### Vulnerabilities', '');
+                const summarySeverities = requestedSeverities.length > 0 ? requestedSeverities : CANONICAL_SEVERITIES;
+                const summaryHeader = ['Source', ...summarySeverities.map(sev => `${SEV_EMOJI[sev]} ${sev}`), 'Total'];
+                out.push(
+                  `| ${summaryHeader.join(' | ')} |`,
+                  `| ${summaryHeader.map(() => '---').join(' | ')} |`,
+                  ...vulnerabilityGroups.map(group => {
+                    const counts = summarySeverities.map(sev => String(group.countsBySeverity[sev] || 0));
+                    return `| \`${escapeCell(group.source)}\` | ${[...counts, String(group.total)].join(' | ')} |`;
+                  }),
+                  '',
+                );
+
+                for (const group of vulnerabilityGroups) {
+                  const rows = selectedVulnerabilitiesBySource.get(group.source) || [];
+                  if (rows.length === 0) continue;
+                  const sevSummary = summarySeverities
+                    .map(sev => `${SEV_EMOJI[sev]} ${group.countsBySeverity[sev] || 0}`)
+                    .join(' · ');
+                  out.push(
+                    `<details><summary>${sevSummary} — ${code(group.source)}</summary>`,
+                    '',
+                    '| Severity | Package | Installed | Fixed | CVE/ID | Source |',
+                    '|---|---|---|---|---|---|',
+                    ...rows.map(v => `| ${SEV_EMOJI[v.severity]} ${v.severity} | ${escapeCell(v.package)} | ${escapeCell(v.installed)} | ${escapeCell(v.fixed)} | [${escapeCell(v.id)}](${v.url}) | ${escapeCell(v.source)} |`),
+                    '',
+                    '</details>',
+                    '',
+                  );
+                }
               }
 
               if (licenses.length > 0) {
-                const rows = [
-                  '| Severity | Package | License | Classification | Source |',
-                  '|---|---|---|---|---|',
-                  ...licenses.slice(0, 100).map(l => `| ${l.severity} | ${escapeCell(l.package)} | ${escapeCell(l.license)} | ${escapeCell(l.classification)} | ${escapeCell(l.source)} |`),
-                ];
-                out.push(...details(`Restricted/forbidden licenses: ${licenses.length} ${findingWord(licenses.length)}`, rows));
+                out.push('### Restricted/forbidden licenses', '');
+                const licenseSummarySeverities = ['HIGH', 'CRITICAL'];
+                const summaryHeader = ['Source', ...licenseSummarySeverities.map(sev => `${SEV_EMOJI[sev]} ${sev}`), 'Total'];
+                out.push(
+                  `| ${summaryHeader.join(' | ')} |`,
+                  `| ${summaryHeader.map(() => '---').join(' | ')} |`,
+                  ...licenseGroups.map(group => {
+                    const counts = licenseSummarySeverities.map(sev => String(group.countsBySeverity[sev] || 0));
+                    return `| \`${escapeCell(group.source)}\` | ${[...counts, String(group.total)].join(' | ')} |`;
+                  }),
+                  '',
+                );
+
+                for (const group of licenseGroups) {
+                  const rows = selectedLicensesBySource.get(group.source) || [];
+                  if (rows.length === 0) continue;
+                  const sevSummary = licenseSummarySeverities
+                    .map(sev => `${SEV_EMOJI[sev]} ${group.countsBySeverity[sev] || 0}`)
+                    .join(' · ');
+                  out.push(
+                    `<details><summary>${sevSummary} — ${code(group.source)}</summary>`,
+                    '',
+                    '| Severity | Package | License | Classification | Source |',
+                    '|---|---|---|---|---|',
+                    ...rows.map(l => `| ${SEV_EMOJI[l.severity]} ${l.severity} | ${escapeCell(l.package)} | ${escapeCell(l.license)} | ${escapeCell(l.classification)} | ${escapeCell(l.source)} |`),
+                    '',
+                    '</details>',
+                    '',
+                  );
+                }
               }
 
               if (secrets.length > 0) {
-                const rows = [
+                out.push(
+                  '### Secrets in source',
+                  '',
                   '| Detector | Status | File | Line | Commit |',
                   '|---|---|---|---|---|',
-                  ...secrets.slice(0, 100).map(s => {
-                    const commit = s.commit ? (s.url ? `[${s.commit.slice(0, 12)}](${s.url})` : s.commit.slice(0, 12)) : '-';
-                    return `| ${escapeCell(s.detector)} | ${escapeCell(s.status)} | ${escapeCell(s.file)} | ${escapeCell(s.line)} | ${commit} |`;
+                  ...selectedSecrets.map(s => {
+                    const file = s.file ? `\`${escapeCell(s.file)}\`` : '-';
+                    const commit = s.commit ? (s.url ? `[\`${escapeCell(s.commit.slice(0, 12))}\`](${s.url})` : `\`${escapeCell(s.commit.slice(0, 12))}\``) : '-';
+                    return `| ${escapeCell(s.detector)} | ${escapeCell(s.status)} | ${file} | ${escapeCell(s.line)} | ${commit} |`;
                   }),
-                ];
-                out.push(...details(`Secrets: ${secrets.length} ${findingWord(secrets.length)}, ${secretBlocking} blocking`, rows));
+                  '',
+                );
               }
 
               for (const [label, count] of [['vulnerability', vulnerabilities.length], ['license', licenses.length], ['secret', secrets.length]]) {
-                if (count > 100) out.push(`_Showing 100 of ${count} ${label} findings - see the full source security artifact for the rest._`, '');
+                if (count > 100) out.push(`_Showing 100 of ${count} ${label} findings - see the [full reports](${runUrl}) for the rest._`, '');
               }
             }
 
