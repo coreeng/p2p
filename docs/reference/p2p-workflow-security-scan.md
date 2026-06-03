@@ -61,7 +61,7 @@ None. Results are surfaced via:
 
 - Each child job's workflow summary (`$GITHUB_STEP_SUMMARY`).
 - `source-security-scan-findings` artifact from the source-security-scan job. Contains redacted TruffleHog output, raw Trivy filesystem output, and normalized merged JSON.
-- `image-scan-reports-<github_env>` artifact per stage from each image-scan job. Contains `trivy/` (vulnerability JSON per image × platform) and `trufflehog-image/` (secret JSON-lines per image × platform) subdirectories.
+- `image-scan-reports-<github_env>` artifact per stage from each image-scan job. Each artifact contains root `manifest.json`, `trivy/` vulnerability JSON reports, and `trufflehog-image/` secret JSON-lines reports. `manifest.json` records the P2P stage (`fast-feedback`, `extended-test`, or `prod`) and is the supported artifact index.
 
 ## Job Graph
 

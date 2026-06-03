@@ -280,6 +280,7 @@ jobs:
 
       - name: Test image scan target construction
         run: |
+          set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
 
@@ -381,28 +382,492 @@ jobs:
 
             vm.runInNewContext(`(async () => {\n${script}\n})()`, sandbox);
             assert.deepStrictEqual(failures, []);
-            return calls;
+            return { calls, outputs };
           }
 
-          const trivyCalls = runScanScript('/tmp/image-scan-script.js');
+          const trivyRun = runScanScript('/tmp/image-scan-script.js');
           assert.deepStrictEqual(
-            trivyCalls.map(call => call.args[call.args.length - 1]),
+            trivyRun.calls.map(call => call.args[call.args.length - 1]),
             [
               'ghcr.io/coreeng/support-bot@sha256:resolved',
               'ghcr.io/coreeng/support-bot:0.0.48@sha256:tagresolved',
             ],
           );
 
-          const secretCalls = runScanScript('/tmp/image-secret-scan-script.js');
+          const secretRun = runScanScript('/tmp/image-secret-scan-script.js');
           assert.deepStrictEqual(
-            secretCalls.map(call => call.args[2]),
+            secretRun.calls.map(call => call.args[2]),
             [
               'docker://ghcr.io/coreeng/support-bot@sha256:resolved',
               'docker://ghcr.io/coreeng/support-bot:0.0.48@sha256:tagresolved',
             ],
           );
+          for (const line of fs.readFileSync(secretRun.outputs['report-list'], 'utf8').trim().split('\n')) {
+            const reportPath = line.split('\t')[3];
+            assert.strictEqual(path.extname(reportPath), '.jsonl');
+          }
 
           console.log('image scan target fixtures passed');
+          NODE
+
+      - name: Test image scan manifest construction
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          workflow = Path('.github/workflows/p2p-workflow-image-scan.yaml')
+
+          def extract_script(step_id):
+              lines = workflow.read_text().splitlines()
+              in_step = False
+              in_script = False
+              script = []
+
+              for line in lines:
+                  if line.startswith(f'      - id: {step_id}'):
+                      in_step = True
+                      continue
+                  if in_step and line.startswith('      - id: ') and step_id not in line:
+                      break
+                  if in_step and line.strip() == 'script: |':
+                      in_script = True
+                      continue
+                  if in_script:
+                      if line.startswith('            '):
+                          script.append(line[12:])
+                      elif line.strip() == '':
+                          script.append('')
+                      else:
+                          break
+
+              if not script:
+                  raise SystemExit(f'Could not extract {step_id} script')
+              return '\n'.join(script) + '\n'
+
+          scripts = {
+              'pull-images': extract_script('pull-images'),
+              'manifest': extract_script('manifest'),
+          }
+          upload_block = []
+          in_upload = False
+          for line in workflow.read_text().splitlines():
+              if line.startswith('      - name: Upload image-scan reports'):
+                  in_upload = True
+              elif in_upload and line.startswith('      - name: '):
+                  break
+              if in_upload:
+                  upload_block.append(line)
+          upload_text = '\n'.join(upload_block)
+          for forbidden in ('always()', 'reports-dir', 'reports.txt', 'if-no-files-found: ignore'):
+              if forbidden in upload_text:
+                  raise SystemExit(f'Upload image-scan reports must not contain {forbidden}')
+          for required in ('steps.manifest.outputs.artifact-dir', 'if-no-files-found: error'):
+              if required not in upload_text:
+                  raise SystemExit(f'Upload image-scan reports is missing {required}')
+          for marker in ('pinnedDigest', 'platform-specific manifest digest'):
+              if marker not in scripts['pull-images']:
+                  raise SystemExit(f'Extracted pull-images script is missing expected marker: {marker}')
+          for marker in ('schemaVersion', 'vulnerabilityReport', 'secretReport'):
+              if marker not in scripts['manifest']:
+                  raise SystemExit(f'Extracted manifest script is missing expected marker: {marker}')
+
+          Path('/tmp/image-pull-script.js').write_text(scripts['pull-images'])
+          Path('/tmp/image-manifest-script.js').write_text(scripts['manifest'])
+          PY
+
+          node <<'NODE'
+          const assert = require('assert');
+          const fs = require('fs');
+          const os = require('os');
+          const path = require('path');
+          const vm = require('vm');
+
+          function runPullScript(imageRefs, inspectByRef) {
+            const script = fs.readFileSync('/tmp/image-pull-script.js', 'utf8');
+            const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'image-pull-'));
+            const outputs = {};
+            const failures = [];
+            const pulls = [];
+            const sandbox = {
+              process: {
+                env: {
+                  RUNNER_TEMP: tmp,
+                  IMAGE_REFS: imageRefs.join('\n'),
+                },
+              },
+              core: {
+                setOutput: (key, value) => { outputs[key] = value; },
+                setFailed: (message) => { failures.push(message); },
+                info: () => {},
+              },
+              require: (moduleName) => {
+                if (moduleName === 'child_process') {
+                  return {
+                    execFileSync(command, args) {
+                      assert.strictEqual(command, 'docker');
+                      if (args[0] === 'buildx') {
+                        const ref = args[3];
+                        if (!inspectByRef[ref]) throw new Error(`unexpected inspect ref ${ref}`);
+                        return JSON.stringify(inspectByRef[ref]);
+                      }
+                      if (args[0] === 'pull') {
+                        pulls.push(args);
+                        return '';
+                      }
+                      throw new Error(`unexpected docker args ${args.join(' ')}`);
+                    },
+                  };
+                }
+                return require(moduleName);
+              },
+            };
+
+            vm.runInNewContext(`(async () => {\n${script}\n})()`, sandbox);
+            return { outputs, failures, pulls };
+          }
+
+          function runManifestScript({ stage, vulnLines = [], secretLines = [], vulnRawLines = null, secretRawLines = null }) {
+            const script = fs.readFileSync('/tmp/image-manifest-script.js', 'utf8');
+            const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'image-manifest-'));
+            const trivyDir = path.join(tmp, 'trivy');
+            const secretDir = path.join(tmp, 'trufflehog-image');
+            fs.mkdirSync(trivyDir, { recursive: true });
+            fs.mkdirSync(secretDir, { recursive: true });
+            const vulnList = path.join(trivyDir, 'reports.txt');
+            const secretList = path.join(secretDir, 'reports.txt');
+            const writeReport = (dir, name) => {
+              if (name.includes('..')) return name;
+              const report = path.join(dir, name);
+              if (name.startsWith('missing-')) return report;
+              fs.writeFileSync(report, name.startsWith('empty-') ? '' : '{}');
+              return report;
+            };
+            fs.writeFileSync(
+              vulnList,
+              vulnRawLines === null
+                ? vulnLines.map(([ref, plat, digest, name]) => `${ref}\t${plat}\t${digest}\t${writeReport(trivyDir, name)}`).join('\n') + '\n'
+                : vulnRawLines.join('\n') + '\n',
+            );
+            fs.writeFileSync(
+              secretList,
+              secretRawLines === null
+                ? secretLines.map(([ref, plat, digest, name]) => `${ref}\t${plat}\t${digest}\t${writeReport(secretDir, name)}`).join('\n') + '\n'
+                : secretRawLines.join('\n') + '\n',
+            );
+
+            const outputs = {};
+            const failures = [];
+            const sandbox = {
+              process: {
+                env: {
+                  RUNNER_TEMP: tmp,
+                  PIPELINE_STAGE: stage,
+                  REPORT_LIST: vulnList,
+                  SECRET_REPORT_LIST: secretList,
+                  REPORT_ROOT: trivyDir,
+                  SECRET_REPORT_ROOT: secretDir,
+                },
+              },
+              core: {
+                setOutput: (key, value) => { outputs[key] = value; },
+                setFailed: (message) => { failures.push(message); },
+                info: () => {},
+                warning: () => {},
+              },
+              require,
+            };
+
+            vm.runInNewContext(`(async () => {\n${script}\n})()`, sandbox);
+            return {
+              manifest: outputs['manifest-path'] ? JSON.parse(fs.readFileSync(outputs['manifest-path'], 'utf8')) : null,
+              manifestPath: outputs['manifest-path'],
+              artifactDir: outputs['artifact-dir'],
+              tmp,
+              failures,
+            };
+          }
+
+          const matchingPinned = runPullScript(
+            ['ghcr.io/coreeng/support-bot@sha256:resolved'],
+            {
+              'ghcr.io/coreeng/support-bot@sha256:resolved': {
+                manifest: { digest: 'sha256:resolved' },
+                image: { os: 'linux', architecture: 'amd64' },
+              },
+            },
+          );
+          assert.deepStrictEqual(matchingPinned.failures, []);
+          assert.deepStrictEqual(
+            fs.readFileSync(matchingPinned.outputs['list-path'], 'utf8').trim(),
+            'ghcr.io/coreeng/support-bot@sha256:resolved\tlinux/amd64\tsha256:resolved',
+          );
+
+          const mismatchedPinned = runPullScript(
+            ['ghcr.io/coreeng/support-bot@sha256:input'],
+            {
+              'ghcr.io/coreeng/support-bot@sha256:input': {
+                manifest: { digest: 'sha256:resolved' },
+                image: { os: 'linux', architecture: 'amd64' },
+              },
+            },
+          );
+          assert.deepStrictEqual(mismatchedPinned.pulls, []);
+          assert.deepStrictEqual(
+            mismatchedPinned.failures,
+            ['Resolved platform digest sha256:resolved for ghcr.io/coreeng/support-bot@sha256:input does not match pinned digest sha256:input. Use a platform-specific manifest digest for image scan evidence.'],
+          );
+
+          const pinnedIndexDigest = runPullScript(
+            ['ghcr.io/coreeng/support-bot@sha256:index'],
+            {
+              'ghcr.io/coreeng/support-bot@sha256:index': {
+                manifest: {
+                  digest: 'sha256:index',
+                  manifests: [
+                    { platform: { os: 'linux', architecture: 'amd64' }, digest: 'sha256:amd64' },
+                    { platform: { os: 'linux', architecture: 'arm64' }, digest: 'sha256:arm64' },
+                  ],
+                },
+              },
+            },
+          );
+          assert.deepStrictEqual(pinnedIndexDigest.pulls, []);
+          assert.deepStrictEqual(
+            pinnedIndexDigest.failures,
+            ['Pinned digest sha256:index for ghcr.io/coreeng/support-bot@sha256:index resolves to an image index. Use a platform-specific manifest digest for image scan evidence.'],
+          );
+
+          const multi = runManifestScript({
+            stage: 'extended-test',
+            vulnLines: [
+              ['ghcr.io/coreeng/zeta:1.0.0', 'linux/arm64', 'sha256:z-arm', 'zeta-arm-vuln.json'],
+              ['ghcr.io/coreeng/alpha:1.0.0', 'linux/amd64', 'sha256:a-amd', 'alpha-amd-vuln.json'],
+              ['ghcr.io/coreeng/zeta:1.0.0', 'linux/amd64', 'sha256:z-amd', 'zeta-amd-vuln.json'],
+            ],
+            secretLines: [
+              ['ghcr.io/coreeng/zeta:1.0.0', 'linux/arm64', 'sha256:z-arm', 'zeta-arm-secret.jsonl'],
+              ['ghcr.io/coreeng/alpha:1.0.0', 'linux/amd64', 'sha256:a-amd', 'alpha-amd-secret.jsonl'],
+              ['ghcr.io/coreeng/zeta:1.0.0', 'linux/amd64', 'sha256:z-amd', 'zeta-amd-secret.jsonl'],
+            ],
+          });
+          assert.deepStrictEqual(multi.failures, []);
+          assert.strictEqual(path.basename(multi.manifestPath), 'manifest.json');
+          assert.strictEqual(path.basename(multi.artifactDir), 'image-scan-artifact');
+          assert.strictEqual(multi.manifestPath, path.join(multi.artifactDir, 'manifest.json'));
+          assert.deepStrictEqual(multi.manifest, {
+            schemaVersion: 1,
+            stage: 'extended-test',
+            reports: [
+              {
+                imageRef: 'ghcr.io/coreeng/alpha:1.0.0',
+                platform: 'linux/amd64',
+                digest: 'sha256:a-amd',
+                vulnerabilityReport: 'trivy/alpha-amd-vuln.json',
+                secretReport: 'trufflehog-image/alpha-amd-secret.jsonl',
+              },
+              {
+                imageRef: 'ghcr.io/coreeng/zeta:1.0.0',
+                platform: 'linux/amd64',
+                digest: 'sha256:z-amd',
+                vulnerabilityReport: 'trivy/zeta-amd-vuln.json',
+                secretReport: 'trufflehog-image/zeta-amd-secret.jsonl',
+              },
+              {
+                imageRef: 'ghcr.io/coreeng/zeta:1.0.0',
+                platform: 'linux/arm64',
+                digest: 'sha256:z-arm',
+                vulnerabilityReport: 'trivy/zeta-arm-vuln.json',
+                secretReport: 'trufflehog-image/zeta-arm-secret.jsonl',
+              },
+            ],
+          });
+          assert(fs.existsSync(path.join(multi.artifactDir, 'manifest.json')));
+          assert(fs.existsSync(path.join(multi.artifactDir, 'trivy/alpha-amd-vuln.json')));
+          assert(fs.existsSync(path.join(multi.artifactDir, 'trufflehog-image/alpha-amd-secret.jsonl')));
+          assert(!fs.existsSync(path.join(multi.artifactDir, 'trivy/reports.txt')));
+          assert(!fs.existsSync(path.join(multi.artifactDir, 'trufflehog-image/reports.txt')));
+
+          const single = runManifestScript({
+            stage: 'fast-feedback',
+            vulnLines: [
+              ['ghcr.io/coreeng/single:1.0.0', 'linux/amd64', 'sha256:single', 'single-vuln.json'],
+            ],
+            secretLines: [
+              ['ghcr.io/coreeng/single:1.0.0', 'linux/amd64', 'sha256:single', 'single-secret.jsonl'],
+            ],
+          });
+          assert.deepStrictEqual(single.failures, []);
+          assert.deepStrictEqual(single.manifest.reports, [
+            {
+              imageRef: 'ghcr.io/coreeng/single:1.0.0',
+              platform: 'linux/amd64',
+              digest: 'sha256:single',
+              vulnerabilityReport: 'trivy/single-vuln.json',
+              secretReport: 'trufflehog-image/single-secret.jsonl',
+            },
+          ]);
+
+          const cleanSecretScan = runManifestScript({
+            stage: 'fast-feedback',
+            vulnLines: [
+              ['ghcr.io/coreeng/clean-secret:1.0.0', 'linux/amd64', 'sha256:clean', 'clean-secret-vuln.json'],
+            ],
+            secretLines: [
+              ['ghcr.io/coreeng/clean-secret:1.0.0', 'linux/amd64', 'sha256:clean', 'empty-clean-secret.jsonl'],
+            ],
+          });
+          assert.deepStrictEqual(cleanSecretScan.failures, []);
+          assert.deepStrictEqual(cleanSecretScan.manifest.reports, [
+            {
+              imageRef: 'ghcr.io/coreeng/clean-secret:1.0.0',
+              platform: 'linux/amd64',
+              digest: 'sha256:clean',
+              vulnerabilityReport: 'trivy/clean-secret-vuln.json',
+              secretReport: 'trufflehog-image/empty-clean-secret.jsonl',
+            },
+          ]);
+
+          const missingSecret = runManifestScript({
+            stage: 'fast-feedback',
+            vulnLines: [
+              ['ghcr.io/coreeng/single:1.0.0', 'linux/amd64', 'sha256:single', 'single-vuln.json'],
+            ],
+            secretLines: [],
+          });
+          assert.deepStrictEqual(
+            missingSecret.failures,
+            ['Missing secret report for ghcr.io/coreeng/single:1.0.0 (linux/amd64) @ sha256:single.'],
+          );
+
+          const missingVulnerability = runManifestScript({
+            stage: 'fast-feedback',
+            vulnLines: [],
+            secretLines: [
+              ['ghcr.io/coreeng/single:1.0.0', 'linux/amd64', 'sha256:single', 'single-secret.jsonl'],
+            ],
+          });
+          assert.deepStrictEqual(
+            missingVulnerability.failures,
+            ['Missing vulnerability report for ghcr.io/coreeng/single:1.0.0 (linux/amd64) @ sha256:single.'],
+          );
+
+          const manifestDigestMismatch = runManifestScript({
+            stage: 'fast-feedback',
+            vulnLines: [
+              ['ghcr.io/coreeng/single@sha256:input', 'linux/amd64', 'sha256:resolved', 'single-vuln.json'],
+            ],
+            secretLines: [
+              ['ghcr.io/coreeng/single@sha256:input', 'linux/amd64', 'sha256:resolved', 'single-secret.jsonl'],
+            ],
+          });
+          assert.deepStrictEqual(
+            manifestDigestMismatch.failures,
+            ['Pinned digest sha256:input for ghcr.io/coreeng/single@sha256:input does not match scanned digest sha256:resolved.'],
+          );
+
+          const invalidStage = runManifestScript({
+            stage: 'qa',
+            vulnLines: [
+              ['ghcr.io/coreeng/single:1.0.0', 'linux/amd64', 'sha256:single', 'single-vuln.json'],
+            ],
+            secretLines: [
+              ['ghcr.io/coreeng/single:1.0.0', 'linux/amd64', 'sha256:single', 'single-secret.jsonl'],
+            ],
+          });
+          assert.deepStrictEqual(
+            invalidStage.failures,
+            ["Unknown pipeline-stage 'qa'. Expected: fast-feedback|extended-test|prod."],
+          );
+
+          const malformed = runManifestScript({
+            stage: 'fast-feedback',
+            vulnRawLines: ['ghcr.io/coreeng/single:1.0.0\tlinux/amd64\tsha256:single'],
+            secretLines: [],
+          });
+          assert.deepStrictEqual(
+            malformed.failures,
+            ['Malformed vulnerability report list entry: ghcr.io/coreeng/single:1.0.0\tlinux/amd64\tsha256:single'],
+          );
+
+          const duplicate = runManifestScript({
+            stage: 'fast-feedback',
+            vulnLines: [
+              ['ghcr.io/coreeng/single:1.0.0', 'linux/amd64', 'sha256:single', 'single-vuln.json'],
+              ['ghcr.io/coreeng/single:1.0.0', 'linux/amd64', 'sha256:single', 'single-vuln-copy.json'],
+            ],
+            secretLines: [
+              ['ghcr.io/coreeng/single:1.0.0', 'linux/amd64', 'sha256:single', 'single-secret.jsonl'],
+            ],
+          });
+          assert.deepStrictEqual(
+            duplicate.failures,
+            ['Duplicate vulnerability report for ghcr.io/coreeng/single:1.0.0 (linux/amd64) @ sha256:single.'],
+          );
+
+          const missingPath = runManifestScript({
+            stage: 'fast-feedback',
+            vulnLines: [
+              ['ghcr.io/coreeng/single:1.0.0', 'linux/amd64', 'sha256:single', 'missing-vuln.json'],
+            ],
+            secretLines: [
+              ['ghcr.io/coreeng/single:1.0.0', 'linux/amd64', 'sha256:single', 'single-secret.jsonl'],
+            ],
+          });
+          assert.deepStrictEqual(
+            missingPath.failures,
+            ['Vulnerability report path does not exist: ' + path.join(missingPath.tmp, 'trivy', 'missing-vuln.json')],
+          );
+
+          const noReports = runManifestScript({ stage: 'fast-feedback' });
+          assert.deepStrictEqual(
+            noReports.failures,
+            ['No scanned image reports found; cannot build manifest.json.'],
+          );
+
+          const badSecretExtension = runManifestScript({
+            stage: 'fast-feedback',
+            vulnLines: [
+              ['ghcr.io/coreeng/single:1.0.0', 'linux/amd64', 'sha256:single', 'single-vuln.json'],
+            ],
+            secretLines: [
+              ['ghcr.io/coreeng/single:1.0.0', 'linux/amd64', 'sha256:single', 'single-secret.json'],
+            ],
+          });
+          assert.deepStrictEqual(
+            badSecretExtension.failures,
+            ['Secret report path must end in .jsonl: single-secret.json'],
+          );
+
+          const parentTraversal = runManifestScript({
+            stage: 'fast-feedback',
+            vulnLines: [
+              ['ghcr.io/coreeng/single:1.0.0', 'linux/amd64', 'sha256:single', '../single-vuln.json'],
+            ],
+            secretLines: [
+              ['ghcr.io/coreeng/single:1.0.0', 'linux/amd64', 'sha256:single', 'single-secret.jsonl'],
+            ],
+          });
+          assert.deepStrictEqual(
+            parentTraversal.failures,
+            ['Vulnerability report path must stay inside report root: ../single-vuln.json'],
+          );
+
+          const emptyReport = runManifestScript({
+            stage: 'fast-feedback',
+            vulnLines: [
+              ['ghcr.io/coreeng/single:1.0.0', 'linux/amd64', 'sha256:single', 'empty-vuln.json'],
+            ],
+            secretLines: [
+              ['ghcr.io/coreeng/single:1.0.0', 'linux/amd64', 'sha256:single', 'single-secret.jsonl'],
+            ],
+          });
+          assert.deepStrictEqual(
+            emptyReport.failures,
+            ['Vulnerability report is empty: empty-vuln.json'],
+          );
+
+          console.log('image scan manifest fixtures passed');
           NODE
 
   get_image_extended_test:

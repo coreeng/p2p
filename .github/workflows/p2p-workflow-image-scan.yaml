@@ -192,6 +192,10 @@ jobs:
             const listPath = path.join(process.env.RUNNER_TEMP, 'pulled-images.txt');
             fs.writeFileSync(listPath, '');
             core.setOutput('list-path', listPath);
+            const pinnedDigest = ref => {
+              const match = String(ref).match(/@([^@]+)$/);
+              return match ? match[1] : null;
+            };
             for (const ref of refs) {
               // One inspect per ref: `{{json .}}` exposes `.manifest.manifests[]` for OCI indexes / Docker manifest
               // lists, and `.manifest.digest` + `.image.{os,architecture,variant}` for single-manifest images.
@@ -227,7 +231,19 @@ jobs:
                 core.setFailed(`Could not enumerate platforms for ${ref}.`);
                 return;
               }
+              const requestedDigest = pinnedDigest(ref);
+              const requestedIndexDigest = requestedDigest
+                && info?.manifest?.digest === requestedDigest
+                && entries.every(entry => entry.digest !== requestedDigest);
+              if (requestedIndexDigest) {
+                core.setFailed(`Pinned digest ${requestedDigest} for ${ref} resolves to an image index. Use a platform-specific manifest digest for image scan evidence.`);
+                return;
+              }
               for (const { platform, digest } of entries) {
+                if (requestedDigest && requestedDigest !== digest) {
+                  core.setFailed(`Resolved platform digest ${digest} for ${ref} does not match pinned digest ${requestedDigest}. Use a platform-specific manifest digest for image scan evidence.`);
+                  return;
+                }
                 core.info(`Pulling ${ref} (${platform}) @ ${digest}`);
                 execFileSync('docker', ['pull', '--platform', platform, ref], { stdio: 'inherit' });
                 fs.appendFileSync(listPath, `${ref}\t${platform}\t${digest}\n`);
@@ -321,7 +337,7 @@ jobs:
               const [ref, plat, digest] = line.split('\t');
               const refName = ref.split('@')[0];
               const target = `docker://${refName}@${digest}`;
-              const out = path.join(reportsDir, `${sanitize(ref)}-${sanitize(plat)}.json`);
+              const out = path.join(reportsDir, `${sanitize(ref)}-${sanitize(plat)}.jsonl`);
               core.info(`Scanning ${ref} (${plat}) @ ${digest} for secrets`);
               const proc = spawnSync(
                 'trufflehog',
@@ -335,6 +351,203 @@ jobs:
               fs.writeFileSync(out, proc.stdout || '');
               fs.appendFileSync(reportList, `${ref}\t${plat}\t${digest}\t${out}\n`);
             }
+
+      - id: manifest
+        name: Build image scan manifest
+        if: ${{ inputs.dry-run == false }}
+        uses: actions/github-script@v7
+        env:
+          PIPELINE_STAGE: ${{ inputs.pipeline-stage }}
+          REPORT_LIST: ${{ steps.scan.outputs.report-list }}
+          SECRET_REPORT_LIST: ${{ steps.secret-scan.outputs.report-list }}
+          REPORT_ROOT: ${{ steps.scan.outputs.reports-dir }}
+          SECRET_REPORT_ROOT: ${{ steps.secret-scan.outputs.reports-dir }}
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            const stage = process.env.PIPELINE_STAGE;
+            if (!['fast-feedback', 'extended-test', 'prod'].includes(stage)) {
+              core.setFailed(`Unknown pipeline-stage '${stage}'. Expected: fast-feedback|extended-test|prod.`);
+              return;
+            }
+
+            const artifactRoot = path.join(process.env.RUNNER_TEMP, 'image-scan-artifact');
+            const keyFor = (ref, platform, digest) => [ref, platform, digest].join('\u0000');
+            const displayPath = file => String(file || '').split(path.sep).join('/');
+            const title = kind => kind.charAt(0).toUpperCase() + kind.slice(1);
+            const pinnedDigest = ref => {
+              const match = String(ref).match(/@([^@]+)$/);
+              return match ? match[1] : null;
+            };
+
+            function resolveReportPath(reportPath, reportRoot, artifactPrefix, expectedExtension, kind, options = {}) {
+              if (!reportPath) {
+                core.setFailed(`Missing ${kind} report path.`);
+                return null;
+              }
+              if (!reportRoot || !fs.existsSync(reportRoot)) {
+                core.setFailed(`Missing ${kind} report root.`);
+                return null;
+              }
+              const root = path.resolve(reportRoot);
+              const resolved = path.resolve(path.isAbsolute(reportPath) ? reportPath : path.join(root, reportPath));
+              if (resolved !== root && !resolved.startsWith(`${root}${path.sep}`)) {
+                core.setFailed(`${title(kind)} report path must stay inside report root: ${displayPath(reportPath)}`);
+                return null;
+              }
+              const relativePath = path.relative(root, resolved).split(path.sep).join('/');
+              if (
+                !relativePath
+                || path.isAbsolute(relativePath)
+                || relativePath === '..'
+                || relativePath.startsWith('../')
+                || relativePath.split('/').includes('..')
+              ) {
+                core.setFailed(`${title(kind)} report path must be artifact-relative without parent traversal: ${displayPath(reportPath)}`);
+                return null;
+              }
+              if (!fs.existsSync(resolved)) {
+                core.setFailed(`${title(kind)} report path does not exist: ${displayPath(reportPath)}`);
+                return null;
+              }
+              const stat = fs.statSync(resolved);
+              if (!stat.isFile()) {
+                core.setFailed(`${title(kind)} report path is not a file: ${displayPath(reportPath)}`);
+                return null;
+              }
+              if (stat.size === 0 && !options.allowEmpty) {
+                core.setFailed(`${title(kind)} report is empty: ${relativePath}`);
+                return null;
+              }
+              if (!relativePath.endsWith(expectedExtension)) {
+                core.setFailed(`${title(kind)} report path must end in ${expectedExtension}: ${relativePath}`);
+                return null;
+              }
+              return {
+                sourcePath: resolved,
+                artifactPath: `${artifactPrefix}/${relativePath}`,
+              };
+            }
+
+            function readReportList(listPath, kind, reportRoot, artifactPrefix, expectedExtension, options = {}) {
+              if (!listPath || !fs.existsSync(listPath) || fs.statSync(listPath).size === 0) {
+                return new Map();
+              }
+              const reports = new Map();
+              for (const line of fs.readFileSync(listPath, 'utf8').split('\n').filter(Boolean)) {
+                const fields = line.split('\t');
+                if (fields.length !== 4) {
+                  core.setFailed(`Malformed ${kind} report list entry: ${line}`);
+                  return null;
+                }
+                const [imageRef, platform, digest, reportPath] = fields;
+                if (!imageRef || !platform || !digest || !reportPath) {
+                  core.setFailed(`Malformed ${kind} report list entry: ${line}`);
+                  return null;
+                }
+                const key = keyFor(imageRef, platform, digest);
+                if (reports.has(key)) {
+                  core.setFailed(`Duplicate ${kind} report for ${imageRef} (${platform}) @ ${digest}.`);
+                  return null;
+                }
+                const resolvedReport = resolveReportPath(reportPath, reportRoot, artifactPrefix, expectedExtension, kind, options);
+                if (!resolvedReport) return null;
+                reports.set(key, { imageRef, platform, digest, ...resolvedReport });
+              }
+              return reports;
+            }
+
+            const vulnerabilityReports = readReportList(
+              process.env.REPORT_LIST,
+              'vulnerability',
+              process.env.REPORT_ROOT,
+              'trivy',
+              '.json',
+            );
+            if (!vulnerabilityReports) return;
+            const secretReports = readReportList(
+              process.env.SECRET_REPORT_LIST,
+              'secret',
+              process.env.SECRET_REPORT_ROOT,
+              'trufflehog-image',
+              '.jsonl',
+              { allowEmpty: true },
+            );
+            if (!secretReports) return;
+
+            const reports = [];
+            const artifactPaths = new Set();
+            function addArtifactPath(file) {
+              if (artifactPaths.has(file.artifactPath)) {
+                core.setFailed(`Duplicate artifact report path: ${file.artifactPath}`);
+                return false;
+              }
+              artifactPaths.add(file.artifactPath);
+              return true;
+            }
+
+            for (const vulnReport of vulnerabilityReports.values()) {
+              const key = keyFor(vulnReport.imageRef, vulnReport.platform, vulnReport.digest);
+              const secretReport = secretReports.get(key);
+              if (!secretReport) {
+                core.setFailed(`Missing secret report for ${vulnReport.imageRef} (${vulnReport.platform}) @ ${vulnReport.digest}.`);
+                return;
+              }
+              const requestedDigest = pinnedDigest(vulnReport.imageRef);
+              if (requestedDigest && requestedDigest !== vulnReport.digest) {
+                core.setFailed(`Pinned digest ${requestedDigest} for ${vulnReport.imageRef} does not match scanned digest ${vulnReport.digest}.`);
+                return;
+              }
+              if (!addArtifactPath(vulnReport) || !addArtifactPath(secretReport)) return;
+              reports.push({
+                imageRef: vulnReport.imageRef,
+                platform: vulnReport.platform,
+                digest: vulnReport.digest,
+                vulnerabilityReport: vulnReport.artifactPath,
+                secretReport: secretReport.artifactPath,
+              });
+            }
+            for (const secretReport of secretReports.values()) {
+              const key = keyFor(secretReport.imageRef, secretReport.platform, secretReport.digest);
+              if (!vulnerabilityReports.has(key)) {
+                core.setFailed(`Missing vulnerability report for ${secretReport.imageRef} (${secretReport.platform}) @ ${secretReport.digest}.`);
+                return;
+              }
+            }
+
+            if (reports.length === 0) {
+              core.setFailed('No scanned image reports found; cannot build manifest.json.');
+              return;
+            }
+
+            reports.sort((a, b) => (
+              a.imageRef.localeCompare(b.imageRef)
+              || a.platform.localeCompare(b.platform)
+              || a.digest.localeCompare(b.digest)
+            ));
+
+            const manifest = {
+              schemaVersion: 1,
+              stage,
+              reports,
+            };
+            fs.rmSync(artifactRoot, { recursive: true, force: true });
+            fs.mkdirSync(artifactRoot, { recursive: true });
+            const copyReport = reportPath => {
+              const destination = path.join(artifactRoot, ...reportPath.artifactPath.split('/'));
+              fs.mkdirSync(path.dirname(destination), { recursive: true });
+              fs.copyFileSync(reportPath.sourcePath, destination);
+            };
+            for (const vulnReport of vulnerabilityReports.values()) copyReport(vulnReport);
+            for (const secretReport of secretReports.values()) copyReport(secretReport);
+
+            const manifestPath = path.join(artifactRoot, 'manifest.json');
+            fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
+            core.setOutput('manifest-path', manifestPath);
+            core.setOutput('artifact-dir', artifactRoot);
+            core.info(`Wrote image scan manifest to ${manifestPath}`);
 
       - id: report
         name: Build report
@@ -689,14 +902,12 @@ jobs:
           recreate: true
 
       - name: Upload image-scan reports
-        if: ${{ always() && inputs.dry-run == false }}
+        if: ${{ inputs.dry-run == false && steps.manifest.outputs.artifact-dir != '' }}
         uses: actions/upload-artifact@v4
         with:
           name: image-scan-reports-${{ inputs.github_env || 'local' }}
-          path: |
-            ${{ steps.scan.outputs.reports-dir }}
-            ${{ steps.secret-scan.outputs.reports-dir }}
-          if-no-files-found: ignore
+          path: ${{ steps.manifest.outputs.artifact-dir }}
+          if-no-files-found: error
           retention-days: 30
 
       - name: Enforce policy
