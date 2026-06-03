@@ -99,6 +99,312 @@ jobs:
       pipeline-stage: prod
       version: ${{ needs.test_version.outputs.version }}
 
+  test_image_ref_resolution:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: Test image reference resolver
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          workflow = Path('.github/workflows/p2p-workflow-image-scan.yaml')
+          lines = workflow.read_text().splitlines()
+          in_step = False
+          in_script = False
+          script = []
+
+          for line in lines:
+              if line.startswith('      - id: resolve-images'):
+                  in_step = True
+                  continue
+              if in_step and line.startswith('      - id: ') and 'resolve-images' not in line:
+                  break
+              if in_step and line.strip() == 'script: |':
+                  in_script = True
+                  continue
+              if in_script:
+                  if line.startswith('            '):
+                      script.append(line[12:])
+                  elif line.strip() == '':
+                      script.append('')
+                  else:
+                      break
+
+          if not script:
+              raise SystemExit('Could not extract Resolve image references script')
+          extracted = '\n'.join(script) + '\n'
+          for marker in ('p2p-image-refs', 'normalizeExplicitRef', 'core.setFailed'):
+              if marker not in extracted:
+                  raise SystemExit(f'Extracted resolver script is missing expected marker: {marker}')
+          Path('/tmp/resolve-image-refs.js').write_text(extracted)
+          PY
+
+          node <<'NODE'
+          const assert = require('assert');
+          const fs = require('fs');
+          const vm = require('vm');
+
+          const resolverScript = fs.readFileSync('/tmp/resolve-image-refs.js', 'utf8');
+
+          async function runCase(name, makeOutputs, envOverrides = {}) {
+            const calls = [];
+            const outputs = {};
+            const infos = [];
+            const failures = [];
+            const make = (target) => makeOutputs[target] ?? null;
+
+            const sandbox = {
+              process: {
+                env: {
+                  PIPELINE_STAGE: 'fast-feedback',
+                  REGION: 'europe-west2',
+                  PROJECT_ID: 'project-a',
+                  TENANT_NAME: 'tenant-a',
+                  VERSION: '1.2.3',
+                  WORKING_DIR: '/repo',
+                  ...envOverrides,
+                },
+              },
+              core: {
+                setOutput: (key, value) => { outputs[key] = value; },
+                info: (message) => { infos.push(message); },
+                setFailed: (message) => { failures.push(message); },
+              },
+              require: (moduleName) => {
+                if (moduleName !== 'child_process') {
+                  return require(moduleName);
+                }
+                return {
+                  execFileSync(command, args, options) {
+                    calls.push({ command, args, cwd: options.cwd });
+                    assert.strictEqual(command, 'make', `${name}: command`);
+                    const target = args[args.length - 1];
+                    if (args.includes('-q')) {
+                      if (Object.prototype.hasOwnProperty.call(makeOutputs, target)) {
+                        return '';
+                      }
+                      const error = new Error(`No rule to make target '${target}'`);
+                      error.status = 2;
+                      throw error;
+                    }
+                    const output = make(target);
+                    if (output === null) {
+                      const error = new Error(`No rule to make target '${target}'`);
+                      error.status = 2;
+                      throw error;
+                    }
+                    return output;
+                  },
+                };
+              },
+            };
+
+            await vm.runInNewContext(`(async () => {\n${resolverScript}\n})()`, sandbox);
+            return { calls, outputs, infos, failures };
+          }
+
+          (async () => {
+          const fallback = await runCase('missing override falls back', {
+            'p2p-images': 'api ui\n',
+          });
+          assert.deepStrictEqual(fallback.failures, [], 'missing override falls back: no failures');
+          assert.deepStrictEqual(
+            fallback.outputs['image-refs'].split('\n'),
+            [
+              'europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/fast-feedback/api:1.2.3',
+              'europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/fast-feedback/ui:1.2.3',
+            ],
+          );
+
+          const explicit = await runCase('explicit refs normalize', {
+            'p2p-image-refs': [
+              'ghcr.io/coreeng/support-bot',
+              'ghcr.io/coreeng/support-bot:0.0.48',
+              'ghcr.io/coreeng/support-bot@sha256:abc123',
+              'localhost:5000/team/service',
+            ].join('\n'),
+            'p2p-images': 'should-not-be-used\n',
+          });
+          assert.deepStrictEqual(explicit.failures, [], 'explicit refs normalize: no failures');
+          assert.deepStrictEqual(
+            explicit.outputs['image-refs'].split('\n'),
+            [
+              'ghcr.io/coreeng/support-bot:1.2.3',
+              'ghcr.io/coreeng/support-bot:0.0.48',
+              'ghcr.io/coreeng/support-bot@sha256:abc123',
+              'localhost:5000/team/service:1.2.3',
+            ],
+          );
+          assert.deepStrictEqual(
+            explicit.calls.map(call => call.args[call.args.length - 1]),
+            ['p2p-image-refs', 'p2p-image-refs'],
+          );
+
+          const emptyOverride = await runCase('empty override falls back', {
+            'p2p-image-refs': '\n',
+            'p2p-images': 'worker\n',
+          });
+          assert.deepStrictEqual(emptyOverride.failures, [], 'empty override falls back: no failures');
+          assert.strictEqual(
+            emptyOverride.outputs['image-refs'],
+            'europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/fast-feedback/worker:1.2.3',
+          );
+
+          const noTargets = await runCase('no targets fails cleanly', {
+            'p2p-image-refs': '\n',
+          });
+          assert.deepStrictEqual(
+            noTargets.failures,
+            ['Neither p2p-image-refs nor p2p-images produced any image references; nothing to scan.'],
+          );
+          assert.strictEqual(noTargets.outputs['image-refs'], undefined);
+
+          const unknownStage = await runCase(
+            'unknown stage fails cleanly',
+            { 'p2p-images': 'api\n' },
+            { PIPELINE_STAGE: 'qa' },
+          );
+          assert.deepStrictEqual(
+            unknownStage.failures,
+            ["Unknown pipeline-stage 'qa'. Expected: fast-feedback|extended-test|prod."],
+          );
+          assert.strictEqual(unknownStage.outputs['image-refs'], undefined);
+
+          console.log('image ref resolver fixtures passed');
+          })().catch(error => {
+            console.error(error);
+            process.exit(1);
+          });
+          NODE
+
+      - name: Test image scan target construction
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def extract_script(step_id):
+              workflow = Path('.github/workflows/p2p-workflow-image-scan.yaml')
+              lines = workflow.read_text().splitlines()
+              in_step = False
+              in_script = False
+              script = []
+
+              for line in lines:
+                  if line.startswith(f'      - id: {step_id}'):
+                      in_step = True
+                      continue
+                  if in_step and line.startswith('      - id: ') and step_id not in line:
+                      break
+                  if in_step and line.strip() == 'script: |':
+                      in_script = True
+                      continue
+                  if in_script:
+                      if line.startswith('            '):
+                          script.append(line[12:])
+                      elif line.strip() == '':
+                          script.append('')
+                      else:
+                          break
+
+              if not script:
+                  raise SystemExit(f'Could not extract {step_id} script')
+              return '\n'.join(script) + '\n'
+
+          scripts = {
+              'scan': extract_script('scan'),
+              'secret-scan': extract_script('secret-scan'),
+          }
+          for marker in ('const target', '@${digest}'):
+              if marker not in scripts['scan']:
+                  raise SystemExit(f'Extracted scan script is missing expected marker: {marker}')
+          for marker in ('docker://${', '@${digest}'):
+              if marker not in scripts['secret-scan']:
+                  raise SystemExit(f'Extracted secret-scan script is missing expected marker: {marker}')
+
+          Path('/tmp/image-scan-script.js').write_text(scripts['scan'])
+          Path('/tmp/image-secret-scan-script.js').write_text(scripts['secret-scan'])
+          PY
+
+          node <<'NODE'
+          const assert = require('assert');
+          const fs = require('fs');
+          const os = require('os');
+          const path = require('path');
+          const vm = require('vm');
+
+          function runScanScript(scriptPath) {
+            const script = fs.readFileSync(scriptPath, 'utf8');
+            const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'image-targets-'));
+            const pulledList = path.join(tmp, 'pulled-images.txt');
+            fs.writeFileSync(
+              pulledList,
+              [
+                'ghcr.io/coreeng/support-bot@sha256:input\tlinux/amd64\tsha256:resolved',
+                'ghcr.io/coreeng/support-bot:0.0.48\tlinux/arm64\tsha256:tagresolved',
+              ].join('\n') + '\n',
+            );
+
+            const calls = [];
+            const outputs = {};
+            const failures = [];
+            const sandbox = {
+              process: {
+                env: {
+                  RUNNER_TEMP: tmp,
+                  PULLED_LIST: pulledList,
+                  SEVERITY: 'CRITICAL,HIGH',
+                  IGNORE_UNFIXED: 'true',
+                },
+              },
+              core: {
+                setOutput: (key, value) => { outputs[key] = value; },
+                setFailed: (message) => { failures.push(message); },
+                info: () => {},
+              },
+              require: (moduleName) => {
+                if (moduleName === 'child_process') {
+                  return {
+                    execFileSync(command, args) {
+                      calls.push({ command, args });
+                      return '';
+                    },
+                    spawnSync(command, args) {
+                      calls.push({ command, args });
+                      return { status: 0, stdout: '', stderr: '' };
+                    },
+                  };
+                }
+                return require(moduleName);
+              },
+            };
+
+            vm.runInNewContext(`(async () => {\n${script}\n})()`, sandbox);
+            assert.deepStrictEqual(failures, []);
+            return calls;
+          }
+
+          const trivyCalls = runScanScript('/tmp/image-scan-script.js');
+          assert.deepStrictEqual(
+            trivyCalls.map(call => call.args[call.args.length - 1]),
+            [
+              'ghcr.io/coreeng/support-bot@sha256:resolved',
+              'ghcr.io/coreeng/support-bot:0.0.48@sha256:tagresolved',
+            ],
+          );
+
+          const secretCalls = runScanScript('/tmp/image-secret-scan-script.js');
+          assert.deepStrictEqual(
+            secretCalls.map(call => call.args[2]),
+            [
+              'docker://ghcr.io/coreeng/support-bot@sha256:resolved',
+              'docker://ghcr.io/coreeng/support-bot:0.0.48@sha256:tagresolved',
+            ],
+          );
+
+          console.log('image scan target fixtures passed');
+          NODE
+
   get_image_extended_test:
     uses: ./.github/workflows/p2p-get-latest-image-extended-test.yaml
     secrets:

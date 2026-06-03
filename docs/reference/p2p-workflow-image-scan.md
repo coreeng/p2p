@@ -1,6 +1,6 @@
 # p2p-workflow-image-scan
 
-> Scans every image returned by `make p2p-images` for known vulnerabilities (Trivy) and embedded secrets (TruffleHog). Produces a workflow summary, a sticky PR comment (on `pull_request` events), and an `image-scan-reports-<github_env>` artifact. Optionally fails the job on blocking findings.
+> Scans every image resolved by the repository's P2P image targets for known vulnerabilities (Trivy) and embedded secrets (TruffleHog). Produces a workflow summary, a sticky PR comment (on `pull_request` events), and an `image-scan-reports-<github_env>` artifact. Optionally fails the job on blocking findings.
 
 ## Usage
 
@@ -27,11 +27,11 @@ jobs:
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `pipeline-stage` | string | Yes | — | One of `fast-feedback`, `extended-test`, `prod`. Selects the registry path (`<region>-docker.pkg.dev/<project>/tenant/<tenant>/<stage>`) the images are pulled from. |
-| `version` | string | Yes | — | Image tag to scan. All images returned by `make p2p-images` are scanned at this version. |
+| `version` | string | Yes | — | Image tag to scan. Used for standard P2P image names and for explicit image repositories returned without a tag or digest. |
 | `github_env` | string | No | `''` | GitHub Environment used for GCP auth and concurrency grouping. Required in practice — image pulls go through Workload Identity Federation bound to this environment. |
 | `tenant-name` | string | No | `''` | Tenant identifier. Falls back to `vars.TENANT_NAME` when empty. |
 | `region` | string | No | `europe-west2` | GCP region for the Artifact Registry. Overridden by `vars.REGION` when set on the environment. |
-| `working-directory` | string | No | `.` | Directory from which `make p2p-images` is executed to discover image names. |
+| `working-directory` | string | No | `.` | Directory from which `make p2p-image-refs` or `make p2p-images` is executed to discover scan targets. |
 | `dry-run` | boolean | No | `false` | When `true`, skips GCP auth, registry login, Trivy install, the scan itself, the sticky PR comment, the artifact upload, and the policy step. The `Build report` step still runs and produces a "Scan skipped" summary. |
 | `fail-on-findings` | boolean | No | `false` | When `true`, fails the job if any reported vulnerability at a `blocking-severity` level or verified image secret is detected. |
 | `severity` | string | No | `CRITICAL,HIGH` | Comma-separated Trivy severities to report. |
@@ -62,7 +62,7 @@ The workflow inherits permissions from the caller. Grant:
 
 | Scope | When required |
 |-------|---------------|
-| `contents: read` | Always — cloning the repository and reading `make p2p-images`. |
+| `contents: read` | Always — cloning the repository and reading P2P image make targets. |
 | `id-token: write` | Always — GCP authentication via Workload Identity Federation. |
 | `pull-requests: write` | `pull_request` events only — posting the sticky PR comment. Without it the comment step fails open (continue-on-error); the summary and artifact are still produced. |
 
@@ -90,13 +90,23 @@ The job runs under `environment: ${{ inputs.github_env }}`.
 
 ## Image resolution
 
-The list of images to scan is taken from `make p2p-images` executed in `working-directory`. The make target must print whitespace-separated image names (no registry, no tag). Each name is combined with the registry path for `pipeline-stage` and the `version` input to form the full reference:
+The workflow first checks for an optional `p2p-image-refs` make target in `working-directory`. If the target exists and prints at least one whitespace-separated entry, those entries are scanned directly after normalization:
+
+- `ghcr.io/coreeng/support-bot` becomes `ghcr.io/coreeng/support-bot:<version>`.
+- `ghcr.io/coreeng/support-bot:0.0.48` is scanned unchanged.
+- `ghcr.io/coreeng/support-bot@sha256:<digest>` is scanned unchanged.
+
+Any entry containing `@` is treated as an explicit digest reference, and any entry with a colon after the last slash is treated as tagged. This means registry ports such as `localhost:5000/team/service` are not mistaken for tags; they receive the workflow `version` tag when no image tag is present.
+
+Every explicit ref must be readable with the workflow's existing registry credentials: the stage Artifact Registry login, public anonymous access, or the single optional `container_registry_user` / `container_registry_pat` / `container_registry_url` login.
+
+If `p2p-image-refs` is missing or prints no entries, the workflow keeps the standard P2P behavior. It runs `make p2p-images` in `working-directory`; that target must print whitespace-separated image names with no registry and no tag. Each name is combined with the registry path for `pipeline-stage` and the `version` input to form the full reference:
 
 ```
 <region>-docker.pkg.dev/<project>/tenant/<tenant>/<pipeline-stage>/<image>:<version>
 ```
 
-If `make p2p-images` returns no names, the job fails — there is nothing to scan.
+If neither target produces scan targets, the job fails — there is nothing to scan.
 
 ## Report format
 

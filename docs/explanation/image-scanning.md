@@ -1,10 +1,12 @@
 # Image scanning
 
-Image scanning is a two-tool stack. Trivy reports known CVEs in OS and language packages. TruffleHog reports secrets embedded anywhere in any layer of the built image, including intermediate layers that were squashed out of the final filesystem. Both tools run inside [`p2p-workflow-image-scan`](../reference/p2p-workflow-image-scan.md) against each image returned by `make p2p-images`.
+Image scanning is a two-tool stack. Trivy reports known CVEs in OS and language packages. TruffleHog reports secrets embedded anywhere in any layer of the built image, including intermediate layers that were squashed out of the final filesystem. Both tools run inside [`p2p-workflow-image-scan`](../reference/p2p-workflow-image-scan.md) against each resolved image reference.
 
 ## What gets scanned and when
 
-For a given stage, the workflow runs `make p2p-images` in the configured working directory, combines each returned image name with that stage's registry path and the requested version, and scans the resulting image references. In the pipeline stage workflows, image scanning is built into fast-feedback, extended-test, and prod: fast-feedback calls it after the build job, while extended-test and prod call it before promotion or deployment on main-branch runs.
+For a given stage, the workflow normally runs `make p2p-images` in the configured working directory, combines each returned image name with that stage's registry path and the requested version, and scans the resulting image references. Repositories that publish or test final images outside the standard P2P Artifact Registry layout can instead add `p2p-image-refs`; when that target prints refs, untagged entries receive the requested version and tagged or digest entries are scanned unchanged. Those refs must be readable through the workflow's existing registry logins: stage Artifact Registry, public anonymous access, or the single optional `container_registry_*` login.
+
+In the pipeline stage workflows, image scanning is built into fast-feedback, extended-test, and prod: fast-feedback calls it after the build job, while extended-test and prod call it before promotion or deployment on main-branch runs.
 
 The scheduled [`p2p-workflow-security-scan`](../reference/p2p-workflow-security-scan.md) umbrella runs image scanning alongside source security scanning. It resolves one anchor image, looks up the latest version in each stage registry path, and then invokes image scanning once for fast-feedback, extended-test, and prod.
 

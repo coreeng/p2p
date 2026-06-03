@@ -118,16 +118,59 @@ jobs:
               core.setFailed(`Unknown pipeline-stage '${stage}'. Expected: fast-feedback|extended-test|prod.`);
               return;
             }
-            const registry = `${process.env.REGION}-docker.pkg.dev/${process.env.PROJECT_ID}/tenant/${process.env.TENANT_NAME}/${stage}`;
-            const images = execFileSync('make', ['--no-print-directory', 'p2p-images'], {
-              encoding: 'utf8',
-              cwd: process.env.WORKING_DIR,
-            }).trim().split(/\s+/).filter(Boolean);
-            if (images.length === 0) {
-              core.setFailed('make p2p-images returned no images; nothing to scan.');
+
+            function runMake(target) {
+              return execFileSync('make', ['--no-print-directory', target], {
+                encoding: 'utf8',
+                cwd: process.env.WORKING_DIR,
+              });
+            }
+
+            function makeTargetExists(target) {
+              try {
+                execFileSync('make', ['--no-print-directory', '-q', target], {
+                  cwd: process.env.WORKING_DIR,
+                  stdio: 'ignore',
+                });
+                return true;
+              } catch (err) {
+                // `make -q` returns 1 for targets that exist but would run, including PHONY targets.
+                // Missing targets return 2, which is the only case that should trigger fallback.
+                return err.status !== 2;
+              }
+            }
+
+            function entries(output) {
+              return output.trim().split(/\s+/).filter(Boolean);
+            }
+
+            function hasTagOrDigest(ref) {
+              const lastSlash = ref.lastIndexOf('/');
+              const lastColon = ref.lastIndexOf(':');
+              return ref.includes('@') || lastColon > lastSlash;
+            }
+
+            function normalizeExplicitRef(ref) {
+              return hasTagOrDigest(ref) ? ref : `${ref}:${process.env.VERSION}`;
+            }
+
+            const explicitRefs = makeTargetExists('p2p-image-refs')
+              ? entries(runMake('p2p-image-refs'))
+              : [];
+            let refs;
+            if (explicitRefs.length > 0) {
+              refs = explicitRefs.map(normalizeExplicitRef);
+            } else if (makeTargetExists('p2p-images')) {
+              const registry = `${process.env.REGION}-docker.pkg.dev/${process.env.PROJECT_ID}/tenant/${process.env.TENANT_NAME}/${stage}`;
+              const images = entries(runMake('p2p-images'));
+              refs = images.map(img => `${registry}/${img}:${process.env.VERSION}`);
+            } else {
+              refs = [];
+            }
+            if (refs.length === 0) {
+              core.setFailed('Neither p2p-image-refs nor p2p-images produced any image references; nothing to scan.');
               return;
             }
-            const refs = images.map(img => `${registry}/${img}:${process.env.VERSION}`);
             core.setOutput('image-refs', refs.join('\n'));
             core.info('Resolved image references:');
             refs.forEach(r => core.info(`  - ${r}`));
@@ -232,7 +275,8 @@ jobs:
             const entries = fs.readFileSync(list, 'utf8').split('\n').filter(Boolean);
             for (const line of entries) {
               const [ref, plat, digest] = line.split('\t');
-              const target = `${ref}@${digest}`;
+              const refName = ref.split('@')[0];
+              const target = `${refName}@${digest}`;
               const out = path.join(reportsDir, `${sanitize(ref)}-${sanitize(plat)}.json`);
               const args = [
                 'image',
@@ -273,7 +317,8 @@ jobs:
             const entries = fs.readFileSync(process.env.PULLED_LIST, 'utf8').split('\n').filter(Boolean);
             for (const line of entries) {
               const [ref, plat, digest] = line.split('\t');
-              const target = `docker://${ref}@${digest}`;
+              const refName = ref.split('@')[0];
+              const target = `docker://${refName}@${digest}`;
               const out = path.join(reportsDir, `${sanitize(ref)}-${sanitize(plat)}.json`);
               core.info(`Scanning ${ref} (${plat}) @ ${digest} for secrets`);
               const proc = spawnSync(
