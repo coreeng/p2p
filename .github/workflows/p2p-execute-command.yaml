@@ -80,7 +80,10 @@ jobs:
     runs-on: ubuntu-24.04
     environment: ${{ inputs.github_env }}
     concurrency:
-      group: ${{ inputs.github_env }}/${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}-${{ inputs.app-name }}-${{ inputs.subnamespace }}
+      group: >-
+        ${{ inputs.subnamespace != ''
+        && format('{0}/{1}-{2}-{3}', inputs.github_env, inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME, inputs.app-name, inputs.subnamespace)
+        || format('{0}/{1}-{2}-build-{3}-{4}', inputs.github_env, inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME, inputs.app-name, github.run_id, github.run_attempt) }}
       cancel-in-progress: false
     env:
       env_vars: ${{ secrets.env_vars }}
