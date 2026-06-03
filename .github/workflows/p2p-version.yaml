@@ -36,6 +36,9 @@ jobs:
   increment-version:
     name: increment-version
     runs-on: ubuntu-24.04
+    concurrency:
+      group: increment-version-${{ github.ref }}
+      cancel-in-progress: false
     outputs:
       version: ${{ steps.setversion.outputs.version }}
       previous_version: ${{ steps.setversion.outputs.previous_version }}
