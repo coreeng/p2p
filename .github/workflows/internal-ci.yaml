@@ -68,35 +68,16 @@ jobs:
 
   test_image_scan:
     needs: [test_version]
+    strategy:
+      matrix:
+        pipeline-stage: [fast-feedback, extended-test, prod]
     uses: ./.github/workflows/p2p-workflow-image-scan.yaml
     secrets:
       env_vars: |
         TEST_VARIABLE=value
     with:
       dry-run: true
-      pipeline-stage: fast-feedback
-      version: ${{ needs.test_version.outputs.version }}
-
-  test_image_scan_extended_test:
-    needs: [test_version]
-    uses: ./.github/workflows/p2p-workflow-image-scan.yaml
-    secrets:
-      env_vars: |
-        TEST_VARIABLE=value
-    with:
-      dry-run: true
-      pipeline-stage: extended-test
-      version: ${{ needs.test_version.outputs.version }}
-
-  test_image_scan_prod:
-    needs: [test_version]
-    uses: ./.github/workflows/p2p-workflow-image-scan.yaml
-    secrets:
-      env_vars: |
-        TEST_VARIABLE=value
-    with:
-      dry-run: true
-      pipeline-stage: prod
+      pipeline-stage: ${{ matrix.pipeline-stage }}
       version: ${{ needs.test_version.outputs.version }}
 
   test_image_ref_resolution:
@@ -105,40 +86,13 @@ jobs:
       - uses: actions/checkout@v6
       - name: Test image reference resolver
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          workflow = Path('.github/workflows/p2p-workflow-image-scan.yaml')
-          lines = workflow.read_text().splitlines()
-          in_step = False
-          in_script = False
-          script = []
-
-          for line in lines:
-              if line.startswith('      - id: resolve-images'):
-                  in_step = True
-                  continue
-              if in_step and line.startswith('      - id: ') and 'resolve-images' not in line:
-                  break
-              if in_step and line.strip() == 'script: |':
-                  in_script = True
-                  continue
-              if in_script:
-                  if line.startswith('            '):
-                      script.append(line[12:])
-                  elif line.strip() == '':
-                      script.append('')
-                  else:
-                      break
-
-          if not script:
-              raise SystemExit('Could not extract Resolve image references script')
-          extracted = '\n'.join(script) + '\n'
-          for marker in ('p2p-image-refs', 'normalizeExplicitRef', 'core.setFailed'):
-              if marker not in extracted:
-                  raise SystemExit(f'Extracted resolver script is missing expected marker: {marker}')
-          Path('/tmp/resolve-image-refs.js').write_text(extracted)
-          PY
+          python3 .github/scripts/extract-workflow-scripts.py \
+            --workflow .github/workflows/p2p-workflow-image-scan.yaml \
+            --out-dir /tmp \
+            --step resolve-images=resolve-image-refs.js \
+            --require resolve-images=p2p-image-refs \
+            --require resolve-images=normalizeExplicitRef \
+            --require resolve-images=core.setFailed
 
           node <<'NODE'
           const assert = require('assert');
@@ -281,51 +235,16 @@ jobs:
       - name: Test image scan target construction
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-
-          def extract_script(step_id):
-              workflow = Path('.github/workflows/p2p-workflow-image-scan.yaml')
-              lines = workflow.read_text().splitlines()
-              in_step = False
-              in_script = False
-              script = []
-
-              for line in lines:
-                  if line.startswith(f'      - id: {step_id}'):
-                      in_step = True
-                      continue
-                  if in_step and line.startswith('      - id: ') and step_id not in line:
-                      break
-                  if in_step and line.strip() == 'script: |':
-                      in_script = True
-                      continue
-                  if in_script:
-                      if line.startswith('            '):
-                          script.append(line[12:])
-                      elif line.strip() == '':
-                          script.append('')
-                      else:
-                          break
-
-              if not script:
-                  raise SystemExit(f'Could not extract {step_id} script')
-              return '\n'.join(script) + '\n'
-
-          scripts = {
-              'scan': extract_script('scan'),
-              'secret-scan': extract_script('secret-scan'),
-          }
-          for marker in ('const target', '@${digest}'):
-              if marker not in scripts['scan']:
-                  raise SystemExit(f'Extracted scan script is missing expected marker: {marker}')
-          for marker in ('docker://${', '@${digest}'):
-              if marker not in scripts['secret-scan']:
-                  raise SystemExit(f'Extracted secret-scan script is missing expected marker: {marker}')
-
-          Path('/tmp/image-scan-script.js').write_text(scripts['scan'])
-          Path('/tmp/image-secret-scan-script.js').write_text(scripts['secret-scan'])
-          PY
+          # shellcheck disable=SC2016
+          python3 .github/scripts/extract-workflow-scripts.py \
+            --workflow .github/workflows/p2p-workflow-image-scan.yaml \
+            --out-dir /tmp \
+            --step scan=image-scan-script.js \
+            --step secret-scan=image-secret-scan-script.js \
+            --require scan='const target' \
+            --require scan='@${digest}' \
+            --require secret-scan='docker://${' \
+            --require secret-scan='@${digest}'
 
           node <<'NODE'
           const assert = require('assert');
@@ -413,42 +332,21 @@ jobs:
       - name: Test image scan manifest construction
         run: |
           set -euo pipefail
+          python3 .github/scripts/extract-workflow-scripts.py \
+            --workflow .github/workflows/p2p-workflow-image-scan.yaml \
+            --out-dir /tmp \
+            --step pull-images=image-pull-script.js \
+            --step manifest=image-manifest-script.js \
+            --require pull-images=pinnedDigest \
+            --require pull-images='platform-specific manifest digest' \
+            --require manifest=schemaVersion \
+            --require manifest=vulnerabilityReport \
+            --require manifest=secretReport
+
           python3 - <<'PY'
           from pathlib import Path
 
           workflow = Path('.github/workflows/p2p-workflow-image-scan.yaml')
-
-          def extract_script(step_id):
-              lines = workflow.read_text().splitlines()
-              in_step = False
-              in_script = False
-              script = []
-
-              for line in lines:
-                  if line.startswith(f'      - id: {step_id}'):
-                      in_step = True
-                      continue
-                  if in_step and line.startswith('      - id: ') and step_id not in line:
-                      break
-                  if in_step and line.strip() == 'script: |':
-                      in_script = True
-                      continue
-                  if in_script:
-                      if line.startswith('            '):
-                          script.append(line[12:])
-                      elif line.strip() == '':
-                          script.append('')
-                      else:
-                          break
-
-              if not script:
-                  raise SystemExit(f'Could not extract {step_id} script')
-              return '\n'.join(script) + '\n'
-
-          scripts = {
-              'pull-images': extract_script('pull-images'),
-              'manifest': extract_script('manifest'),
-          }
           upload_block = []
           in_upload = False
           for line in workflow.read_text().splitlines():
@@ -465,15 +363,6 @@ jobs:
           for required in ('steps.manifest.outputs.artifact-dir', 'if-no-files-found: error'):
               if required not in upload_text:
                   raise SystemExit(f'Upload image-scan reports is missing {required}')
-          for marker in ('pinnedDigest', 'platform-specific manifest digest'):
-              if marker not in scripts['pull-images']:
-                  raise SystemExit(f'Extracted pull-images script is missing expected marker: {marker}')
-          for marker in ('schemaVersion', 'vulnerabilityReport', 'secretReport'):
-              if marker not in scripts['manifest']:
-                  raise SystemExit(f'Extracted manifest script is missing expected marker: {marker}')
-
-          Path('/tmp/image-pull-script.js').write_text(scripts['pull-images'])
-          Path('/tmp/image-manifest-script.js').write_text(scripts['manifest'])
           PY
 
           node <<'NODE'
@@ -728,144 +617,103 @@ jobs:
             },
           ]);
 
-          const missingSecret = runManifestScript({
-            stage: 'fast-feedback',
-            vulnLines: [
-              ['ghcr.io/coreeng/single:1.0.0', 'linux/amd64', 'sha256:single', 'single-vuln.json'],
-            ],
-            secretLines: [],
-          });
-          assert.deepStrictEqual(
-            missingSecret.failures,
-            ['Missing secret report for ghcr.io/coreeng/single:1.0.0 (linux/amd64) @ sha256:single.'],
-          );
-
-          const missingVulnerability = runManifestScript({
-            stage: 'fast-feedback',
-            vulnLines: [],
-            secretLines: [
-              ['ghcr.io/coreeng/single:1.0.0', 'linux/amd64', 'sha256:single', 'single-secret.jsonl'],
-            ],
-          });
-          assert.deepStrictEqual(
-            missingVulnerability.failures,
-            ['Missing vulnerability report for ghcr.io/coreeng/single:1.0.0 (linux/amd64) @ sha256:single.'],
-          );
-
-          const manifestDigestMismatch = runManifestScript({
-            stage: 'fast-feedback',
-            vulnLines: [
-              ['ghcr.io/coreeng/single@sha256:input', 'linux/amd64', 'sha256:resolved', 'single-vuln.json'],
-            ],
-            secretLines: [
-              ['ghcr.io/coreeng/single@sha256:input', 'linux/amd64', 'sha256:resolved', 'single-secret.jsonl'],
-            ],
-          });
-          assert.deepStrictEqual(
-            manifestDigestMismatch.failures,
-            ['Pinned digest sha256:input for ghcr.io/coreeng/single@sha256:input does not match scanned digest sha256:resolved.'],
-          );
-
-          const invalidStage = runManifestScript({
-            stage: 'qa',
-            vulnLines: [
-              ['ghcr.io/coreeng/single:1.0.0', 'linux/amd64', 'sha256:single', 'single-vuln.json'],
-            ],
-            secretLines: [
-              ['ghcr.io/coreeng/single:1.0.0', 'linux/amd64', 'sha256:single', 'single-secret.jsonl'],
-            ],
-          });
-          assert.deepStrictEqual(
-            invalidStage.failures,
-            ["Unknown pipeline-stage 'qa'. Expected: fast-feedback|extended-test|prod."],
-          );
-
-          const malformed = runManifestScript({
-            stage: 'fast-feedback',
-            vulnRawLines: ['ghcr.io/coreeng/single:1.0.0\tlinux/amd64\tsha256:single'],
-            secretLines: [],
-          });
-          assert.deepStrictEqual(
-            malformed.failures,
-            ['Malformed vulnerability report list entry: ghcr.io/coreeng/single:1.0.0\tlinux/amd64\tsha256:single'],
-          );
-
-          const duplicate = runManifestScript({
-            stage: 'fast-feedback',
-            vulnLines: [
-              ['ghcr.io/coreeng/single:1.0.0', 'linux/amd64', 'sha256:single', 'single-vuln.json'],
-              ['ghcr.io/coreeng/single:1.0.0', 'linux/amd64', 'sha256:single', 'single-vuln-copy.json'],
-            ],
-            secretLines: [
-              ['ghcr.io/coreeng/single:1.0.0', 'linux/amd64', 'sha256:single', 'single-secret.jsonl'],
-            ],
-          });
-          assert.deepStrictEqual(
-            duplicate.failures,
-            ['Duplicate vulnerability report for ghcr.io/coreeng/single:1.0.0 (linux/amd64) @ sha256:single.'],
-          );
-
-          const missingPath = runManifestScript({
-            stage: 'fast-feedback',
-            vulnLines: [
-              ['ghcr.io/coreeng/single:1.0.0', 'linux/amd64', 'sha256:single', 'missing-vuln.json'],
-            ],
-            secretLines: [
-              ['ghcr.io/coreeng/single:1.0.0', 'linux/amd64', 'sha256:single', 'single-secret.jsonl'],
-            ],
-          });
-          assert.deepStrictEqual(
-            missingPath.failures,
-            ['Vulnerability report path does not exist: ' + path.join(missingPath.tmp, 'trivy', 'missing-vuln.json')],
-          );
-
-          const noReports = runManifestScript({ stage: 'fast-feedback' });
-          assert.deepStrictEqual(
-            noReports.failures,
-            ['No scanned image reports found; cannot build manifest.json.'],
-          );
-
-          const badSecretExtension = runManifestScript({
-            stage: 'fast-feedback',
-            vulnLines: [
-              ['ghcr.io/coreeng/single:1.0.0', 'linux/amd64', 'sha256:single', 'single-vuln.json'],
-            ],
-            secretLines: [
-              ['ghcr.io/coreeng/single:1.0.0', 'linux/amd64', 'sha256:single', 'single-secret.json'],
-            ],
-          });
-          assert.deepStrictEqual(
-            badSecretExtension.failures,
-            ['Secret report path must end in .jsonl: single-secret.json'],
-          );
-
-          const parentTraversal = runManifestScript({
-            stage: 'fast-feedback',
-            vulnLines: [
-              ['ghcr.io/coreeng/single:1.0.0', 'linux/amd64', 'sha256:single', '../single-vuln.json'],
-            ],
-            secretLines: [
-              ['ghcr.io/coreeng/single:1.0.0', 'linux/amd64', 'sha256:single', 'single-secret.jsonl'],
-            ],
-          });
-          assert.deepStrictEqual(
-            parentTraversal.failures,
-            ['Vulnerability report path must stay inside report root: ../single-vuln.json'],
-          );
-
-          const emptyReport = runManifestScript({
-            stage: 'fast-feedback',
-            vulnLines: [
-              ['ghcr.io/coreeng/single:1.0.0', 'linux/amd64', 'sha256:single', 'empty-vuln.json'],
-            ],
-            secretLines: [
-              ['ghcr.io/coreeng/single:1.0.0', 'linux/amd64', 'sha256:single', 'single-secret.jsonl'],
-            ],
-          });
-          assert.deepStrictEqual(
-            emptyReport.failures,
-            ['Vulnerability report is empty: empty-vuln.json'],
-          );
+          const singleVuln = ['ghcr.io/coreeng/single:1.0.0', 'linux/amd64', 'sha256:single', 'single-vuln.json'];
+          const singleSecret = ['ghcr.io/coreeng/single:1.0.0', 'linux/amd64', 'sha256:single', 'single-secret.jsonl'];
+          const failureCases = [
+            {
+              name: 'missing secret report',
+              input: { stage: 'fast-feedback', vulnLines: [singleVuln], secretLines: [] },
+              failures: ['Missing secret report for ghcr.io/coreeng/single:1.0.0 (linux/amd64) @ sha256:single.'],
+            },
+            {
+              name: 'missing vulnerability report',
+              input: { stage: 'fast-feedback', vulnLines: [], secretLines: [singleSecret] },
+              failures: ['Missing vulnerability report for ghcr.io/coreeng/single:1.0.0 (linux/amd64) @ sha256:single.'],
+            },
+            {
+              name: 'digest mismatch',
+              input: {
+                stage: 'fast-feedback',
+                vulnLines: [['ghcr.io/coreeng/single@sha256:input', 'linux/amd64', 'sha256:resolved', 'single-vuln.json']],
+                secretLines: [['ghcr.io/coreeng/single@sha256:input', 'linux/amd64', 'sha256:resolved', 'single-secret.jsonl']],
+              },
+              failures: ['Pinned digest sha256:input for ghcr.io/coreeng/single@sha256:input does not match scanned digest sha256:resolved.'],
+            },
+            {
+              name: 'invalid stage',
+              input: { stage: 'qa', vulnLines: [singleVuln], secretLines: [singleSecret] },
+              failures: ["Unknown pipeline-stage 'qa'. Expected: fast-feedback|extended-test|prod."],
+            },
+            {
+              name: 'malformed list row',
+              input: {
+                stage: 'fast-feedback',
+                vulnRawLines: ['ghcr.io/coreeng/single:1.0.0\tlinux/amd64\tsha256:single'],
+                secretLines: [],
+              },
+              failures: ['Malformed vulnerability report list entry: ghcr.io/coreeng/single:1.0.0\tlinux/amd64\tsha256:single'],
+            },
+            {
+              name: 'duplicate vulnerability report',
+              input: {
+                stage: 'fast-feedback',
+                vulnLines: [
+                  singleVuln,
+                  ['ghcr.io/coreeng/single:1.0.0', 'linux/amd64', 'sha256:single', 'single-vuln-copy.json'],
+                ],
+                secretLines: [singleSecret],
+              },
+              failures: ['Duplicate vulnerability report for ghcr.io/coreeng/single:1.0.0 (linux/amd64) @ sha256:single.'],
+            },
+            {
+              name: 'missing report path',
+              input: {
+                stage: 'fast-feedback',
+                vulnLines: [['ghcr.io/coreeng/single:1.0.0', 'linux/amd64', 'sha256:single', 'missing-vuln.json']],
+                secretLines: [singleSecret],
+              },
+              failures: result => ['Vulnerability report path does not exist: ' + path.join(result.tmp, 'trivy', 'missing-vuln.json')],
+            },
+            {
+              name: 'no reports',
+              input: { stage: 'fast-feedback' },
+              failures: ['No scanned image reports found; cannot build manifest.json.'],
+            },
+            {
+              name: 'bad secret extension',
+              input: {
+                stage: 'fast-feedback',
+                vulnLines: [singleVuln],
+                secretLines: [['ghcr.io/coreeng/single:1.0.0', 'linux/amd64', 'sha256:single', 'single-secret.json']],
+              },
+              failures: ['Secret report path must end in .jsonl: single-secret.json'],
+            },
+            {
+              name: 'parent traversal',
+              input: {
+                stage: 'fast-feedback',
+                vulnLines: [['ghcr.io/coreeng/single:1.0.0', 'linux/amd64', 'sha256:single', '../single-vuln.json']],
+                secretLines: [singleSecret],
+              },
+              failures: ['Vulnerability report path must stay inside report root: ../single-vuln.json'],
+            },
+            {
+              name: 'empty vulnerability report',
+              input: {
+                stage: 'fast-feedback',
+                vulnLines: [['ghcr.io/coreeng/single:1.0.0', 'linux/amd64', 'sha256:single', 'empty-vuln.json']],
+                secretLines: [singleSecret],
+              },
+              failures: ['Vulnerability report is empty: empty-vuln.json'],
+            },
+          ];
+          for (const testCase of failureCases) {
+            const result = runManifestScript(testCase.input);
+            const failures = typeof testCase.failures === 'function'
+              ? testCase.failures(result)
+              : testCase.failures;
+            assert.deepStrictEqual(result.failures, failures, testCase.name);
+          }
 
           console.log('image scan manifest fixtures passed');
           NODE

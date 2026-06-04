@@ -66,28 +66,7 @@ The workflow inherits permissions from the caller. Grant:
 | `id-token: write` | Always — GCP authentication via Workload Identity Federation. |
 | `pull-requests: write` | `pull_request` events only — posting the sticky PR comment. Without it the comment step fails open (continue-on-error); the summary and artifact are still produced. |
 
-## Job Graph
-
-```
-image-scan
-├── Checkout
-├── Authenticate to Google Cloud      (if dry-run=false)
-├── Login to Artifact Registry        (if dry-run=false)
-├── Login to tenant provided registry (optional; if creds and dry-run=false)
-├── Resolve image references
-├── Pull images                       (if dry-run=false)
-├── Install Trivy                     (if dry-run=false)
-├── Install TruffleHog                (if dry-run=false)
-├── Scan images (Trivy)               (if dry-run=false)
-├── Scan images (TruffleHog)          (if dry-run=false)
-├── Build image scan manifest         (if dry-run=false)
-├── Build report                      (always)
-├── Post sticky PR comment            (pull_request only; if dry-run=false)
-├── Upload image-scan reports         (if dry-run=false)
-└── Enforce policy                    (if dry-run=false)
-```
-
-The job runs under `environment: ${{ inputs.github_env }}`.
+The job runs under `environment: ${{ inputs.github_env }}` and authenticates to the stage Artifact Registry plus the optional tenant-provided registry before pulling and scanning images.
 
 ## Image resolution
 
@@ -145,23 +124,7 @@ If scanning, report generation, or manifest validation is incomplete, the workfl
 
 ## Report format
 
-The sticky comment and workflow summary contain a unified header (version, vulnerability counts, secret counts, requested severities, blocking severities) followed by up to two tables.
-
-**Vulnerabilities table** (rendered when Trivy finds at least one finding at the requested severities):
-
-- A per-image counts table (rows sorted by blocking count, then total, then name).
-- A `<details>` block per image with the deduplicated finding rows (Severity, Package, Installed, Fixed, CVE link, Source). Rows are sorted by severity, then package, then CVE.
-
-The vulnerabilities table is truncated to 100 rows total; the full set is always available in the artifact's `trivy/` subdirectory.
-
-**Secrets in image** rendering — one section per image (sorted by blocking then total findings), each with a heading naming the image and the platforms it was scanned on, followed by a deduplicated table. Columns:
-
-- `Detector` — TruffleHog detector that matched (e.g. `AWS`, `Slack`, `GitHub`).
-- `Status` — `verified` (TruffleHog successfully called the credential's verifier), `unknown` (verifier returned an error or timeout), or `unverified` (no verifier ran). Only `verified` rows are blocking.
-- `Layer` — digest of the image layer containing the secret.
-- `Path` — file path within the image where the secret was found.
-
-The secrets section is independently truncated at 100 rows total across all images; the rest are in the artifact's `trufflehog-image/` subdirectory.
+The sticky comment and workflow summary contain a unified header followed by compact vulnerability and image-secret sections. Comment rows are truncated for readability; the full scanner output is available in the artifact. For triage details and column meanings, see [How to triage security findings](../how-to/triage-security-findings.md).
 
 ## See also
 
