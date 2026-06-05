@@ -234,6 +234,41 @@ jobs:
           assert count == 3, f'expected 3 image-names pass-throughs, got {count}'
           PY
 
+      - name: Test scheduled image scans use stage matrices
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+
+          workflow = Path('.github/workflows/p2p-workflow-security-scan.yaml').read_text()
+          assert workflow.count('uses: ./.github/workflows/p2p-workflow-security-image-scan-stage.yaml') == 3
+          for name in (
+              'fast-feedback-source',
+              'extended-test-source',
+              'prod-source',
+              'fast-feedback-github-env',
+              'extended-test-github-env',
+              'prod-github-env',
+          ):
+              assert f'{name}:' not in workflow, f'{name} should be derived from repository variables'
+          for var in ('FAST_FEEDBACK', 'EXTENDED_TEST', 'PROD'):
+              assert f'matrix: $' + f'{{{{ fromJSON(vars.{var}) }}}}' in workflow, f'missing matrix for vars.{var}'
+          assert workflow.count('github_env: $' + '{{ matrix.deploy_env }}') == 3
+          PY
+
+      - name: Test image scan comments identify stage
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+
+          workflow = Path('.github/workflows/p2p-workflow-image-scan.yaml').read_text()
+          assert 'Image scan (${process.env.PIPELINE_STAGE}' in workflow
+          assert 'PIPELINE_STAGE: $' + '{{ inputs.pipeline-stage }}' in workflow
+          assert 'header: image-scan-findings-$' + '{{ inputs.pipeline-stage }}-$' + '{{ inputs.github_env || ' in workflow
+          assert 'name: image-scan-reports-$' + '{{ inputs.pipeline-stage }}-$' + '{{ inputs.github_env || ' in workflow
+          PY
+
       - name: Test image scan target construction
         run: |
           set -euo pipefail

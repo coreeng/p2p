@@ -31,7 +31,7 @@ If the PR comment is truncated or you need raw data:
 2. In the run summary, open the **Artifacts** section.
 3. Download:
    - `source-security-scan-findings` for source-security output (contains redacted TruffleHog findings, raw Trivy filesystem output, and normalized merged JSON)
-   - `image-scan-reports-<github_env>` for image-scan output (contains `manifest.json`, `trivy/`, and `trufflehog-image/`)
+   - `image-scan-reports-<stage>-<github_env>` for image-scan output (contains `manifest.json`, `trivy/`, and `trufflehog-image/`)
 
 The image artifact's root `manifest.json` is the supported index. It records the stage and points to artifact-relative raw Trivy JSON reports under `trivy/` and TruffleHog JSON-lines reports under `trufflehog-image/`, both keyed by image × platform. A TruffleHog JSONL file can be empty when no image secrets were found. Dashboard evidence does not expose secret values; use detector, status, layer, and path metadata for triage. The source-security artifact contains scanner-native output plus normalized JSON for source vulnerabilities, source license findings, and git-tree secrets.
 

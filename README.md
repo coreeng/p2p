@@ -57,6 +57,7 @@ The primary workflows call these. Call them only through the primary workflows.
 | [p2p-get-latest-image](docs/reference/p2p-get-latest-image.md) | Base workflow for querying latest image version from artifact registry |
 | [p2p-workflow-source-security-scan](docs/reference/p2p-workflow-source-security-scan.md) | Scans repository source for dependency vulnerabilities, restricted/forbidden licenses, and committed secrets; posts one compact sticky comment and uploads normalized findings. |
 | [p2p-workflow-image-scan](docs/reference/p2p-workflow-image-scan.md) | Scans built images for CVEs (Trivy) and embedded secrets (TruffleHog); posts a single sticky comment and uploads reports. Called by fast-feedback, extended-test, prod, and the scheduled security umbrella. |
+| p2p-workflow-security-image-scan-stage | Internal scheduled-security child workflow that pairs latest-version discovery and image scanning for one stage/environment. |
 | [p2p-workflow-security-scan](docs/reference/p2p-workflow-security-scan.md) | Umbrella workflow for scheduled security scans. Runs source-security-scan plus per-stage image-scans for the latest version in fast-feedback, extended-test, and prod. |
 
 ## Prerequisites

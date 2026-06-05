@@ -533,6 +533,7 @@ jobs:
           REPORT_LIST: ${{ steps.scan.outputs.report-list }}
           SECRET_REPORT_LIST: ${{ steps.secret-scan.outputs.report-list }}
           BLOCKING_SEVERITY: ${{ inputs.blocking-severity }}
+          PIPELINE_STAGE: ${{ inputs.pipeline-stage }}
           GITHUB_ENV_INPUT: ${{ inputs.github_env }}
           VERSION: ${{ inputs.version }}
           SEVERITY: ${{ inputs.severity }}
@@ -766,8 +767,8 @@ jobs:
             }
             for (const arr of selectedSecretsByImage.values()) arr.sort(secretRowSort);
 
-            const envSuffix = process.env.GITHUB_ENV_INPUT ? ` (${process.env.GITHUB_ENV_INPUT})` : '';
-            const out = [`## Image scan${envSuffix}`];
+            const envSuffix = process.env.GITHUB_ENV_INPUT ? ` / ${process.env.GITHUB_ENV_INPUT}` : '';
+            const out = [`## Image scan (${process.env.PIPELINE_STAGE}${envSuffix})`];
 
             if (!listExists && !secretListExists) {
               out.push('', '_Scan skipped (dry-run or upstream failure)._');
@@ -873,7 +874,7 @@ jobs:
         continue-on-error: true
         uses: marocchino/sticky-pull-request-comment@v3
         with:
-          header: image-scan-findings
+          header: image-scan-findings-${{ inputs.pipeline-stage }}-${{ inputs.github_env || 'local' }}
           path: ${{ steps.report.outputs.comment-path }}
           recreate: true
 
@@ -881,7 +882,7 @@ jobs:
         if: ${{ inputs.dry-run == false && steps.manifest.outputs.artifact-dir != '' }}
         uses: actions/upload-artifact@v7
         with:
-          name: image-scan-reports-${{ inputs.github_env || 'local' }}
+          name: image-scan-reports-${{ inputs.pipeline-stage }}-${{ inputs.github_env || 'local' }}
           path: ${{ steps.manifest.outputs.artifact-dir }}
           if-no-files-found: error
           retention-days: 30

@@ -27,9 +27,6 @@ jobs:
       container_registry_url: ${{ secrets.CONTAINER_REGISTRY_URL }}
     with:
       tenant-name: my-tenant
-      fast-feedback-github-env: gcp-dev
-      extended-test-github-env: gcp-test
-      prod-github-env: gcp-prod
 ```
 
 ## Inputs
@@ -40,9 +37,6 @@ jobs:
 | `image-names` | string | No | `''` | Newline-, comma-, or whitespace-separated list of standard P2P image names. The first entry is the version-lookup anchor for each stage, and the full list is passed to each image scan. If empty, image scans fall back to `make p2p-images` in `working-directory`. |
 | `working-directory` | string | No | `.` | Working directory for `make p2p-images` and downstream make targets. |
 | `region` | string | No | `europe-west2` | GCP region; overridden by `vars.REGION`. |
-| `fast-feedback-github-env` | string | Yes | — | GitHub Environment name granting GCP auth for the `fast-feedback` registry path. |
-| `extended-test-github-env` | string | Yes | — | GitHub Environment name granting GCP auth for the `extended-test` registry path. |
-| `prod-github-env` | string | Yes | — | GitHub Environment name granting GCP auth for the `prod` registry path. |
 | `dry-run` | boolean | No | `false` | Passed through to child workflows; skips registry lookups and scans. |
 | `timeout-minutes` | number | No | `30` | Timeout for the `source-security-scan` job. Image-scan jobs use their own default. |
 
@@ -61,24 +55,24 @@ None. Results are surfaced via:
 
 - Each child job's workflow summary (`$GITHUB_STEP_SUMMARY`).
 - `source-security-scan-findings` artifact from the source-security-scan job. Contains redacted TruffleHog output, raw Trivy filesystem output, and normalized merged JSON.
-- `image-scan-reports-<github_env>` artifact per stage from each image-scan job. Each artifact contains root `manifest.json`, `trivy/` vulnerability JSON reports, and `trufflehog-image/` secret JSON-lines reports. `manifest.json` records the P2P stage (`fast-feedback`, `extended-test`, or `prod`) and is the supported artifact index.
+- `image-scan-reports-<stage>-<github_env>` artifact from each image-scan job. Each artifact contains root `manifest.json`, `trivy/` vulnerability JSON reports, and `trufflehog-image/` secret JSON-lines reports. `manifest.json` records the P2P stage (`fast-feedback`, `extended-test`, or `prod`) and is the supported artifact index.
 
 ## Job Graph
 
 ```
 resolve-anchor-image
-├── discover-version-fast-feedback ──► image-scan-fast-feedback
-├── discover-version-extended-test ──► image-scan-extended-test
-└── discover-version-prod          ──► image-scan-prod
+├── image-scan-fast-feedback  (matrix: vars.FAST_FEEDBACK)
+├── image-scan-extended-test  (matrix: vars.EXTENDED_TEST)
+└── image-scan-prod           (matrix: vars.PROD)
 
 source-security-scan                                   (independent; runs in parallel)
 ```
 
-The source-security-scan job runs in parallel with the per-stage chains. All child workflows are invoked with `fail-on-findings: false`, so the umbrella stays green regardless of findings; the reporting channels are the signal.
+Each matrix entry calls an internal stage workflow that first discovers the latest version for that stage/environment and then scans that exact version. The source-security-scan job runs in parallel with the per-stage matrices. All child workflows are invoked with `fail-on-findings: false`, so the umbrella stays green regardless of findings; the reporting channels are the signal.
 
 ## Version discovery
 
-For each stage, the umbrella calls [`p2p-get-latest-image`](p2p-get-latest-image.md) with the anchor image to determine the highest semver-sorted tag in that stage's registry path. That version is passed to the image-scan workflow. Because all images in a p2p release share the same version, scanning at the anchor's version covers the whole image set.
+For each stage/environment matrix entry, the umbrella calls [`p2p-get-latest-image`](p2p-get-latest-image.md) with the anchor image to determine the highest semver-sorted tag in that stage's registry path. That version is passed to the image-scan workflow for the same GitHub environment. Because all images in a p2p release share the same version, scanning at the anchor's version covers the whole image set.
 
 ## See also
 

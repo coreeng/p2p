@@ -1,6 +1,6 @@
 # p2p-workflow-image-scan
 
-> Scans every image resolved by the repository's P2P image targets for known vulnerabilities (Trivy) and embedded secrets (TruffleHog). Produces a workflow summary, a sticky PR comment (on `pull_request` events), and an `image-scan-reports-<github_env>` artifact. Optionally fails the job on blocking findings.
+> Scans every image resolved by the repository's P2P image targets for known vulnerabilities (Trivy) and embedded secrets (TruffleHog). Produces a workflow summary, a sticky PR comment (on `pull_request` events), and an `image-scan-reports-<stage>-<github_env>` artifact. Optionally fails the job on blocking findings.
 
 ## Usage
 
@@ -55,7 +55,7 @@ This workflow defines no outputs. Results are surfaced via:
 
 - The workflow summary (`$GITHUB_STEP_SUMMARY`).
 - A sticky PR comment with `header: image-scan-findings` on `pull_request` events when `dry-run: false`.
-- The `image-scan-reports-<github_env>` artifact, retained for 30 days. Contains root `manifest.json`, `trivy/` (one Trivy JSON per image × platform), and `trufflehog-image/` (one TruffleHog JSON-lines file per image × platform).
+- The `image-scan-reports-<stage>-<github_env>` artifact, retained for 30 days. Contains root `manifest.json`, `trivy/` (one Trivy JSON per image × platform), and `trufflehog-image/` (one TruffleHog JSON-lines file per image × platform).
 
 ## Permissions
 
@@ -81,7 +81,7 @@ If neither `image-names` nor `p2p-images` produces scan targets, the job fails �
 
 ## Artifact contract
 
-Each published `image-scan-reports-<github_env>` artifact is complete dashboard image evidence. The root `manifest.json` is the supported artifact index; `reports.txt` files are runner-local implementation detail and are not published or supported for downstream parsing.
+Each published `image-scan-reports-<stage>-<github_env>` artifact is complete dashboard image evidence. The root `manifest.json` is the supported artifact index; `reports.txt` files are runner-local implementation detail and are not published or supported for downstream parsing.
 
 Manifest schema version 1:
 

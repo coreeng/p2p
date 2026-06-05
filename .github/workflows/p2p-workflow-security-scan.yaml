@@ -31,15 +31,6 @@ on:
         required: false
         type: string
         default: europe-west2
-      fast-feedback-github-env:
-        required: true
-        type: string
-      extended-test-github-env:
-        required: true
-        type: string
-      prod-github-env:
-        required: true
-        type: string
       dry-run:
         required: false
         type: boolean
@@ -89,101 +80,68 @@ jobs:
           echo "image-name=$anchor" >> "$GITHUB_OUTPUT"
           echo "Anchor image for version discovery: $anchor"
 
-  discover-version-fast-feedback:
+  image-scan-fast-feedback:
     needs: [resolve-anchor-image]
-    uses: ./.github/workflows/p2p-get-latest-image.yaml
+    uses: ./.github/workflows/p2p-workflow-security-image-scan-stage.yaml
     secrets:
       env_vars: ${{ secrets.env_vars }}
+      container_registry_user: ${{ secrets.container_registry_user }}
+      container_registry_pat: ${{ secrets.container_registry_pat }}
+      container_registry_url: ${{ secrets.container_registry_url }}
+    strategy:
+      matrix: ${{ fromJSON(vars.FAST_FEEDBACK) }}
+      fail-fast: false
     with:
       registry-path: fast-feedback
-      tenant-name: ${{ inputs.tenant-name }}
-      image-name: ${{ needs.resolve-anchor-image.outputs.image-name }}
-      dry-run: ${{ inputs.dry-run }}
-      region: ${{ inputs.region }}
-      github_env: ${{ inputs.fast-feedback-github-env }}
-      working-directory: ${{ inputs.working-directory }}
-
-  image-scan-fast-feedback:
-    needs: [discover-version-fast-feedback]
-    uses: ./.github/workflows/p2p-workflow-image-scan.yaml
-    secrets:
-      env_vars: ${{ secrets.env_vars }}
-      container_registry_user: ${{ secrets.container_registry_user }}
-      container_registry_pat: ${{ secrets.container_registry_pat }}
-      container_registry_url: ${{ secrets.container_registry_url }}
-    with:
       pipeline-stage: fast-feedback
-      github_env: ${{ inputs.fast-feedback-github-env }}
-      tenant-name: ${{ inputs.tenant-name }}
-      version: ${{ needs.discover-version-fast-feedback.outputs.version }}
-      region: ${{ inputs.region }}
-      working-directory: ${{ inputs.working-directory }}
-      image-names: ${{ inputs.image-names }}
-      dry-run: ${{ inputs.dry-run }}
-      fail-on-findings: false
-
-  discover-version-extended-test:
-    needs: [resolve-anchor-image]
-    uses: ./.github/workflows/p2p-get-latest-image.yaml
-    secrets:
-      env_vars: ${{ secrets.env_vars }}
-    with:
-      registry-path: extended-test
       tenant-name: ${{ inputs.tenant-name }}
       image-name: ${{ needs.resolve-anchor-image.outputs.image-name }}
-      dry-run: ${{ inputs.dry-run }}
+      image-names: ${{ inputs.image-names }}
       region: ${{ inputs.region }}
-      github_env: ${{ inputs.extended-test-github-env }}
+      github_env: ${{ matrix.deploy_env }}
       working-directory: ${{ inputs.working-directory }}
+      dry-run: ${{ inputs.dry-run }}
 
   image-scan-extended-test:
-    needs: [discover-version-extended-test]
-    uses: ./.github/workflows/p2p-workflow-image-scan.yaml
+    needs: [resolve-anchor-image]
+    uses: ./.github/workflows/p2p-workflow-security-image-scan-stage.yaml
     secrets:
       env_vars: ${{ secrets.env_vars }}
       container_registry_user: ${{ secrets.container_registry_user }}
       container_registry_pat: ${{ secrets.container_registry_pat }}
       container_registry_url: ${{ secrets.container_registry_url }}
+    strategy:
+      matrix: ${{ fromJSON(vars.EXTENDED_TEST) }}
+      fail-fast: false
     with:
+      registry-path: extended-test
       pipeline-stage: extended-test
-      github_env: ${{ inputs.extended-test-github-env }}
-      tenant-name: ${{ inputs.tenant-name }}
-      version: ${{ needs.discover-version-extended-test.outputs.version }}
-      region: ${{ inputs.region }}
-      working-directory: ${{ inputs.working-directory }}
-      image-names: ${{ inputs.image-names }}
-      dry-run: ${{ inputs.dry-run }}
-      fail-on-findings: false
-
-  discover-version-prod:
-    needs: [resolve-anchor-image]
-    uses: ./.github/workflows/p2p-get-latest-image.yaml
-    secrets:
-      env_vars: ${{ secrets.env_vars }}
-    with:
-      registry-path: prod
       tenant-name: ${{ inputs.tenant-name }}
       image-name: ${{ needs.resolve-anchor-image.outputs.image-name }}
-      dry-run: ${{ inputs.dry-run }}
+      image-names: ${{ inputs.image-names }}
       region: ${{ inputs.region }}
-      github_env: ${{ inputs.prod-github-env }}
+      github_env: ${{ matrix.deploy_env }}
       working-directory: ${{ inputs.working-directory }}
+      dry-run: ${{ inputs.dry-run }}
 
   image-scan-prod:
-    needs: [discover-version-prod]
-    uses: ./.github/workflows/p2p-workflow-image-scan.yaml
+    needs: [resolve-anchor-image]
+    uses: ./.github/workflows/p2p-workflow-security-image-scan-stage.yaml
     secrets:
       env_vars: ${{ secrets.env_vars }}
       container_registry_user: ${{ secrets.container_registry_user }}
       container_registry_pat: ${{ secrets.container_registry_pat }}
       container_registry_url: ${{ secrets.container_registry_url }}
+    strategy:
+      matrix: ${{ fromJSON(vars.PROD) }}
+      fail-fast: false
     with:
+      registry-path: prod
       pipeline-stage: prod
-      github_env: ${{ inputs.prod-github-env }}
       tenant-name: ${{ inputs.tenant-name }}
-      version: ${{ needs.discover-version-prod.outputs.version }}
-      region: ${{ inputs.region }}
-      working-directory: ${{ inputs.working-directory }}
+      image-name: ${{ needs.resolve-anchor-image.outputs.image-name }}
       image-names: ${{ inputs.image-names }}
+      region: ${{ inputs.region }}
+      github_env: ${{ matrix.deploy_env }}
+      working-directory: ${{ inputs.working-directory }}
       dry-run: ${{ inputs.dry-run }}
-      fail-on-findings: false
