@@ -164,7 +164,7 @@ jobs:
 
       - name: Upload redacted secret findings
         if: ${{ always() && inputs.dry-run == false }}
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: source-security-internal-secret-findings
           path: ${{ steps.redact.outputs.redacted_file }}
@@ -213,7 +213,7 @@ jobs:
 
       - name: Upload Trivy findings
         if: ${{ always() && inputs.dry-run == false }}
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: source-security-internal-trivy-findings
           path: ${{ steps.scan.outputs.trivy_file }}
@@ -237,7 +237,7 @@ jobs:
       - name: Download secret findings
         if: ${{ inputs.dry-run == false }}
         continue-on-error: true
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: source-security-internal-secret-findings
           path: ${{ runner.temp }}/source-security/trufflehog
@@ -245,14 +245,14 @@ jobs:
       - name: Download Trivy findings
         if: ${{ inputs.dry-run == false }}
         continue-on-error: true
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: source-security-internal-trivy-findings
           path: ${{ runner.temp }}/source-security/trivy
 
       - id: report
         name: Build source security report
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         env:
           SCOPE: ${{ inputs.scope }}
           BASE: ${{ needs.secret-scan.outputs.base }}
@@ -563,7 +563,7 @@ jobs:
 
       - name: Upload source security artifact
         if: ${{ always() && inputs.dry-run == false }}
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: source-security-scan-findings
           path: |

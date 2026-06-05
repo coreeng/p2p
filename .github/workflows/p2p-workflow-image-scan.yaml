@@ -116,7 +116,7 @@ jobs:
 
       - id: resolve-images
         name: Resolve image references
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         env:
           PIPELINE_STAGE: ${{ inputs.pipeline-stage }}
           WORKING_DIR: ${{ inputs.working-directory }}
@@ -181,7 +181,7 @@ jobs:
       - id: pull-images
         name: Pull images
         if: ${{ inputs.dry-run == false }}
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         env:
           IMAGE_REFS: ${{ steps.resolve-images.outputs.image-refs }}
         with:
@@ -253,7 +253,7 @@ jobs:
       - id: scan
         name: Scan images
         if: ${{ inputs.dry-run == false }}
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         env:
           PULLED_LIST: ${{ steps.pull-images.outputs.list-path }}
           SEVERITY: ${{ inputs.severity }}
@@ -299,7 +299,7 @@ jobs:
       - id: secret-scan
         name: Scan images for secrets
         if: ${{ inputs.dry-run == false }}
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         env:
           PULLED_LIST: ${{ steps.pull-images.outputs.list-path }}
         with:
@@ -340,7 +340,7 @@ jobs:
       - id: manifest
         name: Build image scan manifest
         if: ${{ inputs.dry-run == false }}
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         env:
           PIPELINE_STAGE: ${{ inputs.pipeline-stage }}
           REPORT_LIST: ${{ steps.scan.outputs.report-list }}
@@ -528,7 +528,7 @@ jobs:
       - id: report
         name: Build report
         if: always()
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         env:
           REPORT_LIST: ${{ steps.scan.outputs.report-list }}
           SECRET_REPORT_LIST: ${{ steps.secret-scan.outputs.report-list }}
@@ -879,7 +879,7 @@ jobs:
 
       - name: Upload image-scan reports
         if: ${{ inputs.dry-run == false && steps.manifest.outputs.artifact-dir != '' }}
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: image-scan-reports-${{ inputs.github_env || 'local' }}
           path: ${{ steps.manifest.outputs.artifact-dir }}
