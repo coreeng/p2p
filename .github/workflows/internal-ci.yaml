@@ -263,10 +263,10 @@ jobs:
           from pathlib import Path
 
           latest_workflow = Path('.github/workflows/p2p-get-latest-image.yaml').read_text()
-          assert 'name: get-latest-image ($' + '{{ inputs.registry-path }})' in latest_workflow
+          assert 'name: get-latest-image ($' + '{{ inputs.registry-path }} / $' + '{{ inputs.github_env }})' in latest_workflow
 
           workflow = Path('.github/workflows/p2p-workflow-image-scan.yaml').read_text()
-          assert 'name: image-scan ($' + '{{ inputs.pipeline-stage }})' in workflow
+          assert "name: image-scan ($" + "{{ inputs.github_env != '' && format('{0} / {1}', inputs.pipeline-stage, inputs.github_env) || inputs.pipeline-stage }})" in workflow
           assert 'name: ' + "'image-scan ($" + '{{ inputs.github_env }})' not in workflow
           assert 'Image scan (${process.env.PIPELINE_STAGE}' in workflow
           assert 'PIPELINE_STAGE: $' + '{{ inputs.pipeline-stage }}' in workflow
