@@ -39,7 +39,7 @@ on:
 
 jobs:
   get-latest-image:
-    name: get-latest-image
+    name: get-latest-image (${{ inputs.registry-path }})
     runs-on: ubuntu-24.04
     outputs:
       version: ${{ steps.get-latest-image.outputs.version }}
