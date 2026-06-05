@@ -33,6 +33,13 @@ on:
         required: false
         type: string
         default: '.'
+      image-names:
+        description: |
+          Newline- or comma-separated list of standard P2P image names to scan
+          before falling back to p2p-images.
+        required: false
+        type: string
+        default: ''
       dry-run:
         required: false
         type: boolean
@@ -64,6 +71,9 @@ jobs:
     runs-on: ubuntu-24.04
     environment: ${{ inputs.github_env }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
+    permissions:
+      contents: read
+      id-token: write
     env:
       PROJECT_ID: ${{ vars.PROJECT_ID }}
       PROJECT_NUMBER: ${{ vars.PROJECT_NUMBER }}
@@ -110,6 +120,7 @@ jobs:
         env:
           PIPELINE_STAGE: ${{ inputs.pipeline-stage }}
           WORKING_DIR: ${{ inputs.working-directory }}
+          IMAGE_NAMES: ${{ inputs.image-names }}
         with:
           script: |
             const { execFileSync } = require('child_process');
@@ -141,34 +152,26 @@ jobs:
             }
 
             function entries(output) {
-              return output.trim().split(/\s+/).filter(Boolean);
+              return output.trim().split(/[\s,]+/).filter(Boolean);
             }
 
-            function hasTagOrDigest(ref) {
-              const lastSlash = ref.lastIndexOf('/');
-              const lastColon = ref.lastIndexOf(':');
-              return ref.includes('@') || lastColon > lastSlash;
-            }
-
-            function normalizeExplicitRef(ref) {
-              return hasTagOrDigest(ref) ? ref : `${ref}:${process.env.VERSION}`;
-            }
-
-            const explicitRefs = makeTargetExists('p2p-image-refs')
-              ? entries(runMake('p2p-image-refs'))
-              : [];
-            let refs;
-            if (explicitRefs.length > 0) {
-              refs = explicitRefs.map(normalizeExplicitRef);
-            } else if (makeTargetExists('p2p-images')) {
+            function standardRefs(images) {
               const registry = `${process.env.REGION}-docker.pkg.dev/${process.env.PROJECT_ID}/tenant/${process.env.TENANT_NAME}/${stage}`;
+              return images.map(img => `${registry}/${img}:${process.env.VERSION}`);
+            }
+
+            const inputImages = entries(process.env.IMAGE_NAMES || '');
+            let refs;
+            if (inputImages.length > 0) {
+              refs = standardRefs(inputImages);
+            } else if (makeTargetExists('p2p-images')) {
               const images = entries(runMake('p2p-images'));
-              refs = images.map(img => `${registry}/${img}:${process.env.VERSION}`);
+              refs = standardRefs(images);
             } else {
               refs = [];
             }
             if (refs.length === 0) {
-              core.setFailed('Neither p2p-image-refs nor p2p-images produced any image references; nothing to scan.');
+              core.setFailed('Neither image-names nor p2p-images produced any image references; nothing to scan.');
               return;
             }
             core.setOutput('image-refs', refs.join('\n'));
@@ -190,10 +193,6 @@ jobs:
             const listPath = path.join(process.env.RUNNER_TEMP, 'pulled-images.txt');
             fs.writeFileSync(listPath, '');
             core.setOutput('list-path', listPath);
-            const pinnedDigest = ref => {
-              const match = String(ref).match(/@([^@]+)$/);
-              return match ? match[1] : null;
-            };
             for (const ref of refs) {
               // One inspect per ref: `{{json .}}` exposes `.manifest.manifests[]` for OCI indexes / Docker manifest
               // lists, and `.manifest.digest` + `.image.{os,architecture,variant}` for single-manifest images.
@@ -229,19 +228,7 @@ jobs:
                 core.setFailed(`Could not enumerate platforms for ${ref}.`);
                 return;
               }
-              const requestedDigest = pinnedDigest(ref);
-              const requestedIndexDigest = requestedDigest
-                && info?.manifest?.digest === requestedDigest
-                && entries.every(entry => entry.digest !== requestedDigest);
-              if (requestedIndexDigest) {
-                core.setFailed(`Pinned digest ${requestedDigest} for ${ref} resolves to an image index. Use a platform-specific manifest digest for image scan evidence.`);
-                return;
-              }
               for (const { platform, digest } of entries) {
-                if (requestedDigest && requestedDigest !== digest) {
-                  core.setFailed(`Resolved platform digest ${digest} for ${ref} does not match pinned digest ${requestedDigest}. Use a platform-specific manifest digest for image scan evidence.`);
-                  return;
-                }
                 core.info(`Pulling ${ref} (${platform}) @ ${digest}`);
                 execFileSync('docker', ['pull', '--platform', platform, ref], { stdio: 'inherit' });
                 fs.appendFileSync(listPath, `${ref}\t${platform}\t${digest}\n`);
@@ -375,10 +362,6 @@ jobs:
             const keyFor = (ref, platform, digest) => [ref, platform, digest].join('\u0000');
             const displayPath = file => String(file || '').split(path.sep).join('/');
             const title = kind => kind.charAt(0).toUpperCase() + kind.slice(1);
-            const pinnedDigest = ref => {
-              const match = String(ref).match(/@([^@]+)$/);
-              return match ? match[1] : null;
-            };
 
             function resolveReportPath(reportPath, reportRoot, artifactPrefix, expectedExtension, kind, options = {}) {
               if (!reportPath) {
@@ -491,11 +474,6 @@ jobs:
               const secretReport = secretReports.get(key);
               if (!secretReport) {
                 core.setFailed(`Missing secret report for ${vulnReport.imageRef} (${vulnReport.platform}) @ ${vulnReport.digest}.`);
-                return;
-              }
-              const requestedDigest = pinnedDigest(vulnReport.imageRef);
-              if (requestedDigest && requestedDigest !== vulnReport.digest) {
-                core.setFailed(`Pinned digest ${requestedDigest} for ${vulnReport.imageRef} does not match scanned digest ${vulnReport.digest}.`);
                 return;
               }
               if (!addArtifactPath(vulnReport) || !addArtifactPath(secretReport)) return;
