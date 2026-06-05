@@ -17,9 +17,9 @@ on:
       image-names:
         description: |
           Newline- or comma-separated list of image names. The first entry is
-          used as the version-lookup anchor for each stage. If empty, the
-          workflow runs `make p2p-images` in `working-directory` to discover
-          the list. All images returned by `make p2p-images` are scanned.
+          used as the version-lookup anchor for each stage, and the full list
+          is passed to image-scan. If empty, image-scan falls back to repository
+          discovery.
         required: false
         type: string
         default: ''
@@ -60,7 +60,7 @@ jobs:
 
   # Resolve a single anchor image used to look up the latest version per
   # stage. All p2p images in a release share the same version, so any image
-  # works. The full image list is rediscovered inside image-scan.
+  # works.
   resolve-anchor-image:
     name: resolve-anchor-image
     runs-on: ubuntu-24.04
@@ -118,6 +118,7 @@ jobs:
       version: ${{ needs.discover-version-fast-feedback.outputs.version }}
       region: ${{ inputs.region }}
       working-directory: ${{ inputs.working-directory }}
+      image-names: ${{ inputs.image-names }}
       dry-run: ${{ inputs.dry-run }}
       fail-on-findings: false
 
@@ -150,6 +151,7 @@ jobs:
       version: ${{ needs.discover-version-extended-test.outputs.version }}
       region: ${{ inputs.region }}
       working-directory: ${{ inputs.working-directory }}
+      image-names: ${{ inputs.image-names }}
       dry-run: ${{ inputs.dry-run }}
       fail-on-findings: false
 
@@ -182,5 +184,6 @@ jobs:
       version: ${{ needs.discover-version-prod.outputs.version }}
       region: ${{ inputs.region }}
       working-directory: ${{ inputs.working-directory }}
+      image-names: ${{ inputs.image-names }}
       dry-run: ${{ inputs.dry-run }}
       fail-on-findings: false

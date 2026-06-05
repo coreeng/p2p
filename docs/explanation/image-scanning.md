@@ -4,11 +4,11 @@ Image scanning is a two-tool stack. Trivy reports known CVEs in OS and language 
 
 ## What gets scanned and when
 
-For a given stage, the workflow normally runs `make p2p-images` in the configured working directory, combines each returned image name with that stage's registry path and the requested version, and scans the resulting image references. Repositories that publish or test final images outside the standard P2P Artifact Registry layout can instead add `p2p-image-refs`; when that target prints refs, untagged entries receive the requested version and tagged or digest entries are scanned unchanged. Those refs must be readable through the workflow's existing registry logins: stage Artifact Registry, public anonymous access, or the single optional `container_registry_*` login.
+For a given stage, the workflow scans standard P2P image names from the `image-names` input when that input is set. Otherwise it runs `make p2p-images` in the configured working directory. Each image name is combined with that stage's registry path and the requested version, then the resulting image references are scanned.
 
 In the pipeline stage workflows, image scanning is built into fast-feedback, extended-test, and prod: fast-feedback calls it after the build job, while extended-test and prod call it before promotion or deployment on main-branch runs.
 
-The scheduled [`p2p-workflow-security-scan`](../reference/p2p-workflow-security-scan.md) umbrella runs image scanning alongside source security scanning. It resolves one anchor image, looks up the latest version in each stage registry path, and then invokes image scanning once for fast-feedback, extended-test, and prod.
+The scheduled [`p2p-workflow-security-scan`](../reference/p2p-workflow-security-scan.md) umbrella runs image scanning alongside source security scanning. It resolves the first configured image name as the anchor, looks up the latest version in each stage registry path, and then invokes image scanning once for fast-feedback, extended-test, and prod with the full configured image-name list.
 
 ## Blocking and reporting
 

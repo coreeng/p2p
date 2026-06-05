@@ -27,11 +27,12 @@ jobs:
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `pipeline-stage` | string | Yes | — | One of `fast-feedback`, `extended-test`, `prod`. Selects the registry path (`<region>-docker.pkg.dev/<project>/tenant/<tenant>/<stage>`) the images are pulled from. |
-| `version` | string | Yes | — | Image tag to scan. Used for standard P2P image names and for explicit image repositories returned without a tag or digest. |
+| `version` | string | Yes | — | Image tag to scan. Used with each standard P2P image name to build the stage Artifact Registry reference. |
 | `github_env` | string | No | `''` | GitHub Environment used for GCP auth and concurrency grouping. Required in practice — image pulls go through Workload Identity Federation bound to this environment. |
 | `tenant-name` | string | No | `''` | Tenant identifier. Falls back to `vars.TENANT_NAME` when empty. |
 | `region` | string | No | `europe-west2` | GCP region for the Artifact Registry. Overridden by `vars.REGION` when set on the environment. |
-| `working-directory` | string | No | `.` | Directory from which `make p2p-image-refs` or `make p2p-images` is executed to discover scan targets. |
+| `working-directory` | string | No | `.` | Directory from which `make p2p-images` is executed when `image-names` is empty. |
+| `image-names` | string | No | `''` | Newline-, comma-, or whitespace-separated list of standard P2P image names to scan. When set, this list is used instead of `make p2p-images`. |
 | `dry-run` | boolean | No | `false` | When `true`, skips GCP auth, registry login, Trivy install, the scan itself, the sticky PR comment, the artifact upload, and the policy step. The `Build report` step still runs and produces a "Scan skipped" summary. |
 | `fail-on-findings` | boolean | No | `false` | When `true`, fails the job if any reported vulnerability at a `blocking-severity` level or verified image secret is detected. |
 | `severity` | string | No | `CRITICAL,HIGH` | Comma-separated Trivy severities to report. |
@@ -70,25 +71,13 @@ The job runs under `environment: ${{ inputs.github_env }}` and authenticates to 
 
 ## Image resolution
 
-The workflow first checks for an optional `p2p-image-refs` make target in `working-directory`. If the target exists and prints at least one whitespace-separated entry, those entries are scanned directly after normalization:
-
-- `ghcr.io/coreeng/support-bot` becomes `ghcr.io/coreeng/support-bot:<version>`.
-- `ghcr.io/coreeng/support-bot:0.0.48` is scanned unchanged.
-- `ghcr.io/coreeng/support-bot@sha256:<digest>` is scanned unchanged.
-
-Any entry containing `@` is treated as an explicit digest reference, and any entry with a colon after the last slash is treated as tagged. This means registry ports such as `localhost:5000/team/service` are not mistaken for tags; they receive the workflow `version` tag when no image tag is present.
-
-For digest refs, the digest suffix must be a platform-specific image manifest digest, not an OCI image index digest. It must match the platform manifest digest that the workflow resolves and publishes in `manifest.json`. A mismatch fails the scan and no dashboard-matching image evidence artifact is uploaded.
-
-Every explicit ref must be readable with the workflow's existing registry credentials: the stage Artifact Registry login, public anonymous access, or the single optional `container_registry_user` / `container_registry_pat` / `container_registry_url` login.
-
-If `p2p-image-refs` is missing or prints no entries, the workflow keeps the standard P2P behavior. It runs `make p2p-images` in `working-directory`; that target must print whitespace-separated image names with no registry and no tag. Each name is combined with the registry path for `pipeline-stage` and the `version` input to form the full reference:
+If `image-names` is set, the workflow splits it on commas or whitespace and scans exactly those standard P2P image names. If it is empty, the workflow runs `make p2p-images` in `working-directory`; that target must print standard P2P image names with no registry and no tag. Each image name is combined with the registry path for `pipeline-stage` and the `version` input to form the full reference:
 
 ```
 <region>-docker.pkg.dev/<project>/tenant/<tenant>/<pipeline-stage>/<image>:<version>
 ```
 
-If neither target produces scan targets, the job fails — there is nothing to scan.
+If neither `image-names` nor `p2p-images` produces scan targets, the job fails — there is nothing to scan.
 
 ## Artifact contract
 
@@ -102,11 +91,11 @@ Manifest schema version 1:
   "stage": "fast-feedback",
   "reports": [
     {
-      "imageRef": "ghcr.io/coreeng/support-bot:0.0.192",
+      "imageRef": "europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/fast-feedback/api:0.0.192",
       "platform": "linux/amd64",
       "digest": "sha256:66bcd930d1794057bd206ebd3f2751eeedc3a57fe65bc869f41380e58f68bf6f",
-      "vulnerabilityReport": "trivy/ghcr.io_coreeng_support-bot_0.0.192-linux_amd64.json",
-      "secretReport": "trufflehog-image/ghcr.io_coreeng_support-bot_0.0.192-linux_amd64.jsonl"
+      "vulnerabilityReport": "trivy/europe-west2-docker.pkg.dev_project-a_tenant_tenant-a_fast-feedback_api_0.0.192-linux_amd64.json",
+      "secretReport": "trufflehog-image/europe-west2-docker.pkg.dev_project-a_tenant_tenant-a_fast-feedback_api_0.0.192-linux_amd64.jsonl"
     }
   ]
 }

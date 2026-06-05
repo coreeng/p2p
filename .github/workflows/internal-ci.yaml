@@ -90,8 +90,8 @@ jobs:
             --workflow .github/workflows/p2p-workflow-image-scan.yaml \
             --out-dir /tmp \
             --step resolve-images=resolve-image-refs.js \
-            --require resolve-images=p2p-image-refs \
-            --require resolve-images=normalizeExplicitRef \
+            --require resolve-images=IMAGE_NAMES \
+            --require resolve-images=standardRefs \
             --require resolve-images=core.setFailed
 
           node <<'NODE'
@@ -159,10 +159,10 @@ jobs:
           }
 
           (async () => {
-          const fallback = await runCase('missing override falls back', {
+          const fallback = await runCase('missing image-names falls back', {
             'p2p-images': 'api ui\n',
           });
-          assert.deepStrictEqual(fallback.failures, [], 'missing override falls back: no failures');
+          assert.deepStrictEqual(fallback.failures, [], 'missing image-names falls back: no failures');
           assert.deepStrictEqual(
             fallback.outputs['image-refs'].split('\n'),
             [
@@ -171,46 +171,35 @@ jobs:
             ],
           );
 
-          const explicit = await runCase('explicit refs normalize', {
-            'p2p-image-refs': [
-              'ghcr.io/coreeng/support-bot',
-              'ghcr.io/coreeng/support-bot:0.0.48',
-              'ghcr.io/coreeng/support-bot@sha256:abc123',
-              'localhost:5000/team/service',
-            ].join('\n'),
-            'p2p-images': 'should-not-be-used\n',
-          });
-          assert.deepStrictEqual(explicit.failures, [], 'explicit refs normalize: no failures');
+          const inputImages = await runCase(
+            'image-names input wins',
+            { 'p2p-images': 'also-not-used\n' },
+            { IMAGE_NAMES: 'api,ui\nworker' },
+          );
+          assert.deepStrictEqual(inputImages.failures, [], 'image-names input wins: no failures');
           assert.deepStrictEqual(
-            explicit.outputs['image-refs'].split('\n'),
+            inputImages.outputs['image-refs'].split('\n'),
             [
-              'ghcr.io/coreeng/support-bot:1.2.3',
-              'ghcr.io/coreeng/support-bot:0.0.48',
-              'ghcr.io/coreeng/support-bot@sha256:abc123',
-              'localhost:5000/team/service:1.2.3',
+              'europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/fast-feedback/api:1.2.3',
+              'europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/fast-feedback/ui:1.2.3',
+              'europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/fast-feedback/worker:1.2.3',
             ],
           );
-          assert.deepStrictEqual(
-            explicit.calls.map(call => call.args[call.args.length - 1]),
-            ['p2p-image-refs', 'p2p-image-refs'],
-          );
+          assert.deepStrictEqual(inputImages.calls, [], 'image-names input wins: make is not called');
 
-          const emptyOverride = await runCase('empty override falls back', {
-            'p2p-image-refs': '\n',
+          const emptyInput = await runCase('empty image-names falls back', {
             'p2p-images': 'worker\n',
-          });
-          assert.deepStrictEqual(emptyOverride.failures, [], 'empty override falls back: no failures');
+          }, { IMAGE_NAMES: ' , \n\t' });
+          assert.deepStrictEqual(emptyInput.failures, [], 'empty image-names falls back: no failures');
           assert.strictEqual(
-            emptyOverride.outputs['image-refs'],
+            emptyInput.outputs['image-refs'],
             'europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/fast-feedback/worker:1.2.3',
           );
 
-          const noTargets = await runCase('no targets fails cleanly', {
-            'p2p-image-refs': '\n',
-          });
+          const noTargets = await runCase('no targets fails cleanly', {});
           assert.deepStrictEqual(
             noTargets.failures,
-            ['Neither p2p-image-refs nor p2p-images produced any image references; nothing to scan.'],
+            ['Neither image-names nor p2p-images produced any image references; nothing to scan.'],
           );
           assert.strictEqual(noTargets.outputs['image-refs'], undefined);
 
@@ -224,6 +213,7 @@ jobs:
             ["Unknown pipeline-stage 'qa'. Expected: fast-feedback|extended-test|prod."],
           );
           assert.strictEqual(unknownStage.outputs['image-refs'], undefined);
+          assert.deepStrictEqual(unknownStage.calls, [], 'unknown stage fails before make');
 
           console.log('image ref resolver fixtures passed');
           })().catch(error => {
@@ -231,6 +221,18 @@ jobs:
             process.exit(1);
           });
           NODE
+
+      - name: Test scheduled image name pass-through
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+
+          workflow = Path('.github/workflows/p2p-workflow-security-scan.yaml').read_text()
+          needle = 'image-names: $' + '{{ inputs.image-names }}'
+          count = workflow.count(needle)
+          assert count == 3, f'expected 3 image-names pass-throughs, got {count}'
+          PY
 
       - name: Test image scan target construction
         run: |
@@ -260,8 +262,8 @@ jobs:
             fs.writeFileSync(
               pulledList,
               [
-                'ghcr.io/coreeng/support-bot@sha256:input\tlinux/amd64\tsha256:resolved',
-                'ghcr.io/coreeng/support-bot:0.0.48\tlinux/arm64\tsha256:tagresolved',
+                'europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/prod/api:1.2.3\tlinux/amd64\tsha256:api',
+                'europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/prod/worker:1.2.3\tlinux/arm64\tsha256:worker',
               ].join('\n') + '\n',
             );
 
@@ -308,8 +310,8 @@ jobs:
           assert.deepStrictEqual(
             trivyRun.calls.map(call => call.args[call.args.length - 1]),
             [
-              'ghcr.io/coreeng/support-bot@sha256:resolved',
-              'ghcr.io/coreeng/support-bot:0.0.48@sha256:tagresolved',
+              'europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/prod/api:1.2.3@sha256:api',
+              'europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/prod/worker:1.2.3@sha256:worker',
             ],
           );
 
@@ -317,8 +319,8 @@ jobs:
           assert.deepStrictEqual(
             secretRun.calls.map(call => call.args[2]),
             [
-              'docker://ghcr.io/coreeng/support-bot@sha256:resolved',
-              'docker://ghcr.io/coreeng/support-bot:0.0.48@sha256:tagresolved',
+              'docker://europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/prod/api:1.2.3@sha256:api',
+              'docker://europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/prod/worker:1.2.3@sha256:worker',
             ],
           );
           for (const line of fs.readFileSync(secretRun.outputs['report-list'], 'utf8').trim().split('\n')) {
@@ -337,8 +339,7 @@ jobs:
             --out-dir /tmp \
             --step pull-images=image-pull-script.js \
             --step manifest=image-manifest-script.js \
-            --require pull-images=pinnedDigest \
-            --require pull-images='platform-specific manifest digest' \
+            --require pull-images="'buildx'" \
             --require manifest=schemaVersion \
             --require manifest=vulnerabilityReport \
             --require manifest=secretReport
@@ -477,40 +478,25 @@ jobs:
             };
           }
 
-          const matchingPinned = runPullScript(
-            ['ghcr.io/coreeng/support-bot@sha256:resolved'],
+          const singlePlatform = runPullScript(
+            ['europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/prod/api:1.2.3'],
             {
-              'ghcr.io/coreeng/support-bot@sha256:resolved': {
+              'europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/prod/api:1.2.3': {
                 manifest: { digest: 'sha256:resolved' },
                 image: { os: 'linux', architecture: 'amd64' },
               },
             },
           );
-          assert.deepStrictEqual(matchingPinned.failures, []);
+          assert.deepStrictEqual(singlePlatform.failures, []);
           assert.deepStrictEqual(
-            fs.readFileSync(matchingPinned.outputs['list-path'], 'utf8').trim(),
-            'ghcr.io/coreeng/support-bot@sha256:resolved\tlinux/amd64\tsha256:resolved',
+            fs.readFileSync(singlePlatform.outputs['list-path'], 'utf8').trim(),
+            'europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/prod/api:1.2.3\tlinux/amd64\tsha256:resolved',
           );
 
-          const mismatchedPinned = runPullScript(
-            ['ghcr.io/coreeng/support-bot@sha256:input'],
+          const multiPlatform = runPullScript(
+            ['europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/prod/worker:1.2.3'],
             {
-              'ghcr.io/coreeng/support-bot@sha256:input': {
-                manifest: { digest: 'sha256:resolved' },
-                image: { os: 'linux', architecture: 'amd64' },
-              },
-            },
-          );
-          assert.deepStrictEqual(mismatchedPinned.pulls, []);
-          assert.deepStrictEqual(
-            mismatchedPinned.failures,
-            ['Resolved platform digest sha256:resolved for ghcr.io/coreeng/support-bot@sha256:input does not match pinned digest sha256:input. Use a platform-specific manifest digest for image scan evidence.'],
-          );
-
-          const pinnedIndexDigest = runPullScript(
-            ['ghcr.io/coreeng/support-bot@sha256:index'],
-            {
-              'ghcr.io/coreeng/support-bot@sha256:index': {
+              'europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/prod/worker:1.2.3': {
                 manifest: {
                   digest: 'sha256:index',
                   manifests: [
@@ -521,10 +507,13 @@ jobs:
               },
             },
           );
-          assert.deepStrictEqual(pinnedIndexDigest.pulls, []);
+          assert.deepStrictEqual(multiPlatform.failures, []);
           assert.deepStrictEqual(
-            pinnedIndexDigest.failures,
-            ['Pinned digest sha256:index for ghcr.io/coreeng/support-bot@sha256:index resolves to an image index. Use a platform-specific manifest digest for image scan evidence.'],
+            fs.readFileSync(multiPlatform.outputs['list-path'], 'utf8').trim().split('\n'),
+            [
+              'europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/prod/worker:1.2.3\tlinux/amd64\tsha256:amd64',
+              'europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/prod/worker:1.2.3\tlinux/arm64\tsha256:arm64',
+            ],
           );
 
           const multi = runManifestScript({
@@ -629,15 +618,6 @@ jobs:
               name: 'missing vulnerability report',
               input: { stage: 'fast-feedback', vulnLines: [], secretLines: [singleSecret] },
               failures: ['Missing vulnerability report for ghcr.io/coreeng/single:1.0.0 (linux/amd64) @ sha256:single.'],
-            },
-            {
-              name: 'digest mismatch',
-              input: {
-                stage: 'fast-feedback',
-                vulnLines: [['ghcr.io/coreeng/single@sha256:input', 'linux/amd64', 'sha256:resolved', 'single-vuln.json']],
-                secretLines: [['ghcr.io/coreeng/single@sha256:input', 'linux/amd64', 'sha256:resolved', 'single-secret.jsonl']],
-              },
-              failures: ['Pinned digest sha256:input for ghcr.io/coreeng/single@sha256:input does not match scanned digest sha256:resolved.'],
             },
             {
               name: 'invalid stage',

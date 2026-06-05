@@ -41,9 +41,8 @@ on:
         type: string
         default: ''
       version:
-        required: false
+        required: true
         type: string
-        default: ''
       version-prefix:
         required: false
         type: string
@@ -62,7 +61,25 @@ on:
         default: false
 
 jobs:
+  validate-version:
+    name: validate-version
+    if: success() && github.ref == inputs.main-branch
+    runs-on: ubuntu-24.04
+    timeout-minutes: 1
+    env:
+      VERSION: ${{ inputs.version }}
+    steps:
+      - name: Require version
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${VERSION//[[:space:]]/}" ]; then
+            echo "::error::p2p-workflow-prod requires a non-empty version input."
+            exit 1
+          fi
+
   image-scan:
+    needs: [validate-version]
     if: success() && github.ref == inputs.main-branch
     uses: ./.github/workflows/p2p-workflow-image-scan.yaml
     secrets:
@@ -110,7 +127,7 @@ jobs:
       skip-subnamespaces-create: ${{ inputs.skip-subnamespaces-create }}
 
   notify-failure:
-    needs: [image-scan, prod-deploy]
+    needs: [validate-version, image-scan, prod-deploy]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     if: always() && github.ref == inputs.main-branch && contains(needs.*.result, 'failure')

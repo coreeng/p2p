@@ -22,7 +22,7 @@ jobs:
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `version` | `string` | No | `''` | Version identifier passed to the `p2p-prod` make target and included in Slack notifications. Optional, unlike other orchestrator workflows. |
+| `version` | `string` | Yes | — | Non-empty version identifier passed to the image scan and `p2p-prod` make target, and included in Slack notifications. |
 | `version-prefix` | `string` | No | `v` | Prefix prepended to `version` to form the `checkout-version` ref (e.g., `v` + `1.2.3` = `v1.2.3`). |
 | `dry-run` | `boolean` | No | `false` | When `true`, runs commands without making persistent changes and skips the success Slack notification. |
 | `main-branch` | `string` | No | `refs/heads/main` | Full ref of the main branch, used to gate the deploy job and Slack alerts. |
@@ -51,16 +51,19 @@ This workflow defines no outputs.
 ## Job Graph
 
 ```
-image-scan      Calls p2p-workflow-image-scan against the prod-registry images.
+validate-version
+                Fails early when version is empty.
+
+└── image-scan  Calls p2p-workflow-image-scan against the prod-registry images.
                 Only runs on main-branch.
                 Fails the workflow on blocking findings when
                 security-scan-fail-on-findings=true (default: false).
 └── prod-deploy (needs: image-scan)
                 Runs p2p-prod make target.
-                Only runs on main-branch.
+                Only runs on main-branch after image-scan succeeds.
                 checkout-version = version-prefix + version.
 
-notify-failure  (needs: image-scan, prod-deploy; runs on main-branch when any job fails)
+notify-failure  (needs: validate-version, image-scan, prod-deploy; runs on main-branch when any job fails)
 notify-success  (needs: prod-deploy; runs on main-branch when prod-deploy succeeds and dry-run=false)
 ```
 
