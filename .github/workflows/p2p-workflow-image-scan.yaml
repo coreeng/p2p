@@ -67,7 +67,7 @@ on:
 
 jobs:
   image-scan:
-    name: image-scan (${{ inputs.github_env != '' && format('{0} / {1}', inputs.pipeline-stage, inputs.github_env) || inputs.pipeline-stage }})
+    name: image-scan (${{ inputs.github_env != '' && format('{0}, {1}', inputs.pipeline-stage, inputs.github_env) || inputs.pipeline-stage }})
     runs-on: ubuntu-24.04
     environment: ${{ inputs.github_env }}
     timeout-minutes: ${{ inputs.timeout-minutes }}

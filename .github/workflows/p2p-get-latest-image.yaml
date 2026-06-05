@@ -39,7 +39,7 @@ on:
 
 jobs:
   get-latest-image:
-    name: get-latest-image (${{ inputs.registry-path }} / ${{ inputs.github_env }})
+    name: get-latest-image (${{ inputs.registry-path }}, ${{ inputs.github_env }})
     runs-on: ubuntu-24.04
     outputs:
       version: ${{ steps.get-latest-image.outputs.version }}
