@@ -11,10 +11,12 @@ On pull requests, the scanners upsert sticky comments in the PR conversation ins
 | Source vulnerabilities | `source-security-scan-findings` | `source-security-scan-findings` |
 | Source restricted/forbidden licenses | `source-security-scan-findings` | `source-security-scan-findings` |
 | Git tree secrets | `source-security-scan-findings` | `source-security-scan-findings` |
-| Image vulnerabilities | `image-scan-findings` | `image-scan-reports-<env>` |
-| Image secrets | `image-scan-findings` (same comment) | `image-scan-reports-<env>` |
+| Image vulnerabilities | `image-scan-findings-<stage>-<github_env>` | `image-scan-reports-<stage>-<github_env>` |
+| Image secrets | `image-scan-findings-<stage>-<github_env>` (same comment as image vulnerabilities for that stage/environment) | `image-scan-reports-<stage>-<github_env>` |
 
 Restricted and forbidden license findings are shown for triage only. The source scan reports only HIGH and CRITICAL license classifications. Trivy's license classification is not a legal decision and is not a P2P-wide organization policy; confirm the finding against your organization's open-source policy before taking enforcement action.
+
+Image-scan PR comments are optional for backward compatibility with orchestrator workflows that existed before image scanning posted comments. If the caller does not grant `pull-requests: write`, the workflow still writes the summary and uploads artifacts, but the sticky PR comment is skipped by the non-fatal comment step.
 
 The source-security comment renders source vulnerabilities, restricted or forbidden licenses, and git-tree secrets under one header. Vulnerability rows include package, installed version, fixed version, CVE, and source where available. License rows identify the package and detected license. Git-tree secret rows show `Detector`, `Status`, `File`, `Line`, and `Commit`.
 

@@ -1,10 +1,10 @@
 # p2p-workflow-image-scan
 
-> Scans every image resolved by the repository's P2P image targets for known vulnerabilities (Trivy) and embedded secrets (TruffleHog). Produces a workflow summary, a sticky PR comment (on `pull_request` events), and an `image-scan-reports-<stage>-<github_env>` artifact. Optionally fails the job on blocking findings.
+> Scans every image resolved by the repository's P2P image targets for known vulnerabilities (Trivy) and embedded secrets (TruffleHog). Produces a workflow summary, optionally posts a sticky PR comment on `pull_request` events, and uploads an `image-scan-reports-<stage>-<github_env>` artifact. Optionally fails the job on blocking findings.
 
 ## Usage
 
-Called by [`p2p-workflow-fastfeedback`](p2p-workflow-fastfeedback.md), [`p2p-workflow-extended-test`](p2p-workflow-extended-test.md), [`p2p-workflow-prod`](p2p-workflow-prod.md), and the scheduled [`p2p-workflow-security-scan`](p2p-workflow-security-scan.md) umbrella. Tenants do not call it directly; the `security-scan-fail-on-findings` input on the orchestrator workflows toggles the blocking policy.
+Usually called by [`p2p-workflow-fastfeedback`](p2p-workflow-fastfeedback.md), [`p2p-workflow-extended-test`](p2p-workflow-extended-test.md), [`p2p-workflow-prod`](p2p-workflow-prod.md), and the scheduled [`p2p-workflow-security-scan`](p2p-workflow-security-scan.md) umbrella. Those orchestrator workflows expose `security-scan-fail-on-findings` as the normal tenant-facing control. Direct calls are supported for advanced wrappers that need to scan a specific stage/version outside the standard orchestrators.
 
 ```yaml
 jobs:
@@ -54,8 +54,8 @@ jobs:
 This workflow defines no outputs. Results are surfaced via:
 
 - The workflow summary (`$GITHUB_STEP_SUMMARY`).
-- A sticky PR comment with `header: image-scan-findings` on `pull_request` events when `dry-run: false`.
-- The `image-scan-reports-<stage>-<github_env>` artifact, retained for 30 days. Contains root `manifest.json`, `trivy/` (one Trivy JSON per image × platform), and `trufflehog-image/` (one TruffleHog JSON-lines file per image × platform).
+- A sticky PR comment with `header: image-scan-findings-<stage>-<github_env>` on `pull_request` events when `dry-run: false` and the caller grants `pull-requests: write`. When `github_env` is empty, the header uses `local`.
+- The `image-scan-reports-<stage>-<github_env>` artifact, retained for 30 days. When `github_env` is empty, the artifact name uses `local`. Contains root `manifest.json`, `trivy/` (one Trivy JSON per image x platform), and `trufflehog-image/` (one TruffleHog JSON-lines file per image x platform).
 
 ## Permissions
 
@@ -65,7 +65,7 @@ The workflow inherits permissions from the caller. Grant:
 |-------|---------------|
 | `contents: read` | Always — cloning the repository and reading P2P image make targets. |
 | `id-token: write` | Always — GCP authentication via Workload Identity Federation. |
-| `pull-requests: write` | `pull_request` events only — posting the sticky PR comment. Without it the comment step fails open (continue-on-error); the summary and artifact are still produced. |
+| `pull-requests: write` | `pull_request` events only, and only when sticky PR comments are wanted. Without it the comment step fails open (continue-on-error); the summary and artifact are still produced. |
 
 The job runs under `environment: ${{ inputs.github_env }}` and authenticates to the stage Artifact Registry plus the optional tenant-provided registry before pulling and scanning images.
 

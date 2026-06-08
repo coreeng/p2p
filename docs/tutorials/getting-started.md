@@ -105,9 +105,11 @@ In the GitHub Actions UI you'll see:
 1. `version` starts immediately and tags the commit (on `main`) or produces a pre-release version string (on a PR).
 2. `fastfeedback` starts once `version` completes. Inside it, the job graph runs:
    - `build` runs first across every environment in `FAST_FEEDBACK`.
+   - `source-security-scan` runs independently of `build`.
+   - `image-scan` runs once `build` succeeds.
    - `functional-test` and `nft-test` run in parallel once build succeeds.
    - `integration-test` runs after both `functional-test` and `nft-test` succeed.
-   - `promote` runs last (on `main` only) and copies the image into the `EXTENDED_TEST` registry path.
+   - `promote` runs last (on `main` only), after `integration-test`, `image-scan`, and `source-security-scan` have all succeeded, and copies the image into the `EXTENDED_TEST` registry path.
 
 ## What happens next
 

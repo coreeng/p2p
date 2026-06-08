@@ -72,7 +72,7 @@ Each matrix entry calls an internal stage workflow that first discovers the late
 
 ## Version discovery
 
-For each stage/environment matrix entry, the umbrella calls [`p2p-get-latest-image`](p2p-get-latest-image.md) with the anchor image to determine the highest semver-sorted tag in that stage's registry path. That version is passed to the image-scan workflow for the same GitHub environment. Because all images in a p2p release share the same version, scanning at the anchor's version covers the whole image set.
+For each stage/environment matrix entry, the umbrella calls [`p2p-get-latest-image`](p2p-get-latest-image.md) with the anchor image to determine the highest semver-sorted tag in that stage's registry path. That version is passed to the image-scan workflow for the same GitHub environment. If no tag is found for that stage/environment, the image scan is skipped after logging the missing image. Because all images in a p2p release share the same version, scanning at the anchor's version covers the whole image set.
 
 ## See also
 

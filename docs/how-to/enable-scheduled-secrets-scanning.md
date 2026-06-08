@@ -36,7 +36,7 @@ That's all that is required. After committing on the default branch, the workflo
 Each scheduled run emits:
 
 * a **workflow summary** with a markdown table of findings;
-* a **workflow artifact** named `source-security-scan-findings` retained per the repository's artifact retention policy;
+* a **workflow artifact** named `source-security-scan-findings` retained for 30 days;
 * no PR comment — there is no PR associated with a scheduled run.
 
 The artifact contains redacted TruffleHog output, raw Trivy filesystem output, and normalized merged JSON. The summary is the primary place to look. Secret finding rows include a deep link (`<server>/<repo>/blob/<sha>/<file>#L<line>`) to the exact line at the offending commit when available.

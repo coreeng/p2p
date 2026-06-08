@@ -38,7 +38,8 @@ jobs:
 
 | Name | Description |
 |------|-------------|
-| `version` | The highest semver-sorted image tag found in the registry, or `0.0.0` when `dry-run` is `true`. |
+| `version` | The highest semver-sorted image tag found in the registry, `0.0.0` when `dry-run` is `true`, or empty when no tags are found. |
+| `found` | `true` when a tag was found, or when `dry-run` is `true`; `false` when the registry query succeeds but no tags are available. |
 
 ## Semver sorting logic
 
