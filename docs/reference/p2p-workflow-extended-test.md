@@ -34,7 +34,7 @@ jobs:
 | `tenant-name` | `string` | No | `''` | Tenant name passed to all make targets. |
 | `skip-subnamespaces-create` | `boolean` | No | `false` | Skips creating subnamespaces before running make targets. |
 | `artifacts` | `string` | No | `''` | Comma-separated list of artifact paths to upload after each stage. |
-| `security-scan-fail-on-findings` | `boolean` | No | `false` | When `true`, the `image-scan` job fails the workflow when blocking findings are detected. |
+| `security-scan-blocking-severity` | `string` | No | `off` | Minimum image-scan finding severity that blocks the workflow: `off`, `low`, `medium`, `high`, or `critical`. Verified image secrets are treated as `critical`. With `off`, the policy job may fail on findings, but the workflow continues. |
 
 ## Secrets
 
@@ -64,8 +64,8 @@ run-tests     Runs p2p-extended-test make target.
 image-scan    (independent of run-tests; runs in parallel)
               Calls p2p-workflow-image-scan against the source images.
               Only runs on main-branch.
-              Fails the workflow on blocking findings when
-              security-scan-fail-on-findings=true (default: false).
+              Blocks the workflow on findings at or above
+              security-scan-blocking-severity (default: off).
 
 notify-failure  (needs: run-tests, image-scan, promote; runs on main-branch when any job fails)
 ```

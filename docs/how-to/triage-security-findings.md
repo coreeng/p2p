@@ -49,7 +49,7 @@ Preferred fixes:
 
 ## 4. Temporarily stop findings from blocking the workflow
 
-This only matters if your repository explicitly turned on blocking. By default, orchestrator workflows set `security-scan-fail-on-findings: false`.
+This only matters if your repository explicitly turned on blocking. By default, orchestrator workflows set `security-scan-blocking-severity: off`.
 
 To make fast-feedback non-blocking again:
 
@@ -59,7 +59,7 @@ jobs:
     uses: coreeng/p2p/.github/workflows/p2p-workflow-fastfeedback.yaml@v1
     with:
       version: ${{ needs.version.outputs.version }}
-      security-scan-fail-on-findings: false
+      security-scan-blocking-severity: off
 ```
 
 The same input exists on `p2p-workflow-extended-test` and `p2p-workflow-prod`.

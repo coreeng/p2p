@@ -68,7 +68,7 @@ resolve-anchor-image
 source-security-scan                                   (independent; runs in parallel)
 ```
 
-Each matrix entry calls an internal stage workflow that first discovers the latest version for that stage/environment and then scans that exact version. The source-security-scan job runs in parallel with the per-stage matrices. All child workflows are invoked with `fail-on-findings: false`, so the umbrella stays green regardless of findings; the reporting channels are the signal.
+Each matrix entry calls an internal stage workflow that first discovers the latest version for that stage/environment and then scans that exact version. The source-security-scan job runs in parallel with the per-stage matrices. All child workflows are invoked with `blocking-severity: off`, so findings can fail policy jobs without failing the umbrella workflow; the reporting channels are the signal.
 
 ## Version discovery
 
@@ -80,5 +80,5 @@ For each stage/environment matrix entry, the umbrella calls [`p2p-get-latest-ima
 - [p2p-workflow-image-scan reference](p2p-workflow-image-scan.md)
 - [p2p-get-latest-image reference](p2p-get-latest-image.md)
 - [Secrets scanning explanation](../explanation/secrets-scanning.md)
-- [How to enable scheduled source security scanning](../how-to/enable-scheduled-secrets-scanning.md)
+- [How to enable scheduled security scanning](../how-to/enable-scheduled-secrets-scanning.md)
 - [Triage security findings (how-to)](../how-to/triage-security-findings.md)

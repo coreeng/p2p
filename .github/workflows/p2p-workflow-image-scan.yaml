@@ -44,18 +44,10 @@ on:
         required: false
         type: boolean
         default: false
-      fail-on-findings:
-        required: false
-        type: boolean
-        default: false
-      severity:
-        required: false
-        type: string
-        default: 'CRITICAL,HIGH'
       blocking-severity:
         required: false
         type: string
-        default: 'CRITICAL'
+        default: 'off'
       ignore-unfixed:
         required: false
         type: boolean
@@ -71,6 +63,11 @@ jobs:
     runs-on: ubuntu-24.04
     environment: ${{ inputs.github_env }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
+    outputs:
+      total-count: ${{ steps.report.outputs.total-count }}
+      blocking-count: ${{ steps.report.outputs.blocking-count }}
+      secret-total-count: ${{ steps.report.outputs.secret-total-count }}
+      secret-blocking-count: ${{ steps.report.outputs.secret-blocking-count }}
     env:
       PROJECT_ID: ${{ vars.PROJECT_ID }}
       PROJECT_NUMBER: ${{ vars.PROJECT_NUMBER }}
@@ -253,7 +250,6 @@ jobs:
         uses: actions/github-script@v9
         env:
           PULLED_LIST: ${{ steps.pull-images.outputs.list-path }}
-          SEVERITY: ${{ inputs.severity }}
           IGNORE_UNFIXED: ${{ inputs.ignore-unfixed }}
         with:
           script: |
@@ -281,7 +277,7 @@ jobs:
               const args = [
                 'image',
                 '--format', 'json',
-                '--severity', process.env.SEVERITY,
+                '--severity', 'LOW,MEDIUM,HIGH,CRITICAL',
                 ...(ignoreUnfixed ? ['--ignore-unfixed'] : []),
                 '--scanners', 'vuln',
                 '--exit-code', '0',
@@ -533,7 +529,6 @@ jobs:
           PIPELINE_STAGE: ${{ inputs.pipeline-stage }}
           GITHUB_ENV_INPUT: ${{ inputs.github_env }}
           VERSION: ${{ inputs.version }}
-          SEVERITY: ${{ inputs.severity }}
         with:
           script: |
             const fs = require('fs');
@@ -541,9 +536,23 @@ jobs:
             const CANONICAL_SEVERITIES = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNKNOWN'];
             const SEV_RANK = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3, UNKNOWN: 4 };
             const SEV_EMOJI = { CRITICAL: '🔴', HIGH: '🟠', MEDIUM: '🟡', LOW: '🔵', UNKNOWN: '⚪' };
-            const blockingSet = new Set((process.env.BLOCKING_SEVERITY || '').split(',').map(s => s.trim()).filter(Boolean));
-            const requestedSet = new Set((process.env.SEVERITY || '').split(',').map(s => s.trim()).filter(Boolean));
-            const requestedSeverities = CANONICAL_SEVERITIES.filter(sev => requestedSet.has(sev));
+            const blockingSeveritySet = value => {
+              const threshold = String(value || 'off').trim().toLowerCase();
+              const byThreshold = {
+                off: [],
+                critical: ['CRITICAL'],
+                high: ['CRITICAL', 'HIGH'],
+                medium: ['CRITICAL', 'HIGH', 'MEDIUM'],
+                low: ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'],
+              };
+              if (!Object.hasOwn(byThreshold, threshold)) {
+                core.setFailed(`blocking-severity must be one of: off, low, medium, high, critical. Got: ${value}`);
+                return new Set();
+              }
+              return new Set(byThreshold[threshold]);
+            };
+            const blockingSet = blockingSeveritySet(process.env.BLOCKING_SEVERITY);
+            const reportedSeverities = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
             const list = process.env.REPORT_LIST;
             const listExists = !!(list && fs.existsSync(list) && fs.statSync(list).size > 0);
             const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
@@ -640,7 +649,7 @@ jobs:
                   const verified = f.Verified === true;
                   const status = verified ? 'verified' : (f.VerificationError ? 'unknown' : 'unverified');
                   const meta = (f.SourceMetadata && f.SourceMetadata.Data && f.SourceMetadata.Data.Docker) || {};
-                  const isBlocking = verified;
+                  const isBlocking = verified && blockingSet.has('CRITICAL');
                   secretTotal += 1;
                   if (isBlocking) secretBlocking += 1;
                   group.rawRows.push({ detector, status, layer: meta.layer || '-', path: meta.file || '-', isBlocking });
@@ -781,7 +790,7 @@ jobs:
                 '',
                 `**Version:** \`${process.env.VERSION}\` · **Vulnerabilities:** ${total} total · ${blocking} blocking`,
                 `· **Secrets:** ${secretTotal} total · ${secretBlocking} blocking`,
-                `**Severities reported:** \`${process.env.SEVERITY}\` · **Blocking severities:** \`${process.env.BLOCKING_SEVERITY}\``,
+                `**Severities reported:** \`LOW,MEDIUM,HIGH,CRITICAL\` · **Blocking severity:** \`${process.env.BLOCKING_SEVERITY}\``,
                 '',
                 `[📦 Download full reports](${runUrl})`,
                 '',
@@ -792,14 +801,14 @@ jobs:
                 if (imageSummaries.length > 0) {
                   const summaryHeader = [
                     'Image',
-                    ...requestedSeverities.map(sev => `${SEV_EMOJI[sev]} ${sev}`),
+                    ...reportedSeverities.map(sev => `${SEV_EMOJI[sev]} ${sev}`),
                     'Total',
                   ];
                   out.push(
                     `| ${summaryHeader.join(' | ')} |`,
                     `| ${summaryHeader.map(() => '---').join(' | ')} |`,
                     ...imageSummaries.map(group => {
-                      const counts = requestedSeverities.map(sev => String(group.countsBySeverity[sev] || 0));
+                      const counts = reportedSeverities.map(sev => String(group.countsBySeverity[sev] || 0));
                       return `| \`${escapeCell(group.shortName)}\` | ${[...counts, String(group.totalUnique)].join(' | ')} |`;
                     }),
                     '',
@@ -810,7 +819,7 @@ jobs:
                   const rows = selectedRowsByImage.get(group.shortName) || [];
                   if (rows.length === 0) continue;
 
-                  const sevSummary = (requestedSeverities.length > 0 ? requestedSeverities : CANONICAL_SEVERITIES)
+                  const sevSummary = reportedSeverities
                     .map(sev => `${SEV_EMOJI[sev]} ${group.countsBySeverity[sev] || 0}`)
                     .join(' · ');
                   const platformSuffix = group.platforms.length > 0 ? ` (${group.platforms.join(', ')})` : '';
@@ -884,29 +893,40 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+  policy:
+    name: image-scan-policy (${{ inputs.github_env != '' && format('{0}, {1}', inputs.pipeline-stage, inputs.github_env) || inputs.pipeline-stage }})
+    runs-on: ubuntu-24.04
+    needs: [image-scan]
+    if: ${{ always() && inputs.dry-run == false }}
+    continue-on-error: ${{ inputs.blocking-severity == 'off' }}
+    timeout-minutes: 1
+    steps:
       - name: Enforce policy
-        if: ${{ always() && inputs.dry-run == false }}
         shell: bash
         env:
-          BLOCKING: ${{ steps.report.outputs.blocking-count }}
-          TOTAL: ${{ steps.report.outputs.total-count }}
-          SECRET_BLOCKING: ${{ steps.report.outputs.secret-blocking-count }}
-          SECRET_TOTAL: ${{ steps.report.outputs.secret-total-count }}
-          FAIL: ${{ inputs.fail-on-findings }}
+          BLOCKING_SEVERITY: ${{ inputs.blocking-severity }}
+          BLOCKING: ${{ needs.image-scan.outputs.blocking-count }}
+          TOTAL: ${{ needs.image-scan.outputs.total-count }}
+          SECRET_BLOCKING: ${{ needs.image-scan.outputs.secret-blocking-count }}
+          SECRET_TOTAL: ${{ needs.image-scan.outputs.secret-total-count }}
         run: |
           set -euo pipefail
+          case "${BLOCKING_SEVERITY}" in
+            off|low|medium|high|critical) ;;
+            *)
+              echo "::error::blocking-severity must be one of: off, low, medium, high, critical. Got: ${BLOCKING_SEVERITY}"
+              exit 1
+              ;;
+          esac
           echo "Trivy: total=${TOTAL:-0}, blocking=${BLOCKING:-0}"
           echo "TruffleHog: total=${SECRET_TOTAL:-0}, blocking=${SECRET_BLOCKING:-0}"
-          echo "fail-on-findings=${FAIL}"
-          if [ "${FAIL}" = "true" ]; then
-            failed=0
-            if [ "${BLOCKING:-0}" -gt 0 ]; then
-              echo "::error::${BLOCKING} blocking vulnerability finding(s) detected."
-              failed=1
+          echo "blocking-severity=${BLOCKING_SEVERITY}"
+          if [ "${BLOCKING_SEVERITY}" = "off" ]; then
+            if [ "${TOTAL:-0}" -gt 0 ] || [ "${SECRET_TOTAL:-0}" -gt 0 ]; then
+              echo "::error::Security finding(s) detected. blocking-severity=off, so this policy job is allowed to fail without failing the workflow."
+              exit 1
             fi
-            if [ "${SECRET_BLOCKING:-0}" -gt 0 ]; then
-              echo "::error::${SECRET_BLOCKING} verified secret finding(s) detected in image."
-              failed=1
-            fi
-            [ "${failed}" -eq 0 ] || exit 1
+          elif [ "${BLOCKING:-0}" -gt 0 ] || [ "${SECRET_BLOCKING:-0}" -gt 0 ]; then
+            echo "::error::Security finding(s) at or above blocking-severity=${BLOCKING_SEVERITY} detected."
+            exit 1
           fi

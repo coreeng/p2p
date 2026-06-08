@@ -1,12 +1,12 @@
-# How to Enable Scheduled Source Security Scanning
+# How to Enable Scheduled Security Scanning
 
-Fast-feedback scans only cover commits introduced by a PR or push. To also scan the full history on a schedule, add a per-repository wrapper that calls [`p2p-workflow-source-security-scan`](../reference/p2p-workflow-source-security-scan.md) on a cron with `scope: full-history`. Use this source-only wrapper for committed secrets, source dependency vulnerabilities, and restricted or forbidden license signals. To run source security and per-stage image scans together on a single schedule, use the [scheduled security umbrella](../reference/p2p-workflow-security-scan.md) instead.
+Fast-feedback scans pull-request and push changes. To also monitor older source findings and deployed images, add a per-repository scheduled wrapper that calls [`p2p-workflow-security-scan`](../reference/p2p-workflow-security-scan.md).
 
-GitHub requires schedule triggers to be declared in the consuming repository, so this wrapper lives in the application repo rather than in P2P.
+GitHub requires `schedule` triggers to live in the consuming repository, so this wrapper belongs in the application repo rather than in P2P.
 
 ## 1. Add the wrapper workflow
 
-Create `.github/workflows/source-security-scan.yaml` in your application repository:
+Create `.github/workflows/security-scan.yaml` in your application repository:
 
 ```yaml
 name: P2P scheduled security scan
@@ -19,45 +19,91 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
-  source-security-scan:
-    uses: coreeng/p2p/.github/workflows/p2p-workflow-source-security-scan.yaml@v1
+  security-scan:
+    uses: coreeng/p2p/.github/workflows/p2p-workflow-security-scan.yaml@v1
+    secrets:
+      env_vars: ${{ secrets.ENV_VARS }}
     with:
-      scope: full-history
-      # Scheduled scans see the full history, including legacy findings.
-      fail-on-findings: false
+      tenant-name: my-tenant
 ```
 
-That's all that is required. After committing on the default branch, the workflow runs on the cron and on demand via the Actions tab.
+`id-token: write` is required because the image discovery and image scan jobs authenticate to Google Cloud with OIDC.
 
-## 2. Review the report
+## 2. What gets scanned
 
-Each scheduled run emits:
+Each scheduled run starts these scans:
 
-* a **workflow summary** with a markdown table of findings;
-* a **workflow artifact** named `source-security-scan-findings` retained for 30 days;
-* no PR comment — there is no PR associated with a scheduled run.
+- source security scan over the repository's reachable git history and current source tree;
+- latest fast-feedback images for each environment in `vars.FAST_FEEDBACK`;
+- latest extended-test images for each environment in `vars.EXTENDED_TEST`;
+- latest production images for each environment in `vars.PROD`.
 
-The artifact contains redacted TruffleHog output, raw Trivy filesystem output, and normalized merged JSON. The summary is the primary place to look. Secret finding rows include a deep link (`<server>/<repo>/blob/<sha>/<file>#L<line>`) to the exact line at the offending commit when available.
+The source scan uses TruffleHog for committed secrets and Trivy for source dependency vulnerabilities plus restricted or forbidden license signals. The image scans use Trivy for image vulnerabilities and TruffleHog for embedded image secrets.
 
-On the first scheduled run, the workflow surfaces source security findings across the repository's reachable history and current source tree. Secret findings may include credentials that were rotated or accepted long ago. The same backlog re-appears on subsequent runs until each finding is remediated or suppressed. The job status is passing regardless of the number of findings, because `fail-on-findings: false`.
+Scheduled scans are report-only. Child workflows use `blocking-severity: off`, so findings can fail the policy jobs without failing the umbrella workflow. Scanner execution errors, authentication errors, and invalid configuration still fail the workflow.
 
-## 3. Adjust the timeout for large histories (optional)
+## 3. Image discovery
 
-The scan duration scales with history size; most repositories complete well under the default 30-minute timeout. For very large histories, increase `timeout-minutes`:
+By default, the umbrella runs `make p2p-images` from `working-directory` and uses the first returned image name as the anchor for latest-version discovery. All image names returned by `make p2p-images` are then passed to each stage image scan.
+
+If your repository cannot use `make p2p-images` for scheduled scans, pass `image-names` explicitly:
+
+```yaml
+jobs:
+  security-scan:
+    uses: coreeng/p2p/.github/workflows/p2p-workflow-security-scan.yaml@v1
+    permissions:
+      contents: read
+      id-token: write
+    secrets:
+      env_vars: ${{ secrets.ENV_VARS }}
+    with:
+      tenant-name: my-tenant
+      image-names: |
+        api
+        worker
+```
+
+The first image name is used to find the latest deployed version in each stage registry path. If a stage has no deployed image tag yet, that stage scan is skipped after writing a log line.
+
+## 4. Review the reports
+
+Each run emits:
+
+- workflow summaries for source security and each image scan;
+- `source-security-scan-findings`, retained for 30 days;
+- `image-scan-reports-<stage>-<github_env>` for each scanned stage/environment, retained for 30 days.
+
+The source artifact contains redacted TruffleHog output, raw Trivy filesystem output, and normalized merged JSON. Each image artifact contains a root `manifest.json`, Trivy vulnerability JSON reports, and TruffleHog image JSON-lines reports.
+
+There is no PR comment for scheduled runs because there is no associated pull request.
+
+## 5. Tune large repositories
+
+For large histories, increase the source scan timeout:
 
 ```yaml
 with:
-  scope: full-history
-  fail-on-findings: false
+  tenant-name: my-tenant
   timeout-minutes: 60
 ```
 
-## 4. Use the scheduled umbrella for source plus images
+For repositories with multiple P2P projects, set `working-directory` to the directory that contains the relevant Makefile:
 
-If you also want per-stage image vulnerability and embedded-secret scans on the same schedule, call [`p2p-workflow-security-scan`](../reference/p2p-workflow-security-scan.md) instead. The umbrella runs `p2p-workflow-source-security-scan` with `scope: full-history` and runs image scans for the latest deployed version in fast-feedback, extended-test, and prod.
+```yaml
+with:
+  tenant-name: my-tenant
+  working-directory: services/api
+```
 
----
+## See also
 
-For the full input reference, see the [p2p-workflow-source-security-scan reference](../reference/p2p-workflow-source-security-scan.md). For an overview of the two scanning modes, see [secrets scanning](../explanation/secrets-scanning.md). For how to read and triage findings, see [how to triage security findings](triage-security-findings.md).
+- [p2p-workflow-security-scan reference](../reference/p2p-workflow-security-scan.md)
+- [p2p-workflow-source-security-scan reference](../reference/p2p-workflow-source-security-scan.md)
+- [p2p-workflow-image-scan reference](../reference/p2p-workflow-image-scan.md)
+- [Secrets scanning](../explanation/secrets-scanning.md)
+- [Image scanning](../explanation/image-scanning.md)
+- [How to triage security findings](triage-security-findings.md)

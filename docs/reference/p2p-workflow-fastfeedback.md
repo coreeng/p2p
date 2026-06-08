@@ -35,7 +35,7 @@ jobs:
 | `skip-fastfeedback-integration-on-prs` | `boolean` | No | `false` | When `true`, skips the `integration-test` job on pull requests (runs unconditionally on main or tags). |
 | `skip-subnamespaces-create` | `boolean` | No | `false` | Skips creating subnamespaces before running make targets. |
 | `artifacts` | `string` | No | `''` | Comma-separated list of artifact paths to upload after each stage. |
-| `security-scan-fail-on-findings` | `boolean` | No | `false` | When `true`, fails the workflow if the `source-security-scan` or `image-scan` job detects blocking findings. See [p2p-workflow-source-security-scan](p2p-workflow-source-security-scan.md) for the source security blocking policy. |
+| `security-scan-blocking-severity` | `string` | No | `off` | Minimum security finding severity that blocks the workflow: `off`, `low`, `medium`, `high`, or `critical`. Verified secrets are treated as `critical`. With `off`, the policy jobs may fail on findings, but the workflow continues. |
 
 ## Secrets
 
@@ -67,14 +67,15 @@ build
 
 image-scan           (needs: build)
                      Calls p2p-workflow-image-scan against the built images.
-                     Fails the workflow on blocking findings when
-                     security-scan-fail-on-findings=true (default: false).
+                     Blocks the workflow on findings at or above
+                     security-scan-blocking-severity (default: off).
 
 source-security-scan  (independent of build; runs in parallel)
                       Calls p2p-workflow-source-security-scan with scope: changes.
                       Reports source vulnerabilities, restricted/forbidden licenses,
-                      and git-tree secrets. Fails only on blocking vulnerabilities or
-                      verified secrets when security-scan-fail-on-findings=true.
+                      and git-tree secrets. Blocks only on vulnerabilities at or above
+                      security-scan-blocking-severity or verified secrets when the
+                      threshold is not off.
 
 notify-failure       (needs: all jobs; runs on main-branch when any job fails)
 ```

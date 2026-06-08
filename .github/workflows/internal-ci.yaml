@@ -62,7 +62,7 @@ jobs:
     uses: ./.github/workflows/p2p-workflow-source-security-scan.yaml
     with:
       scope: changes
-      fail-on-findings: false
+      blocking-severity: off
       dry-run: true
       timeout-minutes: 10
 

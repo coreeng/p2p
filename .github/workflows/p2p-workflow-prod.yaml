@@ -53,12 +53,13 @@ on:
         required: false
         type: boolean
         default: false
-      security-scan-fail-on-findings:
+      security-scan-blocking-severity:
         description: |
-          If true, the image-scan job fails the workflow when blocking findings are detected
+          Minimum severity that blocks the workflow for image-scan findings:
+          off, low, medium, high, or critical.
         required: false
-        type: boolean
-        default: false
+        type: string
+        default: off
 
 jobs:
   validate-version:
@@ -98,7 +99,7 @@ jobs:
       region: ${{ inputs.region }}
       working-directory: ${{ inputs.working-directory }}
       dry-run: ${{ inputs.dry-run }}
-      fail-on-findings: ${{ inputs.security-scan-fail-on-findings }}
+      blocking-severity: ${{ inputs.security-scan-blocking-severity }}
 
   prod-deploy:
     name: prod-deploy

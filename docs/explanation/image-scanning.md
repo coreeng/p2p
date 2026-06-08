@@ -12,7 +12,7 @@ The scheduled [`p2p-workflow-security-scan`](../reference/p2p-workflow-security-
 
 ## Blocking and reporting
 
-Image scanning is visibility-first by default. Both Trivy vulnerability findings and TruffleHog secret findings surface in the same workflow artifact, and in the same sticky PR comment for that stage/environment when the caller grants `pull-requests: write`. The workflow does not fail the job unless the caller sets `security-scan-fail-on-findings: true`, at which point a reported finding whose severity is listed in `blocking-severity` (Trivy) **or** any `verified` TruffleHog finding will fail the run.
+Image scanning is visibility-first by default. Both Trivy vulnerability findings and TruffleHog secret findings surface in the same workflow artifact, and in the same sticky PR comment for that stage/environment when the caller grants `pull-requests: write`. With the default `security-scan-blocking-severity: off`, findings fail the image-scan policy job but do not fail the workflow. Setting `security-scan-blocking-severity` to `low`, `medium`, `high`, or `critical` makes findings at or above that Trivy severity block the workflow; verified TruffleHog secrets are treated as `critical`.
 
 The uploaded `image-scan-reports-*` artifact is manifest-based evidence for dashboard ingestion. Its root `manifest.json` is the supported index and points to artifact-relative Trivy JSON reports plus TruffleHog image JSON-lines reports. TruffleHog JSONL files can be empty when there are no image secrets; dashboard evidence uses detector, status, layer, and path metadata and does not expose secret values.
 

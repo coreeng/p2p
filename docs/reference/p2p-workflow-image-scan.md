@@ -1,10 +1,10 @@
 # p2p-workflow-image-scan
 
-> Scans every image resolved by the repository's P2P image targets for known vulnerabilities (Trivy) and embedded secrets (TruffleHog). Produces a workflow summary, optionally posts a sticky PR comment on `pull_request` events, and uploads an `image-scan-reports-<stage>-<github_env>` artifact. Optionally fails the job on blocking findings.
+> Scans every image resolved by the repository's P2P image targets for known vulnerabilities (Trivy) and embedded secrets (TruffleHog). Produces a workflow summary, optionally posts a sticky PR comment on `pull_request` events, and uploads an `image-scan-reports-<stage>-<github_env>` artifact. A separate policy job fails on findings according to the configured blocking severity.
 
 ## Usage
 
-Usually called by [`p2p-workflow-fastfeedback`](p2p-workflow-fastfeedback.md), [`p2p-workflow-extended-test`](p2p-workflow-extended-test.md), [`p2p-workflow-prod`](p2p-workflow-prod.md), and the scheduled [`p2p-workflow-security-scan`](p2p-workflow-security-scan.md) umbrella. Those orchestrator workflows expose `security-scan-fail-on-findings` as the normal tenant-facing control. Direct calls are supported for advanced wrappers that need to scan a specific stage/version outside the standard orchestrators.
+Usually called by [`p2p-workflow-fastfeedback`](p2p-workflow-fastfeedback.md), [`p2p-workflow-extended-test`](p2p-workflow-extended-test.md), [`p2p-workflow-prod`](p2p-workflow-prod.md), and the scheduled [`p2p-workflow-security-scan`](p2p-workflow-security-scan.md) umbrella. Those orchestrator workflows expose `security-scan-blocking-severity` as the normal tenant-facing control. Direct calls are supported for advanced wrappers that need to scan a specific stage/version outside the standard orchestrators.
 
 ```yaml
 jobs:
@@ -23,7 +23,7 @@ jobs:
       pipeline-stage: fast-feedback
       github_env: gcp-dev
       version: ${{ needs.version.outputs.version }}
-      fail-on-findings: false
+      blocking-severity: off
 ```
 
 ## Inputs
@@ -38,9 +38,7 @@ jobs:
 | `working-directory` | string | No | `.` | Directory from which `make p2p-images` is executed when `image-names` is empty. |
 | `image-names` | string | No | `''` | Newline-, comma-, or whitespace-separated list of standard P2P image names to scan. When set, this list is used instead of `make p2p-images`. |
 | `dry-run` | boolean | No | `false` | When `true`, skips GCP auth, registry login, Trivy install, the scan itself, the sticky PR comment, the artifact upload, and the policy step. The `Build report` step still runs and produces a "Scan skipped" summary. |
-| `fail-on-findings` | boolean | No | `false` | When `true`, fails the job if any reported vulnerability at a `blocking-severity` level or verified image secret is detected. |
-| `severity` | string | No | `CRITICAL,HIGH` | Comma-separated Trivy severities to report. |
-| `blocking-severity` | string | No | `CRITICAL` | Comma-separated severities that count towards the blocking policy. Must be a subset of `severity` to have an effect. |
+| `blocking-severity` | string | No | `off` | Minimum finding severity that blocks the workflow: `off`, `low`, `medium`, `high`, or `critical`. Verified image secrets are treated as `critical`. With `off`, the policy job may fail on findings, but the workflow continues. |
 | `ignore-unfixed` | boolean | No | `true` | When `true`, passes `--ignore-unfixed` to Trivy — only vulnerabilities with a fixed version are reported. |
 | `timeout-minutes` | number | No | `20` | Job timeout. |
 

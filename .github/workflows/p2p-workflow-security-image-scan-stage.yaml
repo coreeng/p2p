@@ -81,4 +81,4 @@ jobs:
       working-directory: ${{ inputs.working-directory }}
       image-names: ${{ inputs.image-names }}
       dry-run: ${{ inputs.dry-run }}
-      fail-on-findings: false
+      blocking-severity: off

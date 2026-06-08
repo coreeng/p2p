@@ -4,18 +4,10 @@ on:
       scope:
         required: true
         type: string
-      fail-on-findings:
-        required: false
-        type: boolean
-        default: false
-      severity:
-        required: false
-        type: string
-        default: 'CRITICAL,HIGH'
       blocking-severity:
         required: false
         type: string
-        default: 'CRITICAL'
+        default: 'off'
       ignore-unfixed:
         required: false
         type: boolean
@@ -191,16 +183,11 @@ jobs:
         if: ${{ inputs.dry-run == false }}
         shell: bash
         env:
-          SEVERITY: ${{ inputs.severity }}
           IGNORE_UNFIXED: ${{ inputs.ignore-unfixed }}
         run: |
           set -euo pipefail
           out="$RUNNER_TEMP/trivy-fs.json"
-          # License reporting is always HIGH,CRITICAL. The Trivy command must
-          # request the union so a caller narrowing vulnerability severity to
-          # CRITICAL does not suppress HIGH restricted-license results.
-          trivy_severity=$(printf '%s\nHIGH\nCRITICAL\n' "$SEVERITY" | tr ',' '\n' | awk 'NF && !seen[$0]++' | paste -sd, -)
-          args=(fs --format json --scanners "vuln,license" --severity "$trivy_severity" --exit-code 0 --output "$out")
+          args=(fs --format json --scanners "vuln,license" --severity "LOW,MEDIUM,HIGH,CRITICAL" --exit-code 0 --output "$out")
           if [ "$IGNORE_UNFIXED" = "true" ]; then
             args+=(--ignore-unfixed)
           fi
@@ -256,7 +243,6 @@ jobs:
         env:
           SCOPE: ${{ inputs.scope }}
           BASE: ${{ needs.secret-scan.outputs.base }}
-          SEVERITY: ${{ inputs.severity }}
           BLOCKING_SEVERITY: ${{ inputs.blocking-severity }}
           DRY_RUN: ${{ inputs.dry-run }}
           ROOT: ${{ runner.temp }}/source-security
@@ -271,7 +257,22 @@ jobs:
             const SEV_RANK = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3, UNKNOWN: 4 };
             const SEV_EMOJI = { CRITICAL: '🔴', HIGH: '🟠', MEDIUM: '🟡', LOW: '🔵', UNKNOWN: '⚪' };
 
-            const severitySet = value => new Set(String(value || '').split(',').map(s => s.trim()).filter(Boolean));
+            const severitySet = value => new Set(String(value || '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean));
+            const blockingSeveritySet = value => {
+              const threshold = String(value || 'off').trim().toLowerCase();
+              const byThreshold = {
+                off: [],
+                critical: ['CRITICAL'],
+                high: ['CRITICAL', 'HIGH'],
+                medium: ['CRITICAL', 'HIGH', 'MEDIUM'],
+                low: ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'],
+              };
+              if (!Object.hasOwn(byThreshold, threshold)) {
+                core.setFailed(`blocking-severity must be one of: off, low, medium, high, critical. Got: ${value}`);
+                return new Set();
+              }
+              return new Set(byThreshold[threshold]);
+            };
             const normalizeSeverity = value => CANONICAL_SEVERITIES.includes(value) ? value : 'UNKNOWN';
             const escapeCell = value => {
               const text = value === undefined || value === null || value === '' ? '-' : String(value);
@@ -352,10 +353,9 @@ jobs:
                 scannerWarnings.push('TruffleHog output was not available; secret results may be incomplete.');
               }
             }
-            const reportSeveritySet = severitySet(process.env.SEVERITY || 'CRITICAL,HIGH');
-            const blockingSeveritySet = severitySet(process.env.BLOCKING_SEVERITY || 'CRITICAL');
-            const requestedSet = severitySet(process.env.SEVERITY || 'CRITICAL,HIGH');
-            const requestedSeverities = CANONICAL_SEVERITIES.filter(sev => requestedSet.has(sev));
+            const reportSeveritySet = severitySet('LOW,MEDIUM,HIGH,CRITICAL');
+            const blockingSet = blockingSeveritySet(process.env.BLOCKING_SEVERITY);
+            const reportedSeverities = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
             const trivy = readJson(trivyPath, { Results: [] });
             const vulnerabilities = [];
             const licenses = [];
@@ -373,7 +373,7 @@ jobs:
                   severity,
                   url: vuln.PrimaryURL || `https://avd.aquasec.com/nvd/${vuln.VulnerabilityID || 'UNKNOWN'}`,
                   source,
-                  blocking: blockingSeveritySet.has(severity),
+                  blocking: blockingSet.has(severity),
                 });
               }
               for (const license of Array.isArray(result.Licenses) ? result.Licenses : []) {
@@ -415,7 +415,7 @@ jobs:
             secrets.sort((a, b) => Number(b.blocking) - Number(a.blocking) || a.detector.localeCompare(b.detector) || String(a.file || '').localeCompare(String(b.file || '')));
 
             const vulnerabilityBlocking = vulnerabilities.filter(v => v.blocking).length;
-            const secretBlocking = secrets.filter(s => s.blocking).length;
+            const secretBlocking = blockingSet.has('CRITICAL') ? secrets.filter(s => s.blocking).length : 0;
             const normalized = { vulnerabilities, licenses, secrets };
             const scanRange = process.env.SCOPE === 'changes' ? `${process.env.BASE || '<initial>'}..HEAD` : '<full history>';
             const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
@@ -442,7 +442,7 @@ jobs:
                 `**Scan range:** \`${scanRange}\` · **Vulnerabilities:** ${vulnerabilities.length} total · ${vulnerabilityBlocking} blocking`,
                 `· **Licenses:** ${licenses.length} total · 0 blocking`,
                 `· **Secrets:** ${secrets.length} total · ${secretBlocking} blocking`,
-                `**Severities reported:** \`${process.env.SEVERITY}\` · **Blocking severities:** \`${process.env.BLOCKING_SEVERITY}\``,
+                `**Severities reported:** \`LOW,MEDIUM,HIGH,CRITICAL\` · **Blocking severity:** \`${process.env.BLOCKING_SEVERITY}\``,
                 '',
                 `[📦 Download full reports](${runUrl})`,
                 '',
@@ -454,7 +454,7 @@ jobs:
 
               if (vulnerabilities.length > 0) {
                 out.push('### Vulnerabilities', '');
-                const summarySeverities = requestedSeverities.length > 0 ? requestedSeverities : CANONICAL_SEVERITIES;
+                const summarySeverities = reportedSeverities;
                 const summaryHeader = ['Source', ...summarySeverities.map(sev => `${SEV_EMOJI[sev]} ${sev}`), 'Total'];
                 out.push(
                   `| ${summaryHeader.join(' | ')} |`,
@@ -573,28 +573,42 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
+  policy:
+    name: source-security-policy
+    runs-on: ubuntu-24.04
+    needs: [report]
+    if: ${{ always() && inputs.dry-run == false }}
+    continue-on-error: ${{ inputs.blocking-severity == 'off' }}
+    timeout-minutes: 1
+    steps:
       - name: Enforce scan policy
-        if: ${{ always() && inputs.dry-run == false }}
         shell: bash
         env:
-          FAIL: ${{ inputs.fail-on-findings }}
-          VULN_BLOCKING: ${{ steps.report.outputs.vulnerability-blocking }}
-          SECRET_BLOCKING: ${{ steps.report.outputs.secret-blocking }}
+          BLOCKING_SEVERITY: ${{ inputs.blocking-severity }}
+          VULN_TOTAL: ${{ needs.report.outputs.vulnerability-total }}
+          VULN_BLOCKING: ${{ needs.report.outputs.vulnerability-blocking }}
+          LICENSE_TOTAL: ${{ needs.report.outputs.license-total }}
+          SECRET_TOTAL: ${{ needs.report.outputs.secret-total }}
+          SECRET_BLOCKING: ${{ needs.report.outputs.secret-blocking }}
         run: |
           set -euo pipefail
-          echo "Trivy source vulnerabilities: total=${{ steps.report.outputs.vulnerability-total }}, blocking=${VULN_BLOCKING:-0}"
-          echo "Trivy restricted/forbidden licenses: total=${{ steps.report.outputs.license-total }}, blocking=0"
-          echo "TruffleHog secrets: total=${{ steps.report.outputs.secret-total }}, blocking=${SECRET_BLOCKING:-0}"
-          echo "fail-on-findings=${FAIL}"
-          if [ "$FAIL" = "true" ]; then
-            failed=0
-            if [ "${VULN_BLOCKING:-0}" -gt 0 ]; then
-              echo "::error::${VULN_BLOCKING} blocking source vulnerability finding(s) detected."
-              failed=1
+          case "${BLOCKING_SEVERITY}" in
+            off|low|medium|high|critical) ;;
+            *)
+              echo "::error::blocking-severity must be one of: off, low, medium, high, critical. Got: ${BLOCKING_SEVERITY}"
+              exit 1
+              ;;
+          esac
+          echo "Trivy source vulnerabilities: total=${VULN_TOTAL:-0}, blocking=${VULN_BLOCKING:-0}"
+          echo "Trivy restricted/forbidden licenses: total=${LICENSE_TOTAL:-0}, blocking=0"
+          echo "TruffleHog secrets: total=${SECRET_TOTAL:-0}, blocking=${SECRET_BLOCKING:-0}"
+          echo "blocking-severity=${BLOCKING_SEVERITY}"
+          if [ "${BLOCKING_SEVERITY}" = "off" ]; then
+            if [ "${VULN_TOTAL:-0}" -gt 0 ] || [ "${SECRET_TOTAL:-0}" -gt 0 ]; then
+              echo "::error::Security finding(s) detected. blocking-severity=off, so this policy job is allowed to fail without failing the workflow."
+              exit 1
             fi
-            if [ "${SECRET_BLOCKING:-0}" -gt 0 ]; then
-              echo "::error::${SECRET_BLOCKING} verified secret finding(s) detected."
-              failed=1
-            fi
-            [ "$failed" -eq 0 ] || exit 1
+          elif [ "${VULN_BLOCKING:-0}" -gt 0 ] || [ "${SECRET_BLOCKING:-0}" -gt 0 ]; then
+            echo "::error::Security finding(s) at or above blocking-severity=${BLOCKING_SEVERITY} detected."
+            exit 1
           fi

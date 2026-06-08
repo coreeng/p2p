@@ -32,7 +32,7 @@ jobs:
 | `app-name` | `string` | No | `''` | Application name. Must equal the tenant name (each application has its own application tenant). |
 | `tenant-name` | `string` | No | `''` | Tenant name passed to the make target. |
 | `skip-subnamespaces-create` | `boolean` | No | `false` | Skips creating subnamespaces before running the make target. |
-| `security-scan-fail-on-findings` | `boolean` | No | `false` | When `true`, the `image-scan` job fails the workflow when blocking findings are detected. |
+| `security-scan-blocking-severity` | `string` | No | `off` | Minimum image-scan finding severity that blocks the workflow: `off`, `low`, `medium`, `high`, or `critical`. Verified image secrets are treated as `critical`. With `off`, the policy job may fail on findings, but the workflow continues. |
 
 ## Secrets
 
@@ -56,8 +56,8 @@ validate-version
 
 └── image-scan  Calls p2p-workflow-image-scan against the prod-registry images.
                 Only runs on main-branch.
-                Fails the workflow on blocking findings when
-                security-scan-fail-on-findings=true (default: false).
+                Blocks the workflow on findings at or above
+                security-scan-blocking-severity (default: off).
 └── prod-deploy (needs: image-scan)
                 Runs p2p-prod make target.
                 Only runs on main-branch after image-scan succeeds.
