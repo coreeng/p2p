@@ -10,6 +10,10 @@ Usually called by [`p2p-workflow-fastfeedback`](p2p-workflow-fastfeedback.md), [
 jobs:
   image-scan:
     uses: coreeng/p2p/.github/workflows/p2p-workflow-image-scan.yaml@main
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
     secrets:
       env_vars: ${{ secrets.ENV_VARS }}
       container_registry_user: ${{ secrets.CONTAINER_REGISTRY_USER }}
@@ -59,7 +63,7 @@ This workflow defines no outputs. Results are surfaced via:
 
 ## Permissions
 
-The workflow inherits permissions from the caller. Grant:
+The workflow inherits the token permissions passed by the caller chain. In nested reusable workflows, GitHub caps the token to the permissions granted by the top-level caller and each intermediate caller. Grant:
 
 | Scope | When required |
 |-------|---------------|

@@ -71,9 +71,6 @@ jobs:
     runs-on: ubuntu-24.04
     environment: ${{ inputs.github_env }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
-    permissions:
-      contents: read
-      id-token: write
     env:
       PROJECT_ID: ${{ vars.PROJECT_ID }}
       PROJECT_NUMBER: ${{ vars.PROJECT_NUMBER }}
