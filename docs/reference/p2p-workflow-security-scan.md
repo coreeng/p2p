@@ -80,5 +80,5 @@ For each stage/environment matrix entry, the umbrella calls [`p2p-get-latest-ima
 - [p2p-workflow-image-scan reference](p2p-workflow-image-scan.md)
 - [p2p-get-latest-image reference](p2p-get-latest-image.md)
 - [Secrets scanning explanation](../explanation/secrets-scanning.md)
-- [How to enable scheduled security scanning](../how-to/enable-scheduled-secrets-scanning.md)
+- [How to enable scheduled security scanning](../how-to/enable-scheduled-security-scanning.md)
 - [Triage security findings (how-to)](../how-to/triage-security-findings.md)

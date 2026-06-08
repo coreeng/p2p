@@ -16,6 +16,6 @@ The two modes serve different purposes: the PR/push mode is a **gate candidate**
 - [Image scanning](image-scanning.md)
 - [p2p-workflow-source-security-scan reference](../reference/p2p-workflow-source-security-scan.md)
 - [p2p-workflow-security-scan reference (scheduled umbrella)](../reference/p2p-workflow-security-scan.md)
-- [How to enable scheduled security scanning](../how-to/enable-scheduled-secrets-scanning.md)
+- [How to enable scheduled security scanning](../how-to/enable-scheduled-security-scanning.md)
 - [How to triage security findings](../how-to/triage-security-findings.md)
 - [p2p-workflow-fastfeedback reference](../reference/p2p-workflow-fastfeedback.md)

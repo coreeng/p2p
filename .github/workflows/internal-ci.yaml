@@ -395,6 +395,8 @@ jobs:
                   in_upload = True
               elif in_upload and line.startswith('      - name: '):
                   break
+              elif in_upload and line and not line.startswith('      '):
+                  break
               if in_upload:
                   upload_block.append(line)
           upload_text = '\n'.join(upload_block)

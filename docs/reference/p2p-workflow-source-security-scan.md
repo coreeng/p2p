@@ -66,7 +66,7 @@ Trivy license classifications are triage signals, not a P2P-wide legal policy. O
 
 ## See also
 
-- [How to enable scheduled security scanning](../how-to/enable-scheduled-secrets-scanning.md)
+- [How to enable scheduled security scanning](../how-to/enable-scheduled-security-scanning.md)
 - [Secrets scanning](../explanation/secrets-scanning.md)
 - [p2p-workflow-fastfeedback reference](p2p-workflow-fastfeedback.md)
 - [p2p-workflow-security-scan reference](p2p-workflow-security-scan.md)
