@@ -84,6 +84,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Checkout P2P workflow sources
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .p2p-workflow-src
+
       - name: Authenticate to Google Cloud
         id: auth
         if: ${{ inputs.dry-run == false }}
@@ -299,14 +306,16 @@ jobs:
         uses: actions/github-script@v9
         env:
           PULLED_LIST: ${{ steps.pull-images.outputs.list-path }}
+          P2P_SECURITY_IGNORE_HELPER: ${{ github.workspace }}/.p2p-workflow-src/.github/scripts/p2p-security-ignore.js
         with:
           script: |
             const fs = require('fs');
             const path = require('path');
             const { spawnSync } = require('child_process');
+            const securityIgnoreHelper = process.env.P2P_SECURITY_IGNORE_HELPER || './.github/scripts/p2p-security-ignore.js';
             const {
               p2pRedactedSecretId,
-            } = require('./.github/scripts/p2p-security-ignore.js');
+            } = require(securityIgnoreHelper);
 
             const reportsDir = path.join(process.env.RUNNER_TEMP, 'trufflehog-image');
             const reportList = path.join(reportsDir, 'reports.txt');
@@ -563,16 +572,18 @@ jobs:
           PIPELINE_STAGE: ${{ inputs.pipeline-stage }}
           GITHUB_ENV_INPUT: ${{ inputs.github_env }}
           VERSION: ${{ inputs.version }}
+          P2P_SECURITY_IGNORE_HELPER: ${{ github.workspace }}/.p2p-workflow-src/.github/scripts/p2p-security-ignore.js
         with:
           script: |
             const fs = require('fs');
             const path = require('path');
+            const securityIgnoreHelper = process.env.P2P_SECURITY_IGNORE_HELPER || './.github/scripts/p2p-security-ignore.js';
             const {
               loadSecurityIgnore,
               splitImageVulnerabilities,
               splitImageSecrets,
               p2pRedactedSecretId,
-            } = require('./.github/scripts/p2p-security-ignore.js');
+            } = require(securityIgnoreHelper);
             const CANONICAL_SEVERITIES = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNKNOWN'];
             const SEV_RANK = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3, UNKNOWN: 4 };
             const SEV_EMOJI = { CRITICAL: '🔴', HIGH: '🟠', MEDIUM: '🟡', LOW: '🔵', UNKNOWN: '⚪' };

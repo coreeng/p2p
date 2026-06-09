@@ -224,6 +224,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
+      - name: Checkout P2P workflow sources
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .p2p-workflow-src
+
       - name: Download secret findings
         if: ${{ inputs.dry-run == false }}
         continue-on-error: true
@@ -251,15 +258,17 @@ jobs:
           ROOT: ${{ runner.temp }}/source-security
           SECRET_SCAN_RESULT: ${{ needs.secret-scan.result }}
           SCA_SCAN_RESULT: ${{ needs.sca-scan.result }}
+          P2P_SECURITY_IGNORE_HELPER: ${{ github.workspace }}/.p2p-workflow-src/.github/scripts/p2p-security-ignore.js
         with:
           script: |
             const fs = require('fs');
             const path = require('path');
+            const securityIgnoreHelper = process.env.P2P_SECURITY_IGNORE_HELPER || './.github/scripts/p2p-security-ignore.js';
             const {
               loadSecurityIgnore,
               splitSourceVulnerabilities,
               splitSourceSecrets,
-            } = require('./.github/scripts/p2p-security-ignore.js');
+            } = require(securityIgnoreHelper);
 
             const CANONICAL_SEVERITIES = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNKNOWN'];
             const SEV_RANK = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3, UNKNOWN: 4 };

@@ -362,6 +362,7 @@ jobs:
                   PULLED_LIST: pulledList,
                   SEVERITY: 'CRITICAL,HIGH',
                   IGNORE_UNFIXED: 'true',
+                  P2P_SECURITY_IGNORE_HELPER: `${process.cwd()}/.github/scripts/p2p-security-ignore.js`,
                 },
               },
               core: {
@@ -405,6 +406,9 @@ jobs:
                       };
                     },
                   };
+                }
+                if (moduleName === './.github/scripts/p2p-security-ignore.js') {
+                  throw new Error('workflow must not load helper from caller repository');
                 }
                 return require(moduleName);
               },

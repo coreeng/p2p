@@ -6,9 +6,10 @@ const path = require('path');
 const vm = require('vm');
 
 const reportScript = fs.readFileSync('/tmp/image-security-report.js', 'utf8');
+const helperPath = path.resolve(__dirname, '../p2p-security-ignore.js');
 const workflowRequire = moduleName => (
   moduleName === './.github/scripts/p2p-security-ignore.js'
-    ? require('../p2p-security-ignore.js')
+    ? (() => { throw new Error('workflow must not load helper from caller repository'); })()
     : require(moduleName)
 );
 const secretId = value => `p2psec_${crypto.createHash('sha256').update(value).digest('hex').slice(0, 16)}`;
@@ -130,6 +131,7 @@ async function runReport() {
         REGION: 'europe-west2',
         PROJECT_ID: 'project',
         TENANT_NAME: 'prod',
+        P2P_SECURITY_IGNORE_HELPER: helperPath,
         GITHUB_SERVER_URL: 'https://github.example',
         GITHUB_REPOSITORY: 'org/repo',
         GITHUB_RUN_ID: '42',
@@ -238,6 +240,7 @@ async function runOffModeAllIgnoredReport() {
         REGION: 'europe-west2',
         PROJECT_ID: 'project',
         TENANT_NAME: 'fast-feedback',
+        P2P_SECURITY_IGNORE_HELPER: helperPath,
         GITHUB_SERVER_URL: 'https://github.example',
         GITHUB_REPOSITORY: 'org/repo',
         GITHUB_RUN_ID: '42',

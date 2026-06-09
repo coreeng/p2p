@@ -5,9 +5,10 @@ const path = require('path');
 const vm = require('vm');
 
 const reportScript = fs.readFileSync('/tmp/source-security-report.js', 'utf8');
+const helperPath = path.resolve(__dirname, '../p2p-security-ignore.js');
 const workflowRequire = moduleName => (
   moduleName === './.github/scripts/p2p-security-ignore.js'
-    ? require('../p2p-security-ignore.js')
+    ? (() => { throw new Error('workflow must not load helper from caller repository'); })()
     : require(moduleName)
 );
 
@@ -103,6 +104,7 @@ async function runReport() {
         BASE: 'base-sha',
         SECRET_SCAN_RESULT: 'success',
         SCA_SCAN_RESULT: 'success',
+        P2P_SECURITY_IGNORE_HELPER: helperPath,
         GITHUB_SERVER_URL: 'https://github.example',
         GITHUB_REPOSITORY: 'org/repo',
         GITHUB_RUN_ID: '42',
@@ -174,6 +176,7 @@ async function runReportWithoutIgnoreFile() {
         BASE: 'base-sha',
         SECRET_SCAN_RESULT: 'success',
         SCA_SCAN_RESULT: 'success',
+        P2P_SECURITY_IGNORE_HELPER: helperPath,
         GITHUB_SERVER_URL: 'https://github.example',
         GITHUB_REPOSITORY: 'org/repo',
         GITHUB_RUN_ID: '42',
@@ -260,6 +263,7 @@ async function runAllIgnoredReport() {
         BASE: 'base-sha',
         SECRET_SCAN_RESULT: 'success',
         SCA_SCAN_RESULT: 'success',
+        P2P_SECURITY_IGNORE_HELPER: helperPath,
         GITHUB_SERVER_URL: 'https://github.example',
         GITHUB_REPOSITORY: 'org/repo',
         GITHUB_RUN_ID: '42',
@@ -358,6 +362,7 @@ async function runReportWithMatcherEdgeCases() {
         BASE: 'base-sha',
         SECRET_SCAN_RESULT: 'success',
         SCA_SCAN_RESULT: 'success',
+        P2P_SECURITY_IGNORE_HELPER: helperPath,
         GITHUB_SERVER_URL: 'https://github.example',
         GITHUB_REPOSITORY: 'org/repo',
         GITHUB_RUN_ID: '42',
@@ -410,6 +415,7 @@ async function runReportWithInvalidIgnoreFile(ignoreFile) {
         BASE: 'base-sha',
         SECRET_SCAN_RESULT: 'success',
         SCA_SCAN_RESULT: 'success',
+        P2P_SECURITY_IGNORE_HELPER: helperPath,
         GITHUB_SERVER_URL: 'https://github.example',
         GITHUB_REPOSITORY: 'org/repo',
         GITHUB_RUN_ID: '42',
