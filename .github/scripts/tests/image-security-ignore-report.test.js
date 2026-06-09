@@ -336,9 +336,9 @@ async function runOffModeAllIgnoredReport() {
   const normalizedText = JSON.stringify(result.normalized);
   assert(!normalizedText.includes('accepted-image-secret-value'));
   assert(!normalizedText.includes('active-image-secret-value'));
-  assert(result.summary.includes('### Ignored image findings'));
-  assert(result.summary.includes('Base image package is accepted until upstream fixes it.'));
-  assert(result.summary.includes('Synthetic image secret fixture is accepted.'));
+  assert(!result.summary.includes('### Ignored image findings'));
+  assert(!result.summary.includes('Base image package is accepted until upstream fixes it.'));
+  assert(!result.summary.includes('Synthetic image secret fixture is accepted.'));
   assert(!result.summary.includes('CVE-2026-IMAGE-1 | debian'));
 
   const offMode = await runOffModeAllIgnoredReport();
@@ -375,7 +375,9 @@ async function runOffModeAllIgnoredReport() {
   ]);
   assert(offMode.summary.includes('**Vulnerabilities:** 0 total · 0 blocking'));
   assert(offMode.summary.includes('· **Secrets:** 0 total · 0 blocking'));
-  assert(offMode.summary.includes('### Ignored image findings'));
+  assert(!offMode.summary.includes('### Ignored image findings'));
+  assert(!offMode.summary.includes('Accepted off-mode image vulnerability.'));
+  assert(!offMode.summary.includes('Accepted off-mode image secret.'));
   console.log('image security ignore report fixtures passed');
 })().catch(error => {
   console.error(error);

@@ -473,10 +473,10 @@ async function runReportWithInvalidIgnoreFile(ignoreFile) {
       expires: '2026-10-01',
     },
   ]);
-  assert(result.summary.includes('### Ignored source findings'));
-  assert(result.summary.includes('Dev-only dependency is unreachable.'));
-  assert(result.summary.includes('Rotated credential retained until history rewrite.'));
-  assert(result.summary.includes('2026-09-01'));
+  assert(!result.summary.includes('### Ignored source findings'));
+  assert(!result.summary.includes('Dev-only dependency is unreachable.'));
+  assert(!result.summary.includes('Rotated credential retained until history rewrite.'));
+  assert(!result.summary.includes('2026-09-01'));
 
   const noIgnore = await runReportWithoutIgnoreFile();
   assert.strictEqual(noIgnore.outputs['vulnerability-total'], 1);
@@ -494,7 +494,9 @@ async function runReportWithInvalidIgnoreFile(ignoreFile) {
   assert.deepStrictEqual(allIgnored.normalized.secrets, []);
   assert.deepStrictEqual(allIgnored.normalized.ignored.vulnerabilities.map(v => v.id), ['CVE-ALL-IGNORED']);
   assert.deepStrictEqual(allIgnored.normalized.ignored.secrets.map(s => s.id), ['all-ignored-secret']);
-  assert(allIgnored.summary.includes('### Ignored source findings'));
+  assert(!allIgnored.summary.includes('### Ignored source findings'));
+  assert(!allIgnored.summary.includes('Accepted source vulnerability.'));
+  assert(!allIgnored.summary.includes('Accepted source secret.'));
   assert(!allIgnored.summary.includes('_No source security findings detected._'));
 
   const matcherEdges = await runReportWithMatcherEdgeCases();

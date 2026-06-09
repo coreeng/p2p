@@ -21,7 +21,7 @@ The review should confirm that P2P's normalized ignored-finding output carries e
 ## Acceptance criteria
 
 - [ ] Reference docs describe `.p2p-security-ignore.yaml` and its v1 schema.
-- [ ] Triage docs explain how ignored findings differ from active findings in comments, summaries, artifacts, and policy counts.
+- [ ] Triage docs explain that comments and summaries show active findings only, while artifacts retain ignored findings separately with reasons for dashboard ingestion.
 - [ ] Docs state that `id` and `reason` are required for vulnerability and secret ignores.
 - [ ] Docs state that `package`, `paths`, `path`, and `expires` are optional narrowing or review metadata fields.
 - [ ] Docs state that optional narrowing fields use exact matching in v1.

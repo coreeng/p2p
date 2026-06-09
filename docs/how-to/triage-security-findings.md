@@ -25,7 +25,7 @@ The image-scan comment renders up to two tables under one header:
 - **Vulnerabilities**: a per-image summary table plus a `<details>` block per image with `Severity`, `Package`, `Installed`, `Fixed`, `CVE`, and `Source` columns. Sorted by severity, then package, then CVE; truncated to 100 rows.
 - **Secrets in image**: `Detector`, `Status`, `Layer`, `Path`. `Status` is `verified`, `unknown`, or `unverified`; only `verified` rows are blocking. Truncated independently at 100 rows.
 
-When a finding matches `.p2p-security-ignore.yaml`, the comments and workflow summaries show it separately as an ignored finding with the recorded reason. Ignored findings are not included in active finding totals, active blocking counts, or policy failures. They remain visible so reviewers and dashboards can distinguish accepted risk from clean scans.
+When a finding matches `.p2p-security-ignore.yaml`, comments and workflow summaries omit it from active finding tables. Ignored findings are not included in active finding totals, active blocking counts, or policy failures. They remain available in normalized JSON artifacts so the dashboard can distinguish accepted risk from clean scans without exposing ignore reasons in PR comments.
 
 ## 2. Download the full artifact
 

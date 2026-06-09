@@ -887,7 +887,6 @@ jobs:
                 '',
                 `**Version:** \`${process.env.VERSION}\` · **Vulnerabilities:** ${total} total · ${blocking} blocking`,
                 `· **Secrets:** ${secretTotal} total · ${secretBlocking} blocking`,
-                ...(securityIgnore.present ? [`· **Ignored:** ${ignoredImageVulnerabilities.length + ignoredImageSecrets.length} image finding(s)`] : []),
                 `**Severities reported:** \`LOW,MEDIUM,HIGH,CRITICAL\` · **Blocking severity:** \`${process.env.BLOCKING_SEVERITY}\``,
                 '',
                 `[📦 Download full reports](${runUrl})`,
@@ -961,29 +960,6 @@ jobs:
                 }
               }
 
-              if (ignoredImageVulnerabilities.length > 0 || ignoredImageSecrets.length > 0) {
-                out.push('### Ignored image findings', '');
-                if (ignoredImageVulnerabilities.length > 0) {
-                  out.push(
-                    '#### Ignored vulnerabilities',
-                    '',
-                    '| Image | Severity | Package | CVE | Source | Reason | Expires |',
-                    '|---|---|---|---|---|---|---|',
-                    ...ignoredImageVulnerabilities.slice(0, 100).map(row => `| \`${escapeCell(row.image)}\` | ${SEV_EMOJI[row.severity]} ${row.severity} | ${escapeCell(row.package)} | [${escapeCell(row.id)}](${row.cveUrl}) | ${escapeCell(row.source)} | ${escapeCell(row.ignore.reason)} | ${escapeCell(row.ignore.expires)} |`),
-                    '',
-                  );
-                }
-                if (ignoredImageSecrets.length > 0) {
-                  out.push(
-                    '#### Ignored secrets',
-                    '',
-                    '| Image | Detector | Status | ID | Path | Reason | Expires |',
-                    '|---|---|---|---|---|---|---|',
-                    ...ignoredImageSecrets.slice(0, 100).map(row => `| \`${escapeCell(row.image)}\` | ${escapeCell(row.detector)} | ${escapeCell(row.status)} | \`${escapeCell(row.id)}\` | ${escapeCell(row.path)} | ${escapeCell(row.ignore.reason)} | ${escapeCell(row.ignore.expires)} |`),
-                    '',
-                  );
-                }
-              }
             }
 
             const md = out.join('\n').trimEnd() + '\n';

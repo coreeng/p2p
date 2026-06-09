@@ -472,7 +472,6 @@ jobs:
                 `**Scan range:** \`${scanRange}\` · **Vulnerabilities:** ${activeVulnerabilities.length} total · ${vulnerabilityBlocking} blocking`,
                 `· **Licenses:** ${licenses.length} total · 0 blocking`,
                 `· **Secrets:** ${activeSecrets.length} total · ${secretBlocking} blocking`,
-                ...(securityIgnore.present ? [`· **Ignored:** ${ignoredVulnerabilities.length + ignoredSecrets.length} source finding(s)`] : []),
                 `**Severities reported:** \`LOW,MEDIUM,HIGH,CRITICAL\` · **Blocking severity:** \`${process.env.BLOCKING_SEVERITY}\``,
                 '',
                 `[📦 Download full reports](${runUrl})`,
@@ -569,30 +568,6 @@ jobs:
                   }),
                   '',
                 );
-              }
-
-              if (ignoredVulnerabilities.length > 0 || ignoredSecrets.length > 0) {
-                out.push('### Ignored source findings', '');
-                if (ignoredVulnerabilities.length > 0) {
-                  out.push(
-                    '#### Ignored vulnerabilities',
-                    '',
-                    '| Severity | Package | CVE/ID | Source | Reason | Expires |',
-                    '|---|---|---|---|---|---|',
-                    ...ignoredVulnerabilities.slice(0, 100).map(v => `| ${SEV_EMOJI[v.severity]} ${v.severity} | ${escapeCell(v.package)} | [${escapeCell(v.id)}](${v.url}) | ${escapeCell(v.source)} | ${escapeCell(v.ignore.reason)} | ${escapeCell(v.ignore.expires)} |`),
-                    '',
-                  );
-                }
-                if (ignoredSecrets.length > 0) {
-                  out.push(
-                    '#### Ignored secrets',
-                    '',
-                    '| Detector | Status | File | Line | Reason | Expires |',
-                    '|---|---|---|---|---|---|',
-                    ...ignoredSecrets.slice(0, 100).map(s => `| ${escapeCell(s.detector)} | ${escapeCell(s.status)} | ${s.file ? `\`${escapeCell(s.file)}\`` : '-'} | ${escapeCell(s.line)} | ${escapeCell(s.ignore.reason)} | ${escapeCell(s.ignore.expires)} |`),
-                    '',
-                  );
-                }
               }
 
               for (const [label, count] of [['vulnerability', activeVulnerabilities.length], ['license', licenses.length], ['secret', activeSecrets.length]]) {

@@ -16,7 +16,7 @@ ready-for-agent
 
 Add support for a repository-root `.p2p-security-ignore.yaml` file that lets P2P users record accepted source and image security findings. The format must support image vulnerabilities, image secrets, source vulnerabilities, and source secrets. Each ignored finding requires an `id` and a `reason`; optional fields narrow matching or add expiry metadata.
 
-The implementation should parse and validate the ignore file, split normalized scan findings into active and ignored collections, exclude ignored findings from active totals and blocking policy counts, and render ignored findings separately in human-readable and machine-readable outputs.
+The implementation should parse and validate the ignore file, split normalized scan findings into active and ignored collections, exclude ignored findings from active totals and blocking policy counts, omit ignored findings from human-readable comments and summaries, and retain ignored findings in machine-readable outputs.
 
 This work should keep the format independent of scanner-native Trivy and TruffleHog ignore mechanisms. License ignores, stage-specific ignores, multiple ignore files, and `working-directory`-relative ignore files are out of scope.
 
@@ -32,7 +32,7 @@ This work should keep the format independent of scanner-native Trivy and Truffle
 - [ ] Image secret ignores match by P2P redacted secret ID and optionally by image file path.
 - [ ] Expired ignore entries do not apply.
 - [ ] Ignored findings are excluded from active totals, blocking counts, and policy failures.
-- [ ] Ignored findings are rendered separately from active findings in comments, summaries, and normalized machine-readable output.
+- [ ] Ignored findings are omitted from comments and summaries, and rendered separately from active findings in normalized machine-readable output.
 - [ ] Ignored findings include the ignore reason and expiry metadata when present.
 - [ ] License findings are unchanged and cannot be ignored by this v1 format.
 - [ ] Tests cover parser validation, matcher behavior, active-vs-ignored reporting, policy counts, expired entries, and image secret ID generation.

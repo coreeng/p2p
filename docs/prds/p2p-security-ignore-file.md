@@ -12,7 +12,7 @@ Add a repository-root P2P security ignore file named `.p2p-security-ignore.yaml`
 
 The ignore file supports image-level vulnerability and secret ignores under each P2P image name, plus repository-level source vulnerability and source secret ignores. Each ignored vulnerability or secret requires only an `id` and a `reason`. Optional fields narrow the match or add review metadata.
 
-P2P scan reporting separates active findings from ignored findings. Ignored findings do not contribute to active totals or blocking counts, but they remain visible in a separate ignored-findings section and in machine-readable artifacts so that the dashboard can display accepted risk with its reason.
+P2P scan reporting separates active findings from ignored findings. Ignored findings do not contribute to active totals or blocking counts. They are omitted from PR comments and workflow summaries, but remain visible in machine-readable artifacts so that the dashboard can display accepted risk with its reason.
 
 Malformed ignore files fail the scan/report job. License findings are not part of this first version.
 
@@ -32,7 +32,7 @@ Malformed ignore files fail the scan/report job. License findings are not part o
 12. As a platform user, I want optional path matching for secrets, so that a secret ignore can be narrowed to the intended source file or image file.
 13. As a platform user, I want optional expiry dates, so that temporary acceptances can become active again automatically.
 14. As a platform user, I want absent expiry dates to be allowed, so that v1 can support simple acceptance records without forcing a governance workflow.
-15. As a platform user, I want ignored findings shown separately from active findings, so that accepted risk remains visible without polluting active remediation counts.
+15. As a platform user, I want ignored findings omitted from PR comments and workflow summaries, so that accepted risk does not distract from active remediation.
 16. As a platform user, I want ignored findings to retain their reasons in the dashboard, so that audit and triage discussions do not require searching workflow logs.
 17. As a maintainer, I want P2P's ignore format to be independent of scanner-native files, so that Trivy or TruffleHog behavior can change without changing the product contract.
 18. As a maintainer, I want invalid ignore files to fail loudly, so that a malformed file does not silently stop applying expected ignores.
@@ -68,7 +68,8 @@ Malformed ignore files fail the scan/report job. License findings are not part o
 - Optional narrowing fields use exact matching in v1. Globs and regular expressions are out of scope.
 - If the ignore file is absent, scans behave as they do today.
 - If the ignore file is present but malformed or semantically invalid, the scan/report job fails.
-- Active findings and ignored findings are separate in human-readable comments, workflow summaries, normalized JSON, and dashboard-facing artifacts.
+- Human-readable comments and workflow summaries show active findings only.
+- Active findings and ignored findings are separate in normalized JSON and dashboard-facing artifacts.
 - Ignored findings do not contribute to active totals, active blocking counts, or policy failures.
 - Ignored findings include the matched ignore reason and any expiry metadata in normalized output.
 - License ignores are not supported in v1.
@@ -80,7 +81,7 @@ Malformed ignore files fail the scan/report job. License findings are not part o
 - Parser tests should cover absent file, minimal valid file, full valid file, unknown schema version, malformed YAML, missing required fields, invalid list/object shapes, invalid expiry format, and expired entries.
 - Matcher tests should cover image vulnerability ignores by ID only, image vulnerability ignores narrowed by package, source vulnerability ignores narrowed by package and path, source secret ignores by ID only, image secret ignores by ID only, and secret ignores narrowed by path.
 - Matching tests should verify exact-match semantics for optional fields.
-- Reporting tests should verify that ignored findings are rendered separately from active findings and carry their reason.
+- Reporting tests should verify that ignored findings are omitted from human-readable comments and summaries, while normalized output retains ignored findings with reasons.
 - Policy tests should verify that ignored findings are excluded from active totals and blocking counts for both `blocking-severity: off` and non-off thresholds.
 - Image secret normalization tests should verify that a stable redacted ID is emitted without exposing raw secret values.
 - Workflow-level or script-level tests should follow the current internal CI pattern of extracting reusable workflow logic and running it in isolation where practical.
