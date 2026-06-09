@@ -53,11 +53,19 @@ jobs:
 
 ## Outputs
 
-This workflow defines no outputs. Results are surfaced via:
+| Name | Description |
+|------|-------------|
+| `json-file` | Path to `image-security-findings.json` inside the runner workspace. |
+
+Results are also surfaced via:
 
 - The workflow summary (`$GITHUB_STEP_SUMMARY`).
 - A sticky PR comment with `header: image-scan-findings-<stage>-<github_env>` on `pull_request` events when `dry-run: false` and the caller grants `pull-requests: write`. When `github_env` is empty, the header uses `local`.
-- The `image-scan-reports-<stage>-<github_env>` artifact, retained for 30 days. When `github_env` is empty, the artifact name uses `local`. Contains root `manifest.json`, `trivy/` (one Trivy JSON per image x platform), and `trufflehog-image/` (one TruffleHog JSON-lines file per image x platform).
+- The `image-scan-reports-<stage>-<github_env>` artifact, retained for 30 days. When `github_env` is empty, the artifact name uses `local`. Contains root `manifest.json`, `image-security-findings.json`, `trivy/` (one Trivy JSON per image x platform), and `trufflehog-image/` (one redacted TruffleHog JSON-lines file per image x platform).
+
+If the repository root contains `.p2p-security-ignore.yaml`, image vulnerability and image secret findings that match a valid, unexpired ignore entry are reported as ignored findings instead of active findings. Ignored findings stay visible in the workflow summary, sticky PR comment, and machine-readable artifacts with their ignore reason and expiry metadata when present. They are excluded from active totals, active blocking counts, and image policy failures.
+
+`image-security-findings.json` uses top-level `vulnerabilities` and `secrets` collections. When an ignore file is present, it also includes `ignored.vulnerabilities` and `ignored.secrets`.
 
 ## Permissions
 
@@ -80,6 +88,47 @@ If `image-names` is set, the workflow splits it on commas or whitespace and scan
 ```
 
 If neither `image-names` nor `p2p-images` produces scan targets, the job fails — there is nothing to scan.
+
+## Security ignore file
+
+The image scan workflow reads one P2P-owned ignore file from the repository root: `.p2p-security-ignore.yaml`. It is not a Trivy `.trivyignore` file and not a TruffleHog configuration file. If the file is absent, scans behave normally. If it is present but malformed, uses an unsupported schema version, omits required fields, has invalid shapes, or contains invalid expiry dates, the scan/report job fails.
+
+The v1 schema uses `version: 1`. Image ignores are grouped under `images`, and each image entry requires `name`. `name` matches the standard P2P image name, not a full registry reference, tag, stage, or GitHub environment:
+
+```yaml
+version: 1
+
+images:
+  - name: api
+    vulnerabilities:
+      - id: CVE-2024-24790
+        reason: "Runtime path is not reachable."
+        package: golang.org/x/net
+        expires: 2026-09-01
+    secrets:
+      - id: p2psec_def456
+        reason: "Synthetic credential in test fixture."
+        path: /app/testdata/example.env
+        expires: 2026-09-01
+```
+
+For image vulnerability ignores:
+
+- `id` is required and matches the Trivy vulnerability identifier.
+- `reason` is required and is copied to ignored-finding output.
+- `package` is optional and narrows matching to the exact finding package name.
+- `expires` is optional review metadata. When absent, the ignore has no expiry. When present and in the past, the ignore no longer applies.
+
+For image secret ignores:
+
+- `id` is required and matches the P2P redacted image secret ID.
+- `reason` is required and is copied to ignored-finding output.
+- `path` is optional and narrows matching to the exact image file path.
+- `expires` is optional review metadata. When absent, the ignore has no expiry. When present and in the past, the ignore no longer applies.
+
+Optional narrowing fields use exact matching in v1. Globs and regular expressions are not supported. Secret IDs are redacted P2P identifiers; raw secret values must not be written to the ignore file and are not exposed in dashboard evidence.
+
+License finding ignores, stage-specific ignores, multiple ignore files, and `working-directory`-relative ignore files are out of scope for v1. V1 ignores are intentionally stage-agnostic; stage-specific per-finding acceptance is not supported.
 
 ## Artifact contract
 
@@ -108,7 +157,7 @@ Manifest schema version 1:
 - `imageRef` is the normalized image reference requested by the workflow.
 - `digest` is the platform-specific manifest digest that was pulled and scanned.
 - `vulnerabilityReport` is an artifact-relative path to a Trivy JSON report under `trivy/`.
-- `secretReport` is an artifact-relative path to a TruffleHog JSON-lines report under `trufflehog-image/`; the file may be empty when TruffleHog finds no secrets.
+- `secretReport` is an artifact-relative path to a redacted TruffleHog JSON-lines report under `trufflehog-image/`; the file may be empty when TruffleHog finds no secrets.
 - Report paths must be relative to the artifact root, must not be absolute, must not contain parent-directory traversal, and must point to files in the same artifact.
 
 If scanning, report generation, or manifest validation is incomplete, the workflow does not upload a dashboard-matching `image-scan-reports-*` artifact. Use the failed job logs as the diagnostic surface.

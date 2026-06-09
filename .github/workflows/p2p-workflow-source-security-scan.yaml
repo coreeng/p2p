@@ -221,6 +221,9 @@ jobs:
       secret-total: ${{ steps.report.outputs.secret-total }}
       secret-blocking: ${{ steps.report.outputs.secret-blocking }}
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
       - name: Download secret findings
         if: ${{ inputs.dry-run == false }}
         continue-on-error: true
@@ -252,6 +255,11 @@ jobs:
           script: |
             const fs = require('fs');
             const path = require('path');
+            const {
+              loadSecurityIgnore,
+              splitSourceVulnerabilities,
+              splitSourceSecrets,
+            } = require('./.github/scripts/p2p-security-ignore.js');
 
             const CANONICAL_SEVERITIES = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNKNOWN'];
             const SEV_RANK = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3, UNKNOWN: 4 };
@@ -356,6 +364,7 @@ jobs:
             const reportSeveritySet = severitySet('LOW,MEDIUM,HIGH,CRITICAL');
             const blockingSet = blockingSeveritySet(process.env.BLOCKING_SEVERITY);
             const reportedSeverities = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
+            const securityIgnore = loadSecurityIgnore(process.env.GITHUB_WORKSPACE);
             const trivy = readJson(trivyPath, { Results: [] });
             const vulnerabilities = [];
             const licenses = [];
@@ -392,6 +401,9 @@ jobs:
 
             vulnerabilities.sort(sortBySeverity);
             licenses.sort(sortBySeverity);
+            const vulnerabilitySplit = splitSourceVulnerabilities(vulnerabilities, securityIgnore);
+            const activeVulnerabilities = vulnerabilitySplit.active;
+            const ignoredVulnerabilities = vulnerabilitySplit.ignored.sort(sortBySeverityOnly);
 
             const secrets = [];
             for (const line of readLines(trufflehogPath)) {
@@ -413,19 +425,28 @@ jobs:
               });
             }
             secrets.sort((a, b) => Number(b.blocking) - Number(a.blocking) || a.detector.localeCompare(b.detector) || String(a.file || '').localeCompare(String(b.file || '')));
+            const secretSplit = splitSourceSecrets(secrets, securityIgnore);
+            const activeSecrets = secretSplit.active;
+            const ignoredSecrets = secretSplit.ignored.sort((a, b) => a.detector.localeCompare(b.detector) || String(a.file || '').localeCompare(String(b.file || '')));
 
-            const vulnerabilityBlocking = vulnerabilities.filter(v => v.blocking).length;
-            const secretBlocking = blockingSet.has('CRITICAL') ? secrets.filter(s => s.blocking).length : 0;
-            const normalized = { vulnerabilities, licenses, secrets };
+            const vulnerabilityBlocking = activeVulnerabilities.filter(v => v.blocking).length;
+            const secretBlocking = blockingSet.has('CRITICAL') ? activeSecrets.filter(s => s.blocking).length : 0;
+            const normalized = { vulnerabilities: activeVulnerabilities, licenses, secrets: activeSecrets };
+            if (securityIgnore.present) {
+              normalized.ignored = {
+                vulnerabilities: ignoredVulnerabilities,
+                secrets: ignoredSecrets,
+              };
+            }
             const scanRange = process.env.SCOPE === 'changes' ? `${process.env.BASE || '<initial>'}..HEAD` : '<full history>';
             const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
-            const vulnerabilityGroups = groupBySource(vulnerabilities);
-            const selectedVulnerabilitiesBySource = selectedRowsBySource(vulnerabilities);
+            const vulnerabilityGroups = groupBySource(activeVulnerabilities);
+            const selectedVulnerabilitiesBySource = selectedRowsBySource(activeVulnerabilities);
             const licenseGroups = groupBySource(licenses);
             const selectedLicensesBySource = selectedRowsBySource(licenses);
             const selectedSecrets = [
-              ...secrets.filter(s => s.blocking),
-              ...secrets.filter(s => !s.blocking),
+              ...activeSecrets.filter(s => s.blocking),
+              ...activeSecrets.filter(s => !s.blocking),
             ].slice(0, 100);
             const out = ['## Source security scan', ''];
 
@@ -439,20 +460,28 @@ jobs:
 
             if (!dryRun) {
               out.push(
-                `**Scan range:** \`${scanRange}\` · **Vulnerabilities:** ${vulnerabilities.length} total · ${vulnerabilityBlocking} blocking`,
+                `**Scan range:** \`${scanRange}\` · **Vulnerabilities:** ${activeVulnerabilities.length} total · ${vulnerabilityBlocking} blocking`,
                 `· **Licenses:** ${licenses.length} total · 0 blocking`,
-                `· **Secrets:** ${secrets.length} total · ${secretBlocking} blocking`,
+                `· **Secrets:** ${activeSecrets.length} total · ${secretBlocking} blocking`,
+                ...(securityIgnore.present ? [`· **Ignored:** ${ignoredVulnerabilities.length + ignoredSecrets.length} source finding(s)`] : []),
                 `**Severities reported:** \`LOW,MEDIUM,HIGH,CRITICAL\` · **Blocking severity:** \`${process.env.BLOCKING_SEVERITY}\``,
                 '',
                 `[📦 Download full reports](${runUrl})`,
                 '',
               );
 
-              if (scannerWarnings.length === 0 && vulnerabilities.length === 0 && licenses.length === 0 && secrets.length === 0) {
+              if (
+                scannerWarnings.length === 0
+                && activeVulnerabilities.length === 0
+                && licenses.length === 0
+                && activeSecrets.length === 0
+                && ignoredVulnerabilities.length === 0
+                && ignoredSecrets.length === 0
+              ) {
                 out.push('_No source security findings detected._');
               }
 
-              if (vulnerabilities.length > 0) {
+              if (activeVulnerabilities.length > 0) {
                 out.push('### Vulnerabilities', '');
                 const summarySeverities = reportedSeverities;
                 const summaryHeader = ['Source', ...summarySeverities.map(sev => `${SEV_EMOJI[sev]} ${sev}`), 'Total'];
@@ -518,7 +547,7 @@ jobs:
                 }
               }
 
-              if (secrets.length > 0) {
+              if (activeSecrets.length > 0) {
                 out.push(
                   '### Secrets in source',
                   '',
@@ -533,7 +562,31 @@ jobs:
                 );
               }
 
-              for (const [label, count] of [['vulnerability', vulnerabilities.length], ['license', licenses.length], ['secret', secrets.length]]) {
+              if (ignoredVulnerabilities.length > 0 || ignoredSecrets.length > 0) {
+                out.push('### Ignored source findings', '');
+                if (ignoredVulnerabilities.length > 0) {
+                  out.push(
+                    '#### Ignored vulnerabilities',
+                    '',
+                    '| Severity | Package | CVE/ID | Source | Reason | Expires |',
+                    '|---|---|---|---|---|---|',
+                    ...ignoredVulnerabilities.slice(0, 100).map(v => `| ${SEV_EMOJI[v.severity]} ${v.severity} | ${escapeCell(v.package)} | [${escapeCell(v.id)}](${v.url}) | ${escapeCell(v.source)} | ${escapeCell(v.ignore.reason)} | ${escapeCell(v.ignore.expires)} |`),
+                    '',
+                  );
+                }
+                if (ignoredSecrets.length > 0) {
+                  out.push(
+                    '#### Ignored secrets',
+                    '',
+                    '| Detector | Status | File | Line | Reason | Expires |',
+                    '|---|---|---|---|---|---|',
+                    ...ignoredSecrets.slice(0, 100).map(s => `| ${escapeCell(s.detector)} | ${escapeCell(s.status)} | ${s.file ? `\`${escapeCell(s.file)}\`` : '-'} | ${escapeCell(s.line)} | ${escapeCell(s.ignore.reason)} | ${escapeCell(s.ignore.expires)} |`),
+                    '',
+                  );
+                }
+              }
+
+              for (const [label, count] of [['vulnerability', activeVulnerabilities.length], ['license', licenses.length], ['secret', activeSecrets.length]]) {
                 if (count > 100) out.push(`_Showing 100 of ${count} ${label} findings - see the [full reports](${runUrl}) for the rest._`, '');
               }
             }
@@ -545,10 +598,10 @@ jobs:
             fs.writeFileSync(jsonPath, JSON.stringify(normalized, null, 2) + '\n');
             core.setOutput('report-file', reportPath);
             core.setOutput('json-file', jsonPath);
-            core.setOutput('vulnerability-total', vulnerabilities.length);
+            core.setOutput('vulnerability-total', activeVulnerabilities.length);
             core.setOutput('vulnerability-blocking', vulnerabilityBlocking);
             core.setOutput('license-total', licenses.length);
-            core.setOutput('secret-total', secrets.length);
+            core.setOutput('secret-total', activeSecrets.length);
             core.setOutput('secret-blocking', secretBlocking);
             await core.summary.addRaw(markdown).write();
 

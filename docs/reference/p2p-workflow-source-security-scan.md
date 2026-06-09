@@ -39,7 +39,7 @@ The workflow inherits permissions from the caller. Grant:
 | Name | Description |
 |------|-------------|
 | `report-file` | Path to the generated markdown report inside the runner workspace. |
-| `json-file` | Path to the normalized merged JSON report inside the runner workspace. |
+| `json-file` | Path to `source-security-findings.json` inside the runner workspace. |
 | `vulnerability-total` | Number of source vulnerability findings in the normalized report. |
 | `vulnerability-blocking` | Number of reported vulnerability findings at or above `blocking-severity`. |
 | `license-total` | Number of restricted or forbidden license findings in the normalized report. |
@@ -50,7 +50,53 @@ Results are also surfaced via:
 
 - workflow summary;
 - sticky PR comment with `header: source-security-scan-findings` on `pull_request` events;
-- `source-security-scan-findings` artifact containing redacted TruffleHog findings, raw Trivy filesystem output, and normalized merged JSON.
+- `source-security-scan-findings` artifact containing redacted TruffleHog findings, raw Trivy filesystem output, and `source-security-findings.json`.
+
+If the repository root contains `.p2p-security-ignore.yaml`, source vulnerability and source secret findings that match a valid, unexpired ignore entry are reported as ignored findings instead of active findings. Ignored findings stay visible in the workflow summary, sticky PR comment, and `source-security-findings.json` with their ignore reason and expiry metadata when present. They are excluded from active totals, active blocking counts, and policy failures.
+
+`source-security-findings.json` uses top-level `vulnerabilities`, `licenses`, and `secrets` collections. When an ignore file is present, it also includes `ignored.vulnerabilities` and `ignored.secrets`.
+
+## Security ignore file
+
+The source security workflow reads one P2P-owned ignore file from the repository root: `.p2p-security-ignore.yaml`. It is not a Trivy `.trivyignore` file and not a TruffleHog configuration file. If the file is absent, scans behave normally. If it is present but malformed, uses an unsupported schema version, omits required fields, has invalid shapes, or contains invalid expiry dates, the scan/report job fails.
+
+The v1 schema uses `version: 1`. Source ignores are repository-level under `source`:
+
+```yaml
+version: 1
+
+source:
+  vulnerabilities:
+    - id: CVE-2024-12345
+      reason: "Dev-only dependency."
+      package: example-dev-tool
+      paths:
+        - services/api/package-lock.json
+      expires: 2026-09-01
+  secrets:
+    - id: source-secret-redacted-id
+      reason: "Rotated historical credential retained until rewrite decision."
+      path: docs/examples/oauth.md
+```
+
+For source vulnerability ignores:
+
+- `id` is required and matches the Trivy vulnerability identifier.
+- `reason` is required and is copied to ignored-finding output.
+- `package` is optional and narrows matching to the exact finding package name.
+- `paths` is optional and narrows matching to exact Trivy filesystem result target paths.
+- `expires` is optional review metadata. When absent, the ignore has no expiry. When present and in the past, the ignore no longer applies.
+
+For source secret ignores:
+
+- `id` is required and matches the exact redacted source secret `id` from `source-security-findings.json`.
+- `reason` is required and is copied to ignored-finding output.
+- `path` is optional and narrows matching to the exact source file path.
+- `expires` is optional review metadata. When absent, the ignore has no expiry. When present and in the past, the ignore no longer applies.
+
+Optional narrowing fields use exact matching in v1. Globs and regular expressions are not supported. Secret IDs are redacted P2P identifiers; raw secret values must not be written to the ignore file and are not exposed in dashboard evidence.
+
+License finding ignores, stage-specific ignores, multiple ignore files, and `working-directory`-relative ignore files are out of scope for v1. The source scan uses the repository-root ignore file even when other P2P workflows use a non-root `working-directory`.
 
 ## Blocking policy
 

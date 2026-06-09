@@ -66,6 +66,31 @@ jobs:
       dry-run: true
       timeout-minutes: 10
 
+  test_security_ignore_helper:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: Test shared P2P security ignore helper
+        run: |
+          set -euo pipefail
+          node .github/scripts/tests/security-ignore-helper.test.js
+
+  test_source_security_ignore_report:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: Test source security ignores split active and ignored findings
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/extract-workflow-scripts.py \
+            --workflow .github/workflows/p2p-workflow-source-security-scan.yaml \
+            --out-dir /tmp \
+            --step report=source-security-report.js \
+            --require report='p2p-security-ignore.js' \
+            --require report='splitSourceVulnerabilities'
+
+          node .github/scripts/tests/source-security-ignore-report.test.js
+
   test_image_scan:
     needs: [test_version]
     strategy:
@@ -79,6 +104,23 @@ jobs:
       dry-run: true
       pipeline-stage: ${{ matrix.pipeline-stage }}
       version: ${{ needs.test_version.outputs.version }}
+
+  test_image_security_ignore_report:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: Test image security ignores split active and ignored findings
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/extract-workflow-scripts.py \
+            --workflow .github/workflows/p2p-workflow-image-scan.yaml \
+            --out-dir /tmp \
+            --step report=image-security-report.js \
+            --require report='p2p-security-ignore.js' \
+            --require report='splitImageVulnerabilities' \
+            --require report='splitImageSecrets'
+
+          node .github/scripts/tests/image-security-ignore-report.test.js
 
   test_image_ref_resolution:
     runs-on: ubuntu-24.04
@@ -272,6 +314,9 @@ jobs:
           assert 'PIPELINE_STAGE: $' + '{{ inputs.pipeline-stage }}' in workflow
           assert 'header: image-scan-findings-$' + '{{ inputs.pipeline-stage }}-$' + '{{ inputs.github_env || ' in workflow
           assert 'name: image-scan-reports-$' + '{{ inputs.pipeline-stage }}-$' + '{{ inputs.github_env || ' in workflow
+          assert 'json-file:' in workflow
+          assert 'value: $' + '{{ jobs.image-scan.outputs.json-file }}' in workflow
+          assert 'json-file: $' + '{{ steps.report.outputs.json-file }}' in workflow
           PY
 
       - name: Test image scan target construction
@@ -333,7 +378,31 @@ jobs:
                     },
                     spawnSync(command, args) {
                       calls.push({ command, args });
-                      return { status: 0, stdout: '', stderr: '' };
+                      return {
+                        status: 0,
+                        stdout: [
+                          JSON.stringify({
+                            DetectorName: 'Github',
+                            Verified: true,
+                            Raw: 'raw-image-secret-value',
+                            RawV2: 'raw-image-secret-value-v2',
+                            SourceMetadata: {
+                              Data: {
+                                Docker: {
+                                  layer: 'sha256:layer',
+                                  file: '/app/secret.env',
+                                },
+                              },
+                            },
+                            ExtraData: {
+                              RawSecret: 'nested-raw-image-secret-value',
+                            },
+                          }),
+                          'malformed raw-image-secret-value',
+                          '',
+                        ].join('\n'),
+                        stderr: '',
+                      };
                     },
                   };
                 }
@@ -366,6 +435,21 @@ jobs:
           for (const line of fs.readFileSync(secretRun.outputs['report-list'], 'utf8').trim().split('\n')) {
             const reportPath = line.split('\t')[3];
             assert.strictEqual(path.extname(reportPath), '.jsonl');
+            const reportText = fs.readFileSync(reportPath, 'utf8');
+            assert(!reportText.includes('"Raw"'));
+            assert(!reportText.includes('"RawV2"'));
+            assert(!reportText.includes('RawSecret'));
+            assert(!reportText.includes('raw-image-secret-value'));
+            assert(!reportText.includes('raw-image-secret-value-v2'));
+            assert(!reportText.includes('nested-raw-image-secret-value'));
+            assert(!reportText.includes('malformed raw-image-secret-value'));
+            const findings = reportText.trim().split('\n').map(item => JSON.parse(item));
+            const finding = findings.find(item => item.DetectorName === 'Github');
+            const parseErrorFinding = findings.find(item => item.parseError === true);
+            assert.match(finding.id, /^p2psec_[0-9a-f]{16}$/);
+            assert.strictEqual(finding.DetectorName, 'Github');
+            assert.strictEqual(finding.SourceMetadata.Data.Docker.file, '/app/secret.env');
+            assert.match(parseErrorFinding.id, /^p2psec_[0-9a-f]{16}$/);
           }
 
           console.log('image scan target fixtures passed');
