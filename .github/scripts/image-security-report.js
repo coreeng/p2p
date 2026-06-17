@@ -32,6 +32,17 @@ const sourceFromTarget = target => {
   return match ? match[1] : text;
 };
 
+const vulnerabilityUrl = (id, primaryUrl) => {
+  const normalizedId = String(id || '').toUpperCase();
+  if (/^CVE-\d{4}-\d+$/.test(normalizedId)) {
+    return `https://www.cve.org/CVERecord?id=${normalizedId}`;
+  }
+  if (/^GHSA-[0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{4}$/.test(normalizedId)) {
+    return `https://github.com/advisories/${normalizedId.toLowerCase()}`;
+  }
+  return primaryUrl || '';
+};
+
 const rowSort = (a, b) => (
   (SEV_RANK[a.severity] ?? SEV_RANK.UNKNOWN) - (SEV_RANK[b.severity] ?? SEV_RANK.UNKNOWN)
   || a.package.localeCompare(b.package)
@@ -112,7 +123,7 @@ const buildImageSecurityReport = async ({ core, env = process.env } = {}) => {
               installed: v.InstalledVersion || '-',
               fixed: v.FixedVersion || '-',
               id: cve,
-              cveUrl: v.PrimaryURL || `https://avd.aquasec.com/nvd/${cve}`,
+              cveUrl: vulnerabilityUrl(cve, v.PrimaryURL),
               source,
             });
           }

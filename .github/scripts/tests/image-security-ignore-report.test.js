@@ -86,12 +86,20 @@ async function runReport() {
             PrimaryURL: 'https://example.test/CVE-2026-IMAGE-1',
           },
           {
-            VulnerabilityID: 'CVE-2026-IMAGE-2',
+            VulnerabilityID: 'CVE-2026-12345',
             PkgName: 'curl',
             InstalledVersion: '2.0.0',
             FixedVersion: '2.0.1',
             Severity: 'HIGH',
-            PrimaryURL: 'https://example.test/CVE-2026-IMAGE-2',
+            PrimaryURL: 'https://example.test/CVE-2026-12345',
+          },
+          {
+            VulnerabilityID: 'GHSA-xxjr-mmjv-4gpg',
+            PkgName: 'lodash',
+            InstalledVersion: '4.17.22',
+            FixedVersion: '4.17.23',
+            Severity: 'HIGH',
+            PrimaryURL: 'https://example.test/GHSA-xxjr-mmjv-4gpg',
           },
           {
             VulnerabilityID: 'CVE-2026-IMAGE-EXPIRED',
@@ -238,13 +246,14 @@ async function runOffModeAllIgnoredReport() {
 (async () => {
   const result = await runReport();
   assert.deepStrictEqual(result.failures, []);
-  assert.strictEqual(result.outputs['total-count'], 2);
-  assert.strictEqual(result.outputs['blocking-count'], 2);
+  assert.strictEqual(result.outputs['total-count'], 3);
+  assert.strictEqual(result.outputs['blocking-count'], 3);
   assert.strictEqual(result.outputs['secret-total-count'], 2);
   assert.strictEqual(result.outputs['secret-blocking-count'], 2);
   assert.deepStrictEqual(result.normalized.vulnerabilities.map(v => v.id).sort(), [
-    'CVE-2026-IMAGE-2',
+    'CVE-2026-12345',
     'CVE-2026-IMAGE-EXPIRED',
+    'GHSA-xxjr-mmjv-4gpg',
   ]);
   assert.deepStrictEqual(result.normalized.secrets.map(s => ({
     image: s.image,
@@ -302,6 +311,10 @@ async function runOffModeAllIgnoredReport() {
   assert(!result.summary.includes('Base image package is accepted until upstream fixes it.'));
   assert(!result.summary.includes('Synthetic image secret fixture is accepted.'));
   assert(!result.summary.includes('CVE-2026-IMAGE-1 | debian'));
+  assert(result.summary.includes('[CVE-2026-12345](https://www.cve.org/CVERecord?id=CVE-2026-12345)'));
+  assert(!result.summary.includes('https://example.test/CVE-2026-12345'));
+  assert(result.summary.includes('[GHSA-xxjr-mmjv-4gpg](https://github.com/advisories/ghsa-xxjr-mmjv-4gpg)'));
+  assert(!result.summary.includes('https://example.test/GHSA-xxjr-mmjv-4gpg'));
 
   const offMode = await runOffModeAllIgnoredReport();
   assert.deepStrictEqual(offMode.failures, []);

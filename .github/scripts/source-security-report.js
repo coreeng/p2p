@@ -35,6 +35,16 @@ const readLines = file => {
   if (!file || !fs.existsSync(file) || fs.statSync(file).size === 0) return [];
   return fs.readFileSync(file, 'utf8').split('\n').filter(Boolean);
 };
+const vulnerabilityUrl = (id, primaryUrl) => {
+  const normalizedId = String(id || '').toUpperCase();
+  if (/^CVE-\d{4}-\d+$/.test(normalizedId)) {
+    return `https://www.cve.org/CVERecord?id=${normalizedId}`;
+  }
+  if (/^GHSA-[0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{4}$/.test(normalizedId)) {
+    return `https://github.com/advisories/${normalizedId.toLowerCase()}`;
+  }
+  return primaryUrl || '';
+};
 const sortBySeverity = (a, b) => (
   Number(b.blocking) - Number(a.blocking)
   || (SEV_RANK[a.severity] ?? SEV_RANK.UNKNOWN) - (SEV_RANK[b.severity] ?? SEV_RANK.UNKNOWN)
@@ -128,7 +138,7 @@ for (const result of Array.isArray(trivy.Results) ? trivy.Results : []) {
       installed: vuln.InstalledVersion || '-',
       fixed: vuln.FixedVersion || '-',
       severity,
-      url: vuln.PrimaryURL || `https://avd.aquasec.com/nvd/${vuln.VulnerabilityID || 'UNKNOWN'}`,
+      url: vulnerabilityUrl(vuln.VulnerabilityID || 'UNKNOWN', vuln.PrimaryURL),
       source,
       blocking: blockingSet.has(severity),
     });

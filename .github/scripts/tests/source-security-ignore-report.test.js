@@ -51,6 +51,14 @@ async function runReport() {
             Severity: 'MEDIUM',
             PrimaryURL: 'https://example.test/CVE-2026-0002',
           },
+          {
+            VulnerabilityID: 'GHSA-xxjr-mmjv-4gpg',
+            PkgName: 'lodash',
+            InstalledVersion: '4.17.22',
+            FixedVersion: '4.17.23',
+            Severity: 'LOW',
+            PrimaryURL: 'https://example.test/GHSA-xxjr-mmjv-4gpg',
+          },
         ],
         Licenses: [
           {
@@ -433,12 +441,12 @@ async function runReportWithInvalidIgnoreFile(ignoreFile) {
 (async () => {
   const result = await runReport();
   assert.deepStrictEqual(result.failures, []);
-  assert.strictEqual(result.outputs['vulnerability-total'], 1);
+  assert.strictEqual(result.outputs['vulnerability-total'], 2);
   assert.strictEqual(result.outputs['vulnerability-blocking'], 0);
   assert.strictEqual(result.outputs['license-total'], 1);
   assert.strictEqual(result.outputs['secret-total'], 1);
   assert.strictEqual(result.outputs['secret-blocking'], 0);
-  assert.deepStrictEqual(result.normalized.vulnerabilities.map(v => v.id), ['CVE-2026-0002']);
+  assert.deepStrictEqual(result.normalized.vulnerabilities.map(v => v.id), ['CVE-2026-0002', 'GHSA-xxjr-mmjv-4gpg']);
   assert.deepStrictEqual(result.normalized.secrets.map(s => s.id), ['source-secret-2']);
   assert.deepStrictEqual(result.normalized.ignored.vulnerabilities.map(v => ({
     id: v.id,
@@ -466,6 +474,10 @@ async function runReportWithInvalidIgnoreFile(ignoreFile) {
   assert(!result.summary.includes('Dev-only dependency is unreachable.'));
   assert(!result.summary.includes('Rotated credential retained until history rewrite.'));
   assert(!result.summary.includes('2026-09-01'));
+  assert(result.summary.includes('[CVE-2026-0002](https://www.cve.org/CVERecord?id=CVE-2026-0002)'));
+  assert(!result.summary.includes('https://example.test/CVE-2026-0002'));
+  assert(result.summary.includes('[GHSA-xxjr-mmjv-4gpg](https://github.com/advisories/ghsa-xxjr-mmjv-4gpg)'));
+  assert(!result.summary.includes('https://example.test/GHSA-xxjr-mmjv-4gpg'));
 
   const noIgnore = await runReportWithoutIgnoreFile();
   assert.strictEqual(noIgnore.outputs['vulnerability-total'], 1);
