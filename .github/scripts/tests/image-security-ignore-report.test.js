@@ -331,7 +331,7 @@ async function runOffModeAllIgnoredReport() {
   assert(!result.summary.includes('Base image package is accepted until upstream fixes it.'));
   assert(!result.summary.includes('Synthetic image secret fixture is accepted.'));
   assert(!result.summary.includes('CVE-2026-IMAGE-1 | debian'));
-  assert(result.summary.includes('[CVE-2026-12345](https://www.cve.org/CVERecord?id=CVE-2026-12345)'));
+  assert(result.summary.includes('[CVE-2026-12345](https://nvd.nist.gov/vuln/detail/CVE-2026-12345)'));
   assert(!result.summary.includes('https://example.test/CVE-2026-12345'));
   assert(result.summary.includes('curl lib\\|curl'));
   assert(result.summary.includes('2.0.1 patched\\|build'));

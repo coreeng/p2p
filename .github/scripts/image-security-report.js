@@ -31,7 +31,7 @@ const sourceFromTarget = target => {
 const vulnerabilityUrl = (id, primaryUrl) => {
   const normalizedId = String(id || '').toUpperCase();
   if (/^CVE-\d{4}-\d+$/.test(normalizedId)) {
-    return `https://www.cve.org/CVERecord?id=${normalizedId}`;
+    return `https://nvd.nist.gov/vuln/detail/${normalizedId}`;
   }
   if (/^GHSA-[0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{4}$/.test(normalizedId)) {
     return `https://github.com/advisories/${normalizedId.toLowerCase()}`;

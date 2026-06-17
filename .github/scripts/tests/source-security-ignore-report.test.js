@@ -537,7 +537,7 @@ async function runReportWithInvalidIgnoreFile(ignoreFile) {
   assert(!result.summary.includes('Dev-only dependency is unreachable.'));
   assert(!result.summary.includes('Rotated credential retained until history rewrite.'));
   assert(!result.summary.includes('2026-09-01'));
-  assert(result.summary.includes('[CVE-2026-0002](https://www.cve.org/CVERecord?id=CVE-2026-0002)'));
+  assert(result.summary.includes('[CVE-2026-0002](https://nvd.nist.gov/vuln/detail/CVE-2026-0002)'));
   assert(!result.summary.includes('https://example.test/CVE-2026-0002'));
   assert(result.summary.includes('[GHSA-xxjr-mmjv-4gpg](https://github.com/advisories/ghsa-xxjr-mmjv-4gpg)'));
   assert(!result.summary.includes('https://example.test/GHSA-xxjr-mmjv-4gpg'));
