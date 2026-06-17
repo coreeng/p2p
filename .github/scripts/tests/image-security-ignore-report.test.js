@@ -3,16 +3,40 @@ const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const vm = require('vm');
 
-const reportScript = fs.readFileSync('/tmp/image-security-report.js', 'utf8');
+const { buildImageSecurityReport } = require('../image-security-report.js');
 const helperPath = path.resolve(__dirname, '../p2p-security-ignore.js');
-const workflowRequire = moduleName => (
-  moduleName === './.github/scripts/p2p-security-ignore.js'
-    ? (() => { throw new Error('workflow must not load helper from caller repository'); })()
-    : require(moduleName)
-);
 const secretId = value => `p2psec_${crypto.createHash('sha256').update(value).digest('hex').slice(0, 16)}`;
+
+async function runReportModule(env) {
+  const outputs = {};
+  let summary = '';
+  const failures = [];
+  await buildImageSecurityReport({
+    env,
+    core: {
+      setOutput: (key, value) => { outputs[key] = value; },
+      setFailed: (message) => { failures.push(message); },
+      info: () => {},
+      warning: () => {},
+      summary: {
+        addRaw(markdown) {
+          summary = markdown;
+          return this;
+        },
+        write() {
+          return Promise.resolve();
+        },
+      },
+    },
+  });
+  return {
+    outputs,
+    failures,
+    summary,
+    normalized: JSON.parse(fs.readFileSync(outputs['json-file'], 'utf8')),
+  };
+}
 
 async function runReport() {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'image-ignore-'));
@@ -114,54 +138,23 @@ async function runReport() {
     '',
   ].join('\n'));
 
-  const outputs = {};
-  let summary = '';
-  const failures = [];
-  const sandbox = {
-    process: {
-      env: {
-        RUNNER_TEMP: tmp,
-        GITHUB_WORKSPACE: workspace,
-        REPORT_LIST: reportList,
-        SECRET_REPORT_LIST: secretList,
-        BLOCKING_SEVERITY: 'high',
-        PIPELINE_STAGE: 'prod',
-        GITHUB_ENV_INPUT: '',
-        VERSION: '1.2.3',
-        REGION: 'europe-west2',
-        PROJECT_ID: 'project',
-        TENANT_NAME: 'prod',
-        P2P_SECURITY_IGNORE_HELPER: helperPath,
-        GITHUB_SERVER_URL: 'https://github.example',
-        GITHUB_REPOSITORY: 'org/repo',
-        GITHUB_RUN_ID: '42',
-      },
-    },
-    core: {
-      setOutput: (key, value) => { outputs[key] = value; },
-      setFailed: (message) => { failures.push(message); },
-      info: () => {},
-      warning: () => {},
-      summary: {
-        addRaw(markdown) {
-          summary = markdown;
-          return this;
-        },
-        write() {
-          return Promise.resolve();
-        },
-      },
-    },
-    require: workflowRequire,
-  };
-
-  await vm.runInNewContext(`(async () => {\n${reportScript}\n})()`, sandbox);
-  return {
-    outputs,
-    failures,
-    summary,
-    normalized: JSON.parse(fs.readFileSync(outputs['json-file'], 'utf8')),
-  };
+  return runReportModule({
+    RUNNER_TEMP: tmp,
+    GITHUB_WORKSPACE: workspace,
+    REPORT_LIST: reportList,
+    SECRET_REPORT_LIST: secretList,
+    BLOCKING_SEVERITY: 'high',
+    PIPELINE_STAGE: 'prod',
+    GITHUB_ENV_INPUT: '',
+    VERSION: '1.2.3',
+    REGION: 'europe-west2',
+    PROJECT_ID: 'project',
+    TENANT_NAME: 'prod',
+    P2P_SECURITY_IGNORE_HELPER: helperPath,
+    GITHUB_SERVER_URL: 'https://github.example',
+    GITHUB_REPOSITORY: 'org/repo',
+    GITHUB_RUN_ID: '42',
+  });
 }
 
 async function runOffModeAllIgnoredReport() {
@@ -223,54 +216,23 @@ async function runOffModeAllIgnoredReport() {
     '',
   ].join('\n'));
 
-  const outputs = {};
-  let summary = '';
-  const failures = [];
-  const sandbox = {
-    process: {
-      env: {
-        RUNNER_TEMP: tmp,
-        GITHUB_WORKSPACE: workspace,
-        REPORT_LIST: reportList,
-        SECRET_REPORT_LIST: secretList,
-        BLOCKING_SEVERITY: 'off',
-        PIPELINE_STAGE: 'fast-feedback',
-        GITHUB_ENV_INPUT: '',
-        VERSION: '1.2.3',
-        REGION: 'europe-west2',
-        PROJECT_ID: 'project',
-        TENANT_NAME: 'fast-feedback',
-        P2P_SECURITY_IGNORE_HELPER: helperPath,
-        GITHUB_SERVER_URL: 'https://github.example',
-        GITHUB_REPOSITORY: 'org/repo',
-        GITHUB_RUN_ID: '42',
-      },
-    },
-    core: {
-      setOutput: (key, value) => { outputs[key] = value; },
-      setFailed: (message) => { failures.push(message); },
-      info: () => {},
-      warning: () => {},
-      summary: {
-        addRaw(markdown) {
-          summary = markdown;
-          return this;
-        },
-        write() {
-          return Promise.resolve();
-        },
-      },
-    },
-    require: workflowRequire,
-  };
-
-  await vm.runInNewContext(`(async () => {\n${reportScript}\n})()`, sandbox);
-  return {
-    outputs,
-    failures,
-    summary,
-    normalized: JSON.parse(fs.readFileSync(outputs['json-file'], 'utf8')),
-  };
+  return runReportModule({
+    RUNNER_TEMP: tmp,
+    GITHUB_WORKSPACE: workspace,
+    REPORT_LIST: reportList,
+    SECRET_REPORT_LIST: secretList,
+    BLOCKING_SEVERITY: 'off',
+    PIPELINE_STAGE: 'fast-feedback',
+    GITHUB_ENV_INPUT: '',
+    VERSION: '1.2.3',
+    REGION: 'europe-west2',
+    PROJECT_ID: 'project',
+    TENANT_NAME: 'fast-feedback',
+    P2P_SECURITY_IGNORE_HELPER: helperPath,
+    GITHUB_SERVER_URL: 'https://github.example',
+    GITHUB_REPOSITORY: 'org/repo',
+    GITHUB_RUN_ID: '42',
+  });
 }
 
 (async () => {

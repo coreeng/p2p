@@ -28,6 +28,7 @@ jobs:
       env_vars: ${{ secrets.ENV_VARS }}
     with:
       tenant-name: my-tenant
+      security-scan-blocking-severity: 'off'
 ```
 
 `id-token: write` is required because the image discovery and image scan jobs authenticate to Google Cloud with OIDC.
@@ -43,7 +44,9 @@ Each scheduled run starts these scans:
 
 The source scan uses TruffleHog for committed secrets and Trivy for source dependency vulnerabilities plus restricted or forbidden license signals. The image scans use Trivy for image vulnerabilities and TruffleHog for embedded image secrets.
 
-Scheduled scans are report-only. Child workflows use `blocking-severity: off`, so findings can fail the policy jobs without failing the umbrella workflow. Scanner execution errors, authentication errors, and invalid configuration still fail the workflow.
+Scheduled scans are report-only by default. The wrapper passes `security-scan-blocking-severity: 'off'`, so findings can fail the child policy jobs without failing the umbrella workflow. Scanner execution errors, authentication errors, and invalid configuration still fail the workflow.
+
+To make scheduled scans block on findings, set `security-scan-blocking-severity` to `low`, `medium`, `high`, or `critical`. The value is passed to the full source scan and every image scan.
 
 ## 3. Image discovery
 

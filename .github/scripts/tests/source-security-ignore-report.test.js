@@ -2,15 +2,9 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const vm = require('vm');
 
-const reportScript = fs.readFileSync('/tmp/source-security-report.js', 'utf8');
+const { buildSourceSecurityReport } = require('../source-security-report.js');
 const helperPath = path.resolve(__dirname, '../p2p-security-ignore.js');
-const workflowRequire = moduleName => (
-  moduleName === './.github/scripts/p2p-security-ignore.js'
-    ? (() => { throw new Error('workflow must not load helper from caller repository'); })()
-    : require(moduleName)
-);
 
 async function runReport() {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'source-ignore-'));
@@ -125,10 +119,9 @@ async function runReport() {
         },
       },
     },
-    require: workflowRequire,
   };
 
-  await vm.runInNewContext(`(async () => {\n${reportScript}\n})()`, sandbox);
+  await buildSourceSecurityReport({ core: sandbox.core, env: sandbox.process.env });
   return {
     outputs,
     failures,
@@ -197,10 +190,9 @@ async function runReportWithoutIgnoreFile() {
         },
       },
     },
-    require: workflowRequire,
   };
 
-  await vm.runInNewContext(`(async () => {\n${reportScript}\n})()`, sandbox);
+  await buildSourceSecurityReport({ core: sandbox.core, env: sandbox.process.env });
   return { outputs, summary };
 }
 
@@ -284,10 +276,9 @@ async function runAllIgnoredReport() {
         },
       },
     },
-    require: workflowRequire,
   };
 
-  await vm.runInNewContext(`(async () => {\n${reportScript}\n})()`, sandbox);
+  await buildSourceSecurityReport({ core: sandbox.core, env: sandbox.process.env });
   return {
     outputs,
     failures,
@@ -382,10 +373,9 @@ async function runReportWithMatcherEdgeCases() {
         },
       },
     },
-    require: workflowRequire,
   };
 
-  await vm.runInNewContext(`(async () => {\n${reportScript}\n})()`, sandbox);
+  await buildSourceSecurityReport({ core: sandbox.core, env: sandbox.process.env });
   return {
     outputs,
     failures,
@@ -435,10 +425,9 @@ async function runReportWithInvalidIgnoreFile(ignoreFile) {
         },
       },
     },
-    require: workflowRequire,
   };
 
-  await vm.runInNewContext(`(async () => {\n${reportScript}\n})()`, sandbox);
+  await buildSourceSecurityReport({ core: sandbox.core, env: sandbox.process.env });
 }
 
 (async () => {

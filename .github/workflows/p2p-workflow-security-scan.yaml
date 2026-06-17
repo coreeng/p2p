@@ -35,6 +35,13 @@ on:
         required: false
         type: boolean
         default: false
+      security-scan-blocking-severity:
+        description: |
+          Minimum severity that blocks the workflow for source-security-scan
+          and image-scan findings: off, low, medium, high, or critical.
+        required: false
+        type: string
+        default: 'off'
       timeout-minutes:
         required: false
         type: number
@@ -45,7 +52,7 @@ jobs:
     uses: ./.github/workflows/p2p-workflow-source-security-scan.yaml
     with:
       scope: full-history
-      blocking-severity: off
+      blocking-severity: ${{ inputs.security-scan-blocking-severity }}
       dry-run: ${{ inputs.dry-run }}
       timeout-minutes: ${{ inputs.timeout-minutes }}
 
@@ -101,6 +108,7 @@ jobs:
       github_env: ${{ matrix.deploy_env }}
       working-directory: ${{ inputs.working-directory }}
       dry-run: ${{ inputs.dry-run }}
+      security-scan-blocking-severity: ${{ inputs.security-scan-blocking-severity }}
 
   image-scan-extended-test:
     needs: [resolve-anchor-image]
@@ -123,6 +131,7 @@ jobs:
       github_env: ${{ matrix.deploy_env }}
       working-directory: ${{ inputs.working-directory }}
       dry-run: ${{ inputs.dry-run }}
+      security-scan-blocking-severity: ${{ inputs.security-scan-blocking-severity }}
 
   image-scan-prod:
     needs: [resolve-anchor-image]
@@ -145,3 +154,4 @@ jobs:
       github_env: ${{ matrix.deploy_env }}
       working-directory: ${{ inputs.working-directory }}
       dry-run: ${{ inputs.dry-run }}
+      security-scan-blocking-severity: ${{ inputs.security-scan-blocking-severity }}

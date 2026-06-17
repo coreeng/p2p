@@ -1,0 +1,15 @@
+paths:
+  .github/workflows/p2p-workflow-image-scan.yaml:
+    ignore:
+      # GitHub documents job.workflow_repository/job.workflow_sha for reusable
+      # workflows that need to check out their own source, but actionlint
+      # v1.7.12 does not include these job context fields yet.
+      - 'property "workflow_repository" is not defined in object type'
+      - 'property "workflow_sha" is not defined in object type'
+  .github/workflows/p2p-workflow-source-security-scan.yaml:
+    ignore:
+      # GitHub documents job.workflow_repository/job.workflow_sha for reusable
+      # workflows that need to check out their own source, but actionlint
+      # v1.7.12 does not include these job context fields yet.
+      - 'property "workflow_repository" is not defined in object type'
+      - 'property "workflow_sha" is not defined in object type'

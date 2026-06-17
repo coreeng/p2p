@@ -42,6 +42,13 @@ on:
         required: false
         type: boolean
         default: false
+      security-scan-blocking-severity:
+        description: |
+          Minimum severity that blocks the workflow for image-scan findings:
+          off, low, medium, high, or critical.
+        required: false
+        type: string
+        default: 'off'
 
 jobs:
   discover-version:
@@ -81,4 +88,4 @@ jobs:
       working-directory: ${{ inputs.working-directory }}
       image-names: ${{ inputs.image-names }}
       dry-run: ${{ inputs.dry-run }}
-      blocking-severity: off
+      blocking-severity: ${{ inputs.security-scan-blocking-severity }}
