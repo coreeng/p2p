@@ -391,6 +391,69 @@ async function runReportWithMatcherEdgeCases() {
   };
 }
 
+async function runOffModeVerifiedSecretReport() {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'source-off-mode-secret-'));
+  const root = path.join(tmp, 'source-security');
+  const workspace = path.join(tmp, 'repo');
+  fs.mkdirSync(path.join(root, 'trivy'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'trufflehog'), { recursive: true });
+  fs.mkdirSync(workspace, { recursive: true });
+  fs.writeFileSync(path.join(root, 'trivy', 'trivy-fs.json'), JSON.stringify({ Results: [] }));
+  fs.writeFileSync(path.join(root, 'trufflehog', 'findings.ndjson'), [
+    JSON.stringify({
+      id: 'off-mode-verified-secret',
+      detector: 'Github',
+      status: 'verified',
+      file: 'docs/off-mode.env',
+      line: 5,
+      commit: 'abcdef1234567890',
+      url: 'https://example.test/blob/abcdef/docs/off-mode.env#L5',
+    }),
+  ].join('\n') + '\n');
+
+  const outputs = {};
+  const failures = [];
+  const sandbox = {
+    process: {
+      env: {
+        ROOT: root,
+        GITHUB_WORKSPACE: workspace,
+        DRY_RUN: 'false',
+        BLOCKING_SEVERITY: 'off',
+        SCOPE: 'changes',
+        BASE: 'base-sha',
+        SECRET_SCAN_RESULT: 'success',
+        SCA_SCAN_RESULT: 'success',
+        P2P_SECURITY_IGNORE_HELPER: helperPath,
+        GITHUB_SERVER_URL: 'https://github.example',
+        GITHUB_REPOSITORY: 'org/repo',
+        GITHUB_RUN_ID: '42',
+      },
+    },
+    core: {
+      setOutput: (key, value) => { outputs[key] = value; },
+      setFailed: (message) => { failures.push(message); },
+      info: () => {},
+      warning: () => {},
+      summary: {
+        addRaw() {
+          return this;
+        },
+        write() {
+          return Promise.resolve();
+        },
+      },
+    },
+  };
+
+  await buildSourceSecurityReport({ core: sandbox.core, env: sandbox.process.env });
+  return {
+    outputs,
+    failures,
+    normalized: JSON.parse(fs.readFileSync(outputs['json-file'], 'utf8')),
+  };
+}
+
 async function runReportWithInvalidIgnoreFile(ignoreFile) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'source-invalid-ignore-'));
   const root = path.join(tmp, 'source-security');
@@ -516,6 +579,22 @@ async function runReportWithInvalidIgnoreFile(ignoreFile) {
   assert.deepStrictEqual(matcherEdges.normalized.secrets.map(s => s.id).sort(), [
     'secret-expired',
     'secret-path-mismatch',
+  ]);
+
+  const offModeVerifiedSecret = await runOffModeVerifiedSecretReport();
+  assert.deepStrictEqual(offModeVerifiedSecret.failures, []);
+  assert.strictEqual(offModeVerifiedSecret.outputs['secret-total'], 1);
+  assert.strictEqual(offModeVerifiedSecret.outputs['secret-blocking'], 0);
+  assert.deepStrictEqual(offModeVerifiedSecret.normalized.secrets.map(s => ({
+    id: s.id,
+    status: s.status,
+    blocking: s.blocking,
+  })), [
+    {
+      id: 'off-mode-verified-secret',
+      status: 'verified',
+      blocking: false,
+    },
   ]);
 
   for (const [name, ignoreFile, expected] of [

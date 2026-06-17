@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { escapeCell } = require('./markdown.js');
 
 const CANONICAL_SEVERITIES = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNKNOWN'];
 const SEV_RANK = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3, UNKNOWN: 4 };
@@ -22,10 +23,6 @@ const blockingSeveritySet = (value, core) => {
   return new Set(byThreshold[threshold]);
 };
 const normalizeSeverity = value => CANONICAL_SEVERITIES.includes(value) ? value : 'UNKNOWN';
-const escapeCell = value => {
-  const text = value === undefined || value === null || value === '' ? '-' : String(value);
-  return text.replace(/\|/g, '\\|').replace(/[\r\n]/g, ' ');
-};
 const code = value => `<code>${escapeCell(value)}</code>`;
 const readJson = (file, fallback) => {
   if (!file || !fs.existsSync(file) || fs.statSync(file).size === 0) return fallback;
@@ -179,7 +176,7 @@ for (const line of readLines(trufflehogPath)) {
     line: secret.line || null,
     commit: secret.commit || null,
     url: secret.url || null,
-    blocking: secret.status === 'verified',
+    blocking: secret.status === 'verified' && blockingSet.has('CRITICAL'),
   });
 }
 secrets.sort((a, b) => Number(b.blocking) - Number(a.blocking) || a.detector.localeCompare(b.detector) || String(a.file || '').localeCompare(String(b.file || '')));

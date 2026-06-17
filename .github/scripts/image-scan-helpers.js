@@ -262,6 +262,7 @@ function resolveReportPath(reportPath, reportRoot, artifactPrefix, expectedExten
     return null;
   }
   const root = path.resolve(reportRoot);
+  const realRoot = fs.realpathSync(reportRoot);
   const resolved = path.resolve(path.isAbsolute(reportPath) ? reportPath : path.join(root, reportPath));
   if (resolved !== root && !resolved.startsWith(`${root}${path.sep}`)) {
     core.setFailed(`${title(kind)} report path must stay inside report root: ${displayPath(reportPath)}`);
@@ -282,7 +283,17 @@ function resolveReportPath(reportPath, reportRoot, artifactPrefix, expectedExten
     core.setFailed(`${title(kind)} report path does not exist: ${displayPath(reportPath)}`);
     return null;
   }
-  const stat = fs.statSync(resolved);
+  const linkStat = fs.lstatSync(resolved);
+  if (linkStat.isSymbolicLink()) {
+    core.setFailed(`${title(kind)} report path must not be a symlink: ${relativePath}`);
+    return null;
+  }
+  const realResolved = fs.realpathSync(resolved);
+  if (realResolved !== realRoot && !realResolved.startsWith(`${realRoot}${path.sep}`)) {
+    core.setFailed(`${title(kind)} report path must stay inside report root: ${displayPath(reportPath)}`);
+    return null;
+  }
+  const stat = fs.statSync(realResolved);
   if (!stat.isFile()) {
     core.setFailed(`${title(kind)} report path is not a file: ${displayPath(reportPath)}`);
     return null;
@@ -296,7 +307,7 @@ function resolveReportPath(reportPath, reportRoot, artifactPrefix, expectedExten
     return null;
   }
   return {
-    sourcePath: resolved,
+    sourcePath: realResolved,
     artifactPath: `${artifactPrefix}/${relativePath}`,
   };
 }

@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { escapeCell } = require('./markdown.js');
 
 const CANONICAL_SEVERITIES = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNKNOWN'];
 const SEV_RANK = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3, UNKNOWN: 4 };
@@ -19,11 +20,6 @@ const blockingSeveritySet = (value, core) => {
     return new Set();
   }
   return new Set(byThreshold[threshold]);
-};
-
-const escapeCell = value => {
-  const text = value === undefined || value === null || value === '' ? '-' : String(value);
-  return text.replace(/\|/g, '\\|');
 };
 
 const sourceFromTarget = target => {
@@ -48,6 +44,43 @@ const rowSort = (a, b) => (
   || a.package.localeCompare(b.package)
   || a.cve.localeCompare(b.cve)
 );
+
+const normalizeVulnerabilityRows = (rawRows, group, blockingSet, options = {}) => {
+  const dedup = new Map();
+  for (const rawRow of rawRows) {
+    const key = [rawRow.severity, rawRow.installed, rawRow.fixed, rawRow.id, rawRow.source].join('\u0000');
+    if (!dedup.has(key)) {
+      dedup.set(key, {
+        severity: rawRow.severity,
+        installed: rawRow.installed,
+        fixed: rawRow.fixed,
+        cve: rawRow.id,
+        cveUrl: rawRow.cveUrl,
+        source: rawRow.source,
+        packages: [],
+        packageSet: new Set(),
+        isBlocking: options.forceNonBlocking ? false : blockingSet.has(rawRow.severity),
+        shortName: group.shortName,
+        ...(options.includeImage ? { image: group.shortName } : {}),
+        ...(options.includeFullRef ? { fullRef: group.fullRef } : {}),
+        ...(rawRow.ignore ? { ignore: rawRow.ignore } : {}),
+      });
+    }
+    const row = dedup.get(key);
+    if (!row.packageSet.has(rawRow.package)) {
+      row.packageSet.add(rawRow.package);
+      row.packages.push(rawRow.package);
+    }
+  }
+
+  return Array.from(dedup.values())
+    .map(({ packageSet, packages, ...row }) => ({
+      ...row,
+      package: packages.join(', '),
+      id: row.cve,
+    }))
+    .sort(rowSort);
+};
 
 const buildImageSecurityReport = async ({ core, env = process.env } = {}) => {
   const securityIgnoreHelper = env.P2P_SECURITY_IGNORE_HELPER || path.join(__dirname, 'p2p-security-ignore.js');
@@ -138,7 +171,11 @@ const buildImageSecurityReport = async ({ core, env = process.env } = {}) => {
     const split = splitImageVulnerabilities(group.rawRows, securityIgnore, group.shortName);
     group.rawRows = split.active;
     ignoredImageVulnerabilities.push(
-      ...split.ignored.map(row => ({ ...row, image: group.shortName, fullRef: group.fullRef })),
+      ...normalizeVulnerabilityRows(split.ignored, group, blockingSet, {
+        forceNonBlocking: true,
+        includeImage: true,
+        includeFullRef: true,
+      }),
     );
     total += split.active.length;
     blocking += split.active.filter(row => blockingSet.has(row.severity)).length;
@@ -194,43 +231,7 @@ const buildImageSecurityReport = async ({ core, env = process.env } = {}) => {
 
   const imageSummaries = Object.values(imageGroups)
     .map(group => {
-      const dedup = new Map();
-      for (const rawRow of group.rawRows) {
-        const key = [rawRow.severity, rawRow.installed, rawRow.fixed, rawRow.id, rawRow.source].join('\u0000');
-        if (!dedup.has(key)) {
-          dedup.set(key, {
-            severity: rawRow.severity,
-            installed: rawRow.installed,
-            fixed: rawRow.fixed,
-            cve: rawRow.id,
-            cveUrl: rawRow.cveUrl,
-            source: rawRow.source,
-            packages: [],
-            packageSet: new Set(),
-            isBlocking: blockingSet.has(rawRow.severity),
-            shortName: group.shortName,
-          });
-        }
-        const row = dedup.get(key);
-        if (!row.packageSet.has(rawRow.package)) {
-          row.packageSet.add(rawRow.package);
-          row.packages.push(rawRow.package);
-        }
-      }
-
-      const rows = Array.from(dedup.values())
-        .map(row => ({
-          severity: row.severity,
-          package: row.packages.join(', '),
-          installed: row.installed,
-          fixed: row.fixed,
-          cve: row.cve,
-          cveUrl: row.cveUrl,
-          source: row.source,
-          isBlocking: row.isBlocking,
-          shortName: row.shortName,
-        }))
-        .sort(rowSort);
+      const rows = normalizeVulnerabilityRows(group.rawRows, group, blockingSet);
 
       const countsBySeverity = Object.fromEntries(CANONICAL_SEVERITIES.map(sev => [sev, 0]));
       for (const row of rows) countsBySeverity[row.severity] += 1;

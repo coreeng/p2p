@@ -41,7 +41,7 @@ async function runPullScript(imageRefs, inspectByRef) {
   return { outputs, failures, pulls };
 }
 
-async function runManifestScript({ stage, vulnLines = [], secretLines = [], vulnRawLines = null, secretRawLines = null }) {
+async function runManifestScript({ stage, vulnLines = [], secretLines = [], vulnRawLines = null, secretRawLines = null, setup = null }) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'image-manifest-'));
   const trivyDir = path.join(tmp, 'trivy');
   const secretDir = path.join(tmp, 'trufflehog-image');
@@ -56,6 +56,7 @@ async function runManifestScript({ stage, vulnLines = [], secretLines = [], vuln
     fs.writeFileSync(report, name.startsWith('empty-') ? '' : '{}');
     return report;
   };
+  if (setup) setup({ tmp, trivyDir, secretDir });
   fs.writeFileSync(
     vulnList,
     vulnRawLines === null
@@ -306,6 +307,20 @@ async function runManifestScript({ stage, vulnLines = [], secretLines = [], vuln
         secretLines: [singleSecret],
       },
       failures: ['Vulnerability report is empty: empty-vuln.json'],
+    },
+    {
+      name: 'symlinked vulnerability report',
+      input: {
+        stage: 'fast-feedback',
+        setup: ({ tmp, trivyDir }) => {
+          const outsideReport = path.join(tmp, 'outside-vuln.json');
+          fs.writeFileSync(outsideReport, '{}');
+          fs.symlinkSync(outsideReport, path.join(trivyDir, 'linked-vuln.json'));
+        },
+        vulnLines: [['ghcr.io/coreeng/single:1.0.0', 'linux/amd64', 'sha256:single', 'linked-vuln.json']],
+        secretLines: [singleSecret],
+      },
+      failures: ['Vulnerability report path must not be a symlink: linked-vuln.json'],
     },
   ];
   for (const testCase of failureCases) {

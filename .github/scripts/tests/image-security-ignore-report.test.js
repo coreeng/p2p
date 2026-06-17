@@ -87,9 +87,9 @@ async function runReport() {
           },
           {
             VulnerabilityID: 'CVE-2026-12345',
-            PkgName: 'curl',
+            PkgName: 'curl\nlib|curl',
             InstalledVersion: '2.0.0',
-            FixedVersion: '2.0.1',
+            FixedVersion: '2.0.1\rpatched|build',
             Severity: 'HIGH',
             PrimaryURL: 'https://example.test/CVE-2026-12345',
           },
@@ -276,13 +276,33 @@ async function runOffModeAllIgnoredReport() {
   ]);
   assert.deepStrictEqual(result.normalized.ignored.vulnerabilities.map(v => ({
     image: v.image,
+    shortName: v.shortName,
     id: v.id,
+    cve: v.cve,
+    cveUrl: v.cveUrl,
+    package: v.package,
+    installed: v.installed,
+    fixed: v.fixed,
+    severity: v.severity,
+    source: v.source,
+    isBlocking: v.isBlocking,
+    fullRef: v.fullRef,
     reason: v.ignore.reason,
     expires: v.ignore.expires,
   })), [
     {
       image: 'tools/prod/api',
+      shortName: 'tools/prod/api',
       id: 'CVE-2026-IMAGE-1',
+      cve: 'CVE-2026-IMAGE-1',
+      cveUrl: 'https://example.test/CVE-2026-IMAGE-1',
+      package: 'openssl',
+      installed: '1.0.0',
+      fixed: '1.0.1',
+      severity: 'CRITICAL',
+      source: 'debian',
+      isBlocking: false,
+      fullRef: 'europe-west2-docker.pkg.dev/project/tenant/prod/prod/tools/prod/api:1.2.3',
       reason: 'Base image package is accepted until upstream fixes it.',
       expires: '2026-09-01',
     },
@@ -313,6 +333,10 @@ async function runOffModeAllIgnoredReport() {
   assert(!result.summary.includes('CVE-2026-IMAGE-1 | debian'));
   assert(result.summary.includes('[CVE-2026-12345](https://www.cve.org/CVERecord?id=CVE-2026-12345)'));
   assert(!result.summary.includes('https://example.test/CVE-2026-12345'));
+  assert(result.summary.includes('curl lib\\|curl'));
+  assert(result.summary.includes('2.0.1 patched\\|build'));
+  assert(!result.summary.includes('curl\nlib|curl'));
+  assert(!result.summary.includes('2.0.1\rpatched|build'));
   assert(result.summary.includes('[GHSA-xxjr-mmjv-4gpg](https://github.com/advisories/ghsa-xxjr-mmjv-4gpg)'));
   assert(!result.summary.includes('https://example.test/GHSA-xxjr-mmjv-4gpg'));
 
@@ -326,12 +350,28 @@ async function runOffModeAllIgnoredReport() {
   assert.deepStrictEqual(offMode.normalized.secrets, []);
   assert.deepStrictEqual(offMode.normalized.ignored.vulnerabilities.map(v => ({
     image: v.image,
+    shortName: v.shortName,
     id: v.id,
+    cve: v.cve,
+    package: v.package,
+    installed: v.installed,
+    fixed: v.fixed,
+    severity: v.severity,
+    source: v.source,
+    isBlocking: v.isBlocking,
     reason: v.ignore.reason,
   })), [
     {
       image: 'services/api',
+      shortName: 'services/api',
       id: 'CVE-2026-OFF-IGNORED',
+      cve: 'CVE-2026-OFF-IGNORED',
+      package: 'openssl',
+      installed: '-',
+      fixed: '-',
+      severity: 'CRITICAL',
+      source: 'debian',
+      isBlocking: false,
       reason: 'Accepted off-mode image vulnerability.',
     },
   ]);
