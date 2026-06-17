@@ -19,7 +19,7 @@ jobs:
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `scope` | string | Yes | - | `changes` for PR/push scanning or `full-history` for scheduled monitoring. TruffleHog uses this to choose git history scope. Trivy scans the checked-out source tree. |
+| `scope` | string | Yes | - | `changes` for PR/push scanning or `full-history` for scheduled monitoring. TruffleHog uses this to choose git history scope. Trivy scans the current checked-out source tree. |
 | `blocking-severity` | string | No | `off` | Minimum finding severity that blocks the workflow: `off`, `low`, `medium`, `high`, or `critical`. Verified secrets are treated as `critical`. With `off`, the policy job may fail on findings, but the workflow continues. |
 | `ignore-unfixed` | boolean | No | `true` | Passed to Trivy vulnerability scanning. |
 | `dry-run` | boolean | No | `false` | When `true`, skips scanner installs, scans, sticky PR comments, artifact upload, and policy enforcement. The summary reports that the scan was skipped. |
@@ -55,6 +55,8 @@ Results are also surfaced via:
 If the repository root contains `.p2p-security-ignore.yaml`, source vulnerability and source secret findings that match a valid, unexpired ignore entry are omitted from active finding tables in the workflow summary and sticky PR comment. Ignored findings stay visible in `source-security-findings.json` with their ignore reason and expiry metadata when present. They are excluded from active totals, active blocking counts, and policy failures.
 
 `source-security-findings.json` uses top-level `vulnerabilities`, `licenses`, and `secrets` collections. When an ignore file is present, it also includes `ignored.vulnerabilities` and `ignored.secrets`.
+
+The source scan scope is scanner-specific. With `scope: changes`, TruffleHog limits git scanning to the changed commit range, while Trivy still scans the current checked-out source tree. With `scope: full-history`, TruffleHog scans reachable git history, while Trivy still scans only the current branch's checked-out tree. Trivy is not limited to `working-directory`, so shared manifests and related modules outside the P2P make target directory are still covered.
 
 ## Security ignore file
 

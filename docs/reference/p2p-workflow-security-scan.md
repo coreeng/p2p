@@ -56,7 +56,7 @@ jobs:
 None. Results are surfaced via:
 
 - Each child job's workflow summary (`$GITHUB_STEP_SUMMARY`).
-- `source-security-scan-findings` artifact from the source-security-scan job. Contains redacted TruffleHog output, raw Trivy filesystem output, and normalized merged JSON.
+- `source-security-scan-findings` artifact from the source-security-scan job. Contains redacted TruffleHog output, raw Trivy filesystem output, and normalized merged JSON. Scheduled source scanning uses TruffleHog for reachable git history and Trivy for the current branch's checked-out source tree.
 - `image-scan-reports-<stage>-<github_env>` artifact from each image-scan job. Each artifact contains root `manifest.json`, `trivy/` vulnerability JSON reports, and `trufflehog-image/` secret JSON-lines reports. `manifest.json` records the P2P stage (`fast-feedback`, `extended-test`, or `prod`) and is the supported artifact index.
 
 ## Job Graph
@@ -70,7 +70,7 @@ resolve-anchor-image
 source-security-scan                                   (independent; runs in parallel)
 ```
 
-Each matrix entry calls an internal stage workflow that first discovers the latest version for that stage/environment and then scans that exact version. The source-security-scan job runs in parallel with the per-stage matrices. The `security-scan-blocking-severity` input is passed to every child scan. Its default `off` keeps scheduled scans report-only; setting it to `low`, `medium`, `high`, or `critical` makes findings at or above that severity fail the umbrella workflow.
+Each matrix entry calls an internal stage workflow that first discovers the latest version for that stage/environment and then scans that exact version. The source-security-scan job runs in parallel with the per-stage matrices. For source scans, `full-history` applies to TruffleHog git scanning; Trivy scans only the current checked-out branch tree. The `security-scan-blocking-severity` input is passed to every child scan. Its default `off` keeps scheduled scans report-only; setting it to `low`, `medium`, `high`, or `critical` makes findings at or above that severity fail the umbrella workflow.
 
 ## Version discovery
 
