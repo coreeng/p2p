@@ -5,6 +5,11 @@
 ## Usage
 
 ```yaml
+permissions:
+  contents: read
+  id-token: write
+  pull-requests: write
+
 jobs:
   fast-feedback:
     uses: coreeng/p2p/.github/workflows/p2p-workflow-fastfeedback.yaml@main
@@ -17,6 +22,12 @@ jobs:
       container_registry_url: ${{ secrets.CONTAINER_REGISTRY_URL }}
       slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
 ```
+
+## Permissions
+
+P2P workflows use GitHub's OIDC token to authenticate to platform services during build, test, promotion, and security scanning. Caller workflows should grant `id-token: write` alongside `contents: read` as part of the standard P2P setup.
+
+Grant `pull-requests: write` when the workflow runs on pull requests so source and image security scans can update their sticky PR comments. Without it, scans still write workflow summaries and artifacts, but PR comments cannot be posted.
 
 ## Inputs
 
