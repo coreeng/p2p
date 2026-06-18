@@ -111,10 +111,6 @@ jobs:
   image-scan:
     needs: [build]
     uses: ./.github/workflows/p2p-workflow-image-scan.yaml
-    permissions:
-      contents: read
-      id-token: write
-      pull-requests: write
     secrets:
       env_vars: ${{ secrets.env_vars }}
       container_registry_user: ${{ secrets.container_registry_user }}

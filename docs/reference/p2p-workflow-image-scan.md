@@ -4,27 +4,7 @@
 
 ## Usage
 
-Usually called by [`p2p-workflow-fastfeedback`](p2p-workflow-fastfeedback.md), [`p2p-workflow-extended-test`](p2p-workflow-extended-test.md), [`p2p-workflow-prod`](p2p-workflow-prod.md), and the scheduled [`p2p-workflow-security-scan`](p2p-workflow-security-scan.md) umbrella. Those orchestrator workflows expose `security-scan-blocking-severity` as the normal tenant-facing control. Direct calls are supported for advanced wrappers that need to scan a specific stage/version outside the standard orchestrators.
-
-```yaml
-jobs:
-  image-scan:
-    uses: coreeng/p2p/.github/workflows/p2p-workflow-image-scan.yaml@main
-    permissions:
-      contents: read
-      id-token: write
-      pull-requests: write
-    secrets:
-      env_vars: ${{ secrets.ENV_VARS }}
-      container_registry_user: ${{ secrets.CONTAINER_REGISTRY_USER }}
-      container_registry_pat: ${{ secrets.CONTAINER_REGISTRY_PAT }}
-      container_registry_url: ${{ secrets.CONTAINER_REGISTRY_URL }}
-    with:
-      pipeline-stage: fast-feedback
-      github_env: gcp-dev
-      version: ${{ needs.version.outputs.version }}
-      blocking-severity: off
-```
+Internal workflow called by [`p2p-workflow-fastfeedback`](p2p-workflow-fastfeedback.md), [`p2p-workflow-extended-test`](p2p-workflow-extended-test.md), [`p2p-workflow-prod`](p2p-workflow-prod.md), and the scheduled [`p2p-workflow-security-scan`](p2p-workflow-security-scan.md) umbrella. Application workflows should call those primary workflows instead; they expose `security-scan-blocking-severity` as the tenant-facing control.
 
 ## Inputs
 

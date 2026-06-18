@@ -66,6 +66,17 @@ jobs:
       dry-run: true
       timeout-minutes: 10
 
+  test_scheduled_security_scan:
+    uses: ./.github/workflows/p2p-workflow-security-scan.yaml
+    secrets:
+      env_vars: |
+        TEST_VARIABLE=value
+    with:
+      image-names: p2p
+      dry-run: true
+      security-scan-blocking-severity: off
+      timeout-minutes: 10
+
   test_security_ignore_helper:
     runs-on: ubuntu-24.04
     steps:
@@ -135,6 +146,10 @@ jobs:
 
           stage_workflow = Path('.github/workflows/p2p-workflow-security-image-scan-stage.yaml').read_text()
           assert 'blocking-severity: $' + '{{ inputs.security-scan-blocking-severity }}' in stage_workflow
+
+          ci_workflow = Path('.github/workflows/internal-ci.yaml').read_text()
+          scheduled_security_call = 'uses: ./.github/workflows/' + 'p2p-workflow-security-scan.yaml'
+          assert scheduled_security_call in ci_workflow
           PY
 
       - name: Test scheduled image scans use stage matrices

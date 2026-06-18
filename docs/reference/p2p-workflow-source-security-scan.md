@@ -4,16 +4,7 @@
 
 ## Usage
 
-Called from [`p2p-workflow-fastfeedback`](p2p-workflow-fastfeedback.md) on PR and push events with `secret-scan-scope: changes`, and from the scheduled [`p2p-workflow-security-scan`](p2p-workflow-security-scan.md) umbrella with `secret-scan-scope: full-history`.
-
-```yaml
-jobs:
-  source-security-scan:
-    uses: coreeng/p2p/.github/workflows/p2p-workflow-source-security-scan.yaml@main
-    with:
-      secret-scan-scope: changes
-      blocking-severity: off
-```
+Internal workflow called from [`p2p-workflow-fastfeedback`](p2p-workflow-fastfeedback.md) on PR and push events with `secret-scan-scope: changes`, and from the scheduled [`p2p-workflow-security-scan`](p2p-workflow-security-scan.md) umbrella with `secret-scan-scope: full-history`. Application workflows should call those primary workflows instead.
 
 ## Inputs
 
