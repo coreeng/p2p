@@ -8,7 +8,7 @@ Accepted.
 
 P2P application repositories need a consistent way to find security issues without each team choosing and maintaining separate scanning workflows. The platform should cover the cases that matter during normal delivery:
 
-- new source findings introduced by a pull request;
+- source findings, plus new committed secrets, during a pull request;
 - vulnerabilities and secrets in the images built for that pull request;
 - older findings in repositories or deployed images that do not change often.
 
