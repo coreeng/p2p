@@ -45,6 +45,7 @@ jobs:
 | [p2p-workflow-prod](docs/reference/p2p-workflow-prod.md) | Deploy to production |
 | [p2p-get-latest-image-extended-test](docs/reference/p2p-get-latest-image-extended-test.md) | Resolve latest image version in extended-test registry |
 | [p2p-get-latest-image-prod](docs/reference/p2p-get-latest-image-prod.md) | Resolve latest image version in prod registry |
+| [p2p-workflow-security-scan](docs/reference/p2p-workflow-security-scan.md) | Umbrella workflow for scheduled security scans. Runs source-security-scan plus per-stage image-scans for the latest version in fast-feedback, extended-test, and prod. |
 
 ### Internal Workflows
 
@@ -58,7 +59,6 @@ The primary workflows call these. Call them only through the primary workflows.
 | [p2p-workflow-source-security-scan](docs/reference/p2p-workflow-source-security-scan.md) | Scans repository source for dependency vulnerabilities, restricted/forbidden licenses, and committed secrets; posts one compact sticky comment and uploads normalized findings. |
 | [p2p-workflow-image-scan](docs/reference/p2p-workflow-image-scan.md) | Scans built images for CVEs (Trivy) and embedded secrets (TruffleHog); uploads reports and, when PR comment permissions are granted, posts a sticky comment per stage/environment. Called by fast-feedback, extended-test, prod, and the scheduled security umbrella. |
 | p2p-workflow-security-image-scan-stage | Internal scheduled-security child workflow that pairs latest-version discovery and image scanning for one stage/environment. |
-| [p2p-workflow-security-scan](docs/reference/p2p-workflow-security-scan.md) | Umbrella workflow for scheduled security scans. Runs source-security-scan plus per-stage image-scans for the latest version in fast-feedback, extended-test, and prod. |
 
 ## Prerequisites
 
