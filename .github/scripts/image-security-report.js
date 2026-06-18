@@ -2,6 +2,14 @@ const fs = require('fs');
 const path = require('path');
 const { escapeCell } = require('./markdown.js');
 
+const escapeHtml = value => escapeCell(value)
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;');
+const code = value => `<code>${escapeHtml(value)}</code>`;
+const escapeLinkText = value => escapeCell(value).replace(/\[/g, '\\[').replace(/\]/g, '\\]');
+const platformSuffix = platforms => platforms.length > 0 ? ` (${escapeHtml(platforms.join(', '))})` : '';
+
 const CANONICAL_SEVERITIES = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNKNOWN'];
 const SEV_RANK = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3, UNKNOWN: 4 };
 const SEV_EMOJI = { CRITICAL: '🔴', HIGH: '🟠', MEDIUM: '🟡', LOW: '🔵', UNKNOWN: '⚪' };
@@ -358,16 +366,16 @@ const buildImageSecurityReport = async ({ core, env = process.env } = {}) => {
         const sevSummary = reportedSeverities
           .map(sev => `${SEV_EMOJI[sev]} ${group.countsBySeverity[sev] || 0}`)
           .join(' · ');
-        const platformSuffix = group.platforms.length > 0 ? ` (${group.platforms.join(', ')})` : '';
+        const platforms = platformSuffix(group.platforms);
 
         out.push(
-          `<details><summary>${sevSummary} — <code>${group.shortName}</code>${platformSuffix}</summary>`,
+          `<details><summary>${sevSummary} — ${code(group.shortName)}${platforms}</summary>`,
           '',
           '| Severity | Package | Installed | Fixed | CVE | Source |',
           '|---|---|---|---|---|---|',
-          ...rows.map(row => `| ${SEV_EMOJI[row.severity]} ${row.severity} | ${escapeCell(row.package)} | ${escapeCell(row.installed)} | ${escapeCell(row.fixed)} | [${row.cve}](${row.cveUrl}) | ${escapeCell(row.source)} |`),
+          ...rows.map(row => `| ${SEV_EMOJI[row.severity]} ${row.severity} | ${escapeCell(row.package)} | ${escapeCell(row.installed)} | ${escapeCell(row.fixed)} | [${escapeLinkText(row.cve)}](${row.cveUrl}) | ${escapeCell(row.source)} |`),
           '',
-          `Full ref: \`${group.fullRef}\``,
+          `Full ref: ${code(group.fullRef)}`,
           '',
           '</details>',
           '',
@@ -384,9 +392,9 @@ const buildImageSecurityReport = async ({ core, env = process.env } = {}) => {
       for (const group of secretSummaries) {
         const rows = selectedSecretsByImage.get(group.shortName) || [];
         if (rows.length === 0) continue;
-        const platformSuffix = group.platforms.length > 0 ? ` (${group.platforms.join(', ')})` : '';
+        const platforms = platformSuffix(group.platforms);
         out.push(
-          `**\`${group.shortName}\`**${platformSuffix}`,
+          `**${code(group.shortName)}**${platforms}`,
           '',
           '| Detector | Status | ID | Layer | Path |',
           '|---|---|---|---|---|',

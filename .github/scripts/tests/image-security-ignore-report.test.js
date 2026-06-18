@@ -243,6 +243,72 @@ async function runOffModeAllIgnoredReport() {
   });
 }
 
+async function runMarkdownEscapingReport() {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'image-markdown-'));
+  const workspace = path.join(tmp, 'repo');
+  const trivyDir = path.join(tmp, 'trivy');
+  const secretDir = path.join(tmp, 'trufflehog-image');
+  fs.mkdirSync(workspace, { recursive: true });
+  fs.mkdirSync(trivyDir, { recursive: true });
+  fs.mkdirSync(secretDir, { recursive: true });
+
+  const vulnReport = path.join(trivyDir, 'markdown-vuln.json');
+  fs.writeFileSync(vulnReport, JSON.stringify({
+    Results: [
+      {
+        Target: 'image (alpine)',
+        Vulnerabilities: [
+          {
+            VulnerabilityID: 'CVE-2026-LINK] [bad|row',
+            PkgName: 'pkg',
+            InstalledVersion: '1.0.0',
+            FixedVersion: '1.0.1',
+            Severity: 'HIGH',
+            PrimaryURL: 'https://example.test/CVE-2026-LINK',
+          },
+        ],
+      },
+    ],
+  }));
+  const reportList = path.join(trivyDir, 'reports.txt');
+  const imageRef = 'registry.example/prod/bad<script>|img:1.2.3';
+  const platform = 'linux/amd64<script>|plat';
+  fs.writeFileSync(reportList, [
+    `${imageRef}\t${platform}\tsha256:markdown\t${vulnReport}`,
+    '',
+  ].join('\n'));
+
+  const secretReport = path.join(secretDir, 'markdown-secret.jsonl');
+  fs.writeFileSync(secretReport, [
+    JSON.stringify({
+      DetectorName: 'Github',
+      Verified: true,
+      Raw: 'markdown-image-secret-value',
+      SourceMetadata: { Data: { Docker: { layer: 'sha256:layer1', file: '/app/secret.env' } } },
+    }),
+  ].join('\n') + '\n');
+  const secretList = path.join(secretDir, 'reports.txt');
+  fs.writeFileSync(secretList, [
+    `${imageRef}\t${platform}\tsha256:markdown\t${secretReport}`,
+    '',
+  ].join('\n'));
+
+  return runReportModule({
+    RUNNER_TEMP: tmp,
+    GITHUB_WORKSPACE: workspace,
+    REPORT_LIST: reportList,
+    SECRET_REPORT_LIST: secretList,
+    BLOCKING_SEVERITY: 'high',
+    PIPELINE_STAGE: 'prod',
+    GITHUB_ENV_INPUT: '',
+    VERSION: '1.2.3',
+    P2P_SECURITY_IGNORE_HELPER: helperPath,
+    GITHUB_SERVER_URL: 'https://github.example',
+    GITHUB_REPOSITORY: 'org/repo',
+    GITHUB_RUN_ID: '42',
+  });
+}
+
 (async () => {
   const result = await runReport();
   assert.deepStrictEqual(result.failures, []);
@@ -339,6 +405,15 @@ async function runOffModeAllIgnoredReport() {
   assert(!result.summary.includes('2.0.1\rpatched|build'));
   assert(result.summary.includes('[GHSA-xxjr-mmjv-4gpg](https://github.com/advisories/ghsa-xxjr-mmjv-4gpg)'));
   assert(!result.summary.includes('https://example.test/GHSA-xxjr-mmjv-4gpg'));
+
+  const markdownEscaping = await runMarkdownEscapingReport();
+  assert.deepStrictEqual(markdownEscaping.failures, []);
+  assert(markdownEscaping.summary.includes('<code>bad&lt;script&gt;\\|img</code>'));
+  assert(markdownEscaping.summary.includes('(linux/amd64&lt;script&gt;\\|plat)'));
+  assert(markdownEscaping.summary.includes('Full ref: <code>registry.example/prod/bad&lt;script&gt;\\|img:1.2.3</code>'));
+  assert(markdownEscaping.summary.includes('[CVE-2026-LINK\\] \\[bad\\|row](https://example.test/CVE-2026-LINK)'));
+  assert(!markdownEscaping.summary.includes('bad<script>|img'));
+  assert(!markdownEscaping.summary.includes('linux/amd64<script>|plat'));
 
   const offMode = await runOffModeAllIgnoredReport();
   assert.deepStrictEqual(offMode.failures, []);
