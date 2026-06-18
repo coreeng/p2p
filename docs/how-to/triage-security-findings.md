@@ -23,7 +23,7 @@ The source-security comment renders source vulnerabilities, restricted or forbid
 The image-scan comment renders up to two tables under one header:
 
 - **Vulnerabilities**: a per-image summary table plus a `<details>` block per image with `Severity`, `Package`, `Installed`, `Fixed`, `CVE`, and `Source` columns. Sorted by severity, then package, then CVE; truncated to 100 rows.
-- **Secrets in image**: `Detector`, `Status`, `Layer`, `Path`. `Status` is `verified`, `unknown`, or `unverified`; only `verified` rows are blocking. Truncated independently at 100 rows.
+- **Secrets in image**: `Detector`, `Status`, `ID`, `Layer`, `Path`. `Status` is `verified`, `unknown`, or `unverified`; only `verified` rows are blocking. Use the `ID` value when adding an image secret ignore entry. Truncated independently at 100 rows.
 
 When a finding matches `.p2p-security-ignore.yaml`, comments and workflow summaries omit it from active finding tables. Ignored findings are not included in active finding totals, active blocking counts, or policy failures. They remain available in normalized JSON artifacts so the dashboard can distinguish accepted risk from clean scans without exposing ignore reasons in PR comments.
 

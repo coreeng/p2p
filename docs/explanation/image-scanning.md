@@ -1,6 +1,6 @@
 # Image scanning
 
-Image scanning is a two-tool stack. Trivy reports known CVEs in OS and language packages. TruffleHog reports secrets embedded anywhere in any layer of the built image, including intermediate layers that were squashed out of the final filesystem. Both tools run inside [`p2p-workflow-image-scan`](../reference/p2p-workflow-image-scan.md) against each resolved image reference.
+Image scanning is a two-tool stack. Trivy reports known CVEs in OS and language packages. TruffleHog reports secrets embedded in the published image reference that the workflow pulls and scans. Both tools run inside [`p2p-workflow-image-scan`](../reference/p2p-workflow-image-scan.md) against each resolved image reference.
 
 ## What gets scanned and when
 

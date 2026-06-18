@@ -1,13 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { escapeCell } = require('./markdown.js');
-
-const escapeHtml = value => escapeCell(value)
-  .replace(/&/g, '&amp;')
-  .replace(/</g, '&lt;')
-  .replace(/>/g, '&gt;');
-const code = value => `<code>${escapeHtml(value)}</code>`;
-const escapeLinkText = value => escapeCell(value).replace(/\[/g, '\\[').replace(/\]/g, '\\]');
+const { code, escapeCell, escapeHtml, markdownLink } = require('./markdown.js');
 const platformSuffix = platforms => platforms.length > 0 ? ` (${escapeHtml(platforms.join(', '))})` : '';
 
 const CANONICAL_SEVERITIES = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNKNOWN'];
@@ -134,8 +127,14 @@ const buildImageSecurityReport = async ({ core, env = process.env } = {}) => {
   if (listExists) {
     const entries = fs.readFileSync(list, 'utf8').split('\n').filter(Boolean);
     for (const line of entries) {
-      const [ref, plat, digest, out] = line.split('\t');
-      if (!out || !fs.existsSync(out) || fs.statSync(out).size === 0) continue;
+      const fields = line.split('\t');
+      if (fields.length !== 4 || fields.some(field => !field)) {
+        throw new Error(`Malformed Trivy report list entry: ${line}`);
+      }
+      const [ref, plat, digest, out] = fields;
+      if (!fs.existsSync(out) || fs.statSync(out).size === 0) {
+        throw new Error(`Missing or empty Trivy report for ${ref} (${plat}): ${out}`);
+      }
       try {
         const shortName = shortNameFromRef(ref);
         if (!imageGroups[shortName]) {
@@ -170,7 +169,7 @@ const buildImageSecurityReport = async ({ core, env = process.env } = {}) => {
           }
         }
       } catch (error) {
-        core.warning(`Failed to process Trivy report for ${ref} (${plat}): ${error.message}`);
+        throw new Error(`Failed to process Trivy report for ${ref} (${plat}): ${error.message}`);
       }
     }
   }
@@ -198,8 +197,14 @@ const buildImageSecurityReport = async ({ core, env = process.env } = {}) => {
   if (secretListExists) {
     for (const line of fs.readFileSync(secretList, 'utf8').split('\n').filter(Boolean)) {
       // Four tab-separated fields: original ref, platform, manifest digest, output path.
-      const [ref, plat, digest, out] = line.split('\t');
-      if (!out || !fs.existsSync(out)) continue;
+      const fields = line.split('\t');
+      if (fields.length !== 4 || fields.some(field => !field)) {
+        throw new Error(`Malformed TruffleHog image report list entry: ${line}`);
+      }
+      const [ref, plat, digest, out] = fields;
+      if (!fs.existsSync(out)) {
+        throw new Error(`Missing TruffleHog image report for ${ref} (${plat}): ${out}`);
+      }
       const shortName = shortNameFromRef(ref);
       if (!secretImageGroups[shortName]) {
         secretImageGroups[shortName] = { shortName, fullRef: ref, platforms: new Set(), rawRows: [] };
@@ -208,7 +213,11 @@ const buildImageSecurityReport = async ({ core, env = process.env } = {}) => {
       if (plat) group.platforms.add(plat);
       for (const ln of fs.readFileSync(out, 'utf8').split('\n').filter(Boolean)) {
         let f;
-        try { f = JSON.parse(ln); } catch (e) { continue; }
+        try {
+          f = JSON.parse(ln);
+        } catch (error) {
+          throw new Error(`Failed to process TruffleHog image report for ${ref} (${plat}): ${error.message}`);
+        }
         const detector = f.DetectorName || f.DetectorType || 'unknown';
         const verified = f.Verified === true;
         const status = verified ? 'verified' : (f.VerificationError ? 'unknown' : 'unverified');
@@ -353,7 +362,7 @@ const buildImageSecurityReport = async ({ core, env = process.env } = {}) => {
           `| ${summaryHeader.map(() => '---').join(' | ')} |`,
           ...imageSummaries.map(group => {
             const counts = reportedSeverities.map(sev => String(group.countsBySeverity[sev] || 0));
-            return `| \`${escapeCell(group.shortName)}\` | ${[...counts, String(group.totalUnique)].join(' | ')} |`;
+            return `| ${code(group.shortName)} | ${[...counts, String(group.totalUnique)].join(' | ')} |`;
           }),
           '',
         );
@@ -373,7 +382,7 @@ const buildImageSecurityReport = async ({ core, env = process.env } = {}) => {
           '',
           '| Severity | Package | Installed | Fixed | CVE | Source |',
           '|---|---|---|---|---|---|',
-          ...rows.map(row => `| ${SEV_EMOJI[row.severity]} ${row.severity} | ${escapeCell(row.package)} | ${escapeCell(row.installed)} | ${escapeCell(row.fixed)} | [${escapeLinkText(row.cve)}](${row.cveUrl}) | ${escapeCell(row.source)} |`),
+          ...rows.map(row => `| ${SEV_EMOJI[row.severity]} ${row.severity} | ${escapeCell(row.package)} | ${escapeCell(row.installed)} | ${escapeCell(row.fixed)} | ${markdownLink(row.cve, row.cveUrl)} | ${escapeCell(row.source)} |`),
           '',
           `Full ref: ${code(group.fullRef)}`,
           '',
@@ -398,7 +407,7 @@ const buildImageSecurityReport = async ({ core, env = process.env } = {}) => {
           '',
           '| Detector | Status | ID | Layer | Path |',
           '|---|---|---|---|---|',
-          ...rows.map(r => `| ${escapeCell(r.detector)} | ${r.status} | \`${escapeCell(r.id)}\` | \`${escapeCell(r.layer)}\` | ${escapeCell(r.path)} |`),
+          ...rows.map(r => `| ${escapeCell(r.detector)} | ${escapeCell(r.status)} | ${code(r.id)} | ${code(r.layer)} | ${escapeCell(r.path)} |`),
           '',
         );
       }
@@ -410,7 +419,9 @@ const buildImageSecurityReport = async ({ core, env = process.env } = {}) => {
 
   const md = out.join('\n').trimEnd() + '\n';
   const reportPath = path.join(env.RUNNER_TEMP, 'trivy-report.md');
-  const jsonPath = path.join(env.RUNNER_TEMP, 'image-security-findings.json');
+  const jsonRoot = env.ARTIFACT_DIR || env.RUNNER_TEMP;
+  fs.mkdirSync(jsonRoot, { recursive: true });
+  const jsonPath = path.join(jsonRoot, 'image-security-findings.json');
   const normalized = {
     vulnerabilities: imageSummaries.flatMap(group => group.rows.map(row => ({ ...row, image: group.shortName, id: row.cve }))),
     secrets: secretSummaries.flatMap(group => group.rows.map(row => ({ ...row, image: group.shortName }))),

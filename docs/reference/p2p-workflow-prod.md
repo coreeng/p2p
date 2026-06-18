@@ -9,7 +9,7 @@ jobs:
   prod:
     uses: coreeng/p2p/.github/workflows/p2p-workflow-prod.yaml@main
     with:
-      version: ${{ needs.extended-test.outputs.version }}
+      version: ${{ needs.fast-feedback.outputs.version }}
     secrets:
       env_vars: ${{ secrets.ENV_VARS }}
       container_registry_user: ${{ secrets.CONTAINER_REGISTRY_USER }}

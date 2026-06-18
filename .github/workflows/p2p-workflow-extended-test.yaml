@@ -98,6 +98,9 @@ jobs:
   image-scan:
     uses: ./.github/workflows/p2p-workflow-image-scan.yaml
     if: success() && (github.ref == inputs.main-branch)
+    permissions:
+      contents: read
+      id-token: write
     secrets:
       env_vars: ${{ secrets.env_vars }}
       container_registry_user: ${{ secrets.container_registry_user }}

@@ -271,7 +271,7 @@ async function runMarkdownEscapingReport() {
     ],
   }));
   const reportList = path.join(trivyDir, 'reports.txt');
-  const imageRef = 'registry.example/prod/bad<script>|img:1.2.3';
+  const imageRef = 'registry.example/prod/bad`script`<script>|img:1.2.3';
   const platform = 'linux/amd64<script>|plat';
   fs.writeFileSync(reportList, [
     `${imageRef}\t${platform}\tsha256:markdown\t${vulnReport}`,
@@ -284,7 +284,7 @@ async function runMarkdownEscapingReport() {
       DetectorName: 'Github',
       Verified: true,
       Raw: 'markdown-image-secret-value',
-      SourceMetadata: { Data: { Docker: { layer: 'sha256:layer1', file: '/app/secret.env' } } },
+      SourceMetadata: { Data: { Docker: { layer: 'sha256:`layer1`', file: '/app/`secret`.env' } } },
     }),
   ].join('\n') + '\n');
   const secretList = path.join(secretDir, 'reports.txt');
@@ -292,6 +292,158 @@ async function runMarkdownEscapingReport() {
     `${imageRef}\t${platform}\tsha256:markdown\t${secretReport}`,
     '',
   ].join('\n'));
+
+  return runReportModule({
+    RUNNER_TEMP: tmp,
+    GITHUB_WORKSPACE: workspace,
+    REPORT_LIST: reportList,
+    SECRET_REPORT_LIST: secretList,
+    BLOCKING_SEVERITY: 'high',
+    PIPELINE_STAGE: 'prod',
+    GITHUB_ENV_INPUT: '',
+    VERSION: '1.2.3',
+    P2P_SECURITY_IGNORE_HELPER: helperPath,
+    GITHUB_SERVER_URL: 'https://github.example',
+    GITHUB_REPOSITORY: 'org/repo',
+    GITHUB_RUN_ID: '42',
+  });
+}
+
+async function runCorruptTrivyReport() {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'image-corrupt-'));
+  const workspace = path.join(tmp, 'repo');
+  const trivyDir = path.join(tmp, 'trivy');
+  const secretDir = path.join(tmp, 'trufflehog-image');
+  fs.mkdirSync(workspace, { recursive: true });
+  fs.mkdirSync(trivyDir, { recursive: true });
+  fs.mkdirSync(secretDir, { recursive: true });
+
+  const vulnReport = path.join(trivyDir, 'corrupt.json');
+  fs.writeFileSync(vulnReport, '{not json');
+  const reportList = path.join(trivyDir, 'reports.txt');
+  fs.writeFileSync(reportList, [
+    `registry.example/prod/api:1.2.3	linux/amd64	sha256:corrupt	${vulnReport}`,
+    '',
+  ].join('\n'));
+
+  const secretReport = path.join(secretDir, 'empty.jsonl');
+  fs.writeFileSync(secretReport, '');
+  const secretList = path.join(secretDir, 'reports.txt');
+  fs.writeFileSync(secretList, [
+    `registry.example/prod/api:1.2.3	linux/amd64	sha256:corrupt	${secretReport}`,
+    '',
+  ].join('\n'));
+
+  return runReportModule({
+    RUNNER_TEMP: tmp,
+    GITHUB_WORKSPACE: workspace,
+    REPORT_LIST: reportList,
+    SECRET_REPORT_LIST: secretList,
+    BLOCKING_SEVERITY: 'high',
+    PIPELINE_STAGE: 'prod',
+    GITHUB_ENV_INPUT: '',
+    VERSION: '1.2.3',
+    P2P_SECURITY_IGNORE_HELPER: helperPath,
+    GITHUB_SERVER_URL: 'https://github.example',
+    GITHUB_REPOSITORY: 'org/repo',
+    GITHUB_RUN_ID: '42',
+  });
+}
+
+async function runCorruptTruffleHogReport() {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'image-corrupt-secret-'));
+  const workspace = path.join(tmp, 'repo');
+  const trivyDir = path.join(tmp, 'trivy');
+  const secretDir = path.join(tmp, 'trufflehog-image');
+  fs.mkdirSync(workspace, { recursive: true });
+  fs.mkdirSync(trivyDir, { recursive: true });
+  fs.mkdirSync(secretDir, { recursive: true });
+
+  const vulnReport = path.join(trivyDir, 'empty.json');
+  fs.writeFileSync(vulnReport, JSON.stringify({ Results: [] }));
+  const reportList = path.join(trivyDir, 'reports.txt');
+  fs.writeFileSync(reportList, [
+    `registry.example/prod/api:1.2.3	linux/amd64	sha256:corrupt-secret	${vulnReport}`,
+    '',
+  ].join('\n'));
+
+  const secretReport = path.join(secretDir, 'corrupt.jsonl');
+  fs.writeFileSync(secretReport, '{not json\n');
+  const secretList = path.join(secretDir, 'reports.txt');
+  fs.writeFileSync(secretList, [
+    `registry.example/prod/api:1.2.3	linux/amd64	sha256:corrupt-secret	${secretReport}`,
+    '',
+  ].join('\n'));
+
+  return runReportModule({
+    RUNNER_TEMP: tmp,
+    GITHUB_WORKSPACE: workspace,
+    REPORT_LIST: reportList,
+    SECRET_REPORT_LIST: secretList,
+    BLOCKING_SEVERITY: 'high',
+    PIPELINE_STAGE: 'prod',
+    GITHUB_ENV_INPUT: '',
+    VERSION: '1.2.3',
+    P2P_SECURITY_IGNORE_HELPER: helperPath,
+    GITHUB_SERVER_URL: 'https://github.example',
+    GITHUB_REPOSITORY: 'org/repo',
+    GITHUB_RUN_ID: '42',
+  });
+}
+
+async function runMissingTrivyReport() {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'image-missing-trivy-'));
+  const workspace = path.join(tmp, 'repo');
+  const trivyDir = path.join(tmp, 'trivy');
+  const secretDir = path.join(tmp, 'trufflehog-image');
+  fs.mkdirSync(workspace, { recursive: true });
+  fs.mkdirSync(trivyDir, { recursive: true });
+  fs.mkdirSync(secretDir, { recursive: true });
+
+  const reportList = path.join(trivyDir, 'reports.txt');
+  fs.writeFileSync(reportList, [
+    `registry.example/prod/api:1.2.3\tlinux/amd64\tsha256:missing\t${path.join(trivyDir, 'missing.json')}`,
+    '',
+  ].join('\n'));
+
+  const secretList = path.join(secretDir, 'reports.txt');
+  fs.writeFileSync(secretList, '');
+
+  return runReportModule({
+    RUNNER_TEMP: tmp,
+    GITHUB_WORKSPACE: workspace,
+    REPORT_LIST: reportList,
+    SECRET_REPORT_LIST: secretList,
+    BLOCKING_SEVERITY: 'high',
+    PIPELINE_STAGE: 'prod',
+    GITHUB_ENV_INPUT: '',
+    VERSION: '1.2.3',
+    P2P_SECURITY_IGNORE_HELPER: helperPath,
+    GITHUB_SERVER_URL: 'https://github.example',
+    GITHUB_REPOSITORY: 'org/repo',
+    GITHUB_RUN_ID: '42',
+  });
+}
+
+async function runMalformedTruffleHogReportList() {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'image-malformed-secret-list-'));
+  const workspace = path.join(tmp, 'repo');
+  const trivyDir = path.join(tmp, 'trivy');
+  const secretDir = path.join(tmp, 'trufflehog-image');
+  fs.mkdirSync(workspace, { recursive: true });
+  fs.mkdirSync(trivyDir, { recursive: true });
+  fs.mkdirSync(secretDir, { recursive: true });
+
+  const vulnReport = path.join(trivyDir, 'empty.json');
+  fs.writeFileSync(vulnReport, JSON.stringify({ Results: [] }));
+  const reportList = path.join(trivyDir, 'reports.txt');
+  fs.writeFileSync(reportList, [
+    `registry.example/prod/api:1.2.3\tlinux/amd64\tsha256:empty\t${vulnReport}`,
+    '',
+  ].join('\n'));
+
+  const secretList = path.join(secretDir, 'reports.txt');
+  fs.writeFileSync(secretList, 'registry.example/prod/api:1.2.3\tlinux/amd64\tsha256:missing-output\n');
 
   return runReportModule({
     RUNNER_TEMP: tmp,
@@ -408,12 +560,32 @@ async function runMarkdownEscapingReport() {
 
   const markdownEscaping = await runMarkdownEscapingReport();
   assert.deepStrictEqual(markdownEscaping.failures, []);
-  assert(markdownEscaping.summary.includes('<code>bad&lt;script&gt;\\|img</code>'));
+  assert(markdownEscaping.summary.includes('<code>bad`script`&lt;script&gt;\\|img</code>'));
   assert(markdownEscaping.summary.includes('(linux/amd64&lt;script&gt;\\|plat)'));
-  assert(markdownEscaping.summary.includes('Full ref: <code>registry.example/prod/bad&lt;script&gt;\\|img:1.2.3</code>'));
+  assert(markdownEscaping.summary.includes('Full ref: <code>registry.example/prod/bad`script`&lt;script&gt;\\|img:1.2.3</code>'));
   assert(markdownEscaping.summary.includes('[CVE-2026-LINK\\] \\[bad\\|row](https://example.test/CVE-2026-LINK)'));
+  assert(!markdownEscaping.summary.includes('`bad`script`'));
+  assert(!markdownEscaping.summary.includes('`sha256:`layer1``'));
+  assert(markdownEscaping.summary.includes('<code>sha256:`layer1`</code>'));
   assert(!markdownEscaping.summary.includes('bad<script>|img'));
   assert(!markdownEscaping.summary.includes('linux/amd64<script>|plat'));
+
+  await assert.rejects(
+    () => runCorruptTrivyReport(),
+    error => error.message.includes('Failed to process Trivy report'),
+  );
+  await assert.rejects(
+    () => runCorruptTruffleHogReport(),
+    error => error.message.includes('Failed to process TruffleHog image report'),
+  );
+  await assert.rejects(
+    () => runMissingTrivyReport(),
+    error => error.message.includes('Missing or empty Trivy report'),
+  );
+  await assert.rejects(
+    () => runMalformedTruffleHogReportList(),
+    error => error.message.includes('Malformed TruffleHog image report list entry'),
+  );
 
   const offMode = await runOffModeAllIgnoredReport();
   assert.deepStrictEqual(offMode.failures, []);

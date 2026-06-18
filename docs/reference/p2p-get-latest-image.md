@@ -12,7 +12,7 @@ jobs:
       env_vars: ${{ secrets.ENV_VARS }}
     with:
       image-name: my-app
-      environment: ${{ vars.EXTENDED_TEST }}
+      github_env: gcp-test
       registry-path: extended-test
 ```
 
@@ -21,7 +21,7 @@ jobs:
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `image-name` | string | Yes | — | Name of the container image to query. |
-| `environment` | string | Yes | — | JSON matrix string describing the GitHub environment to authenticate against. |
+| `github_env` | string | Yes | — | GitHub Environment to authenticate against. |
 | `registry-path` | string | No | `extended-test` | Sub-path within the tenant registry to query (e.g. `fast-feedback`, `extended-test`, `prod`). |
 | `tenant-name` | string | No | `''` | Tenant name. Falls back to the `TENANT_NAME` repository/environment variable when not set. |
 | `dry-run` | boolean | No | `false` | When `true`, skips GCP authentication and returns `0.0.0` as the version. |

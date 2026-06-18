@@ -4,14 +4,14 @@
 
 ## Usage
 
-Called from [`p2p-workflow-fastfeedback`](p2p-workflow-fastfeedback.md) on PR and push events with `scope: changes`, and from the scheduled [`p2p-workflow-security-scan`](p2p-workflow-security-scan.md) umbrella with `scope: full-history`.
+Called from [`p2p-workflow-fastfeedback`](p2p-workflow-fastfeedback.md) on PR and push events with `secret-scan-scope: changes`, and from the scheduled [`p2p-workflow-security-scan`](p2p-workflow-security-scan.md) umbrella with `secret-scan-scope: full-history`.
 
 ```yaml
 jobs:
   source-security-scan:
     uses: coreeng/p2p/.github/workflows/p2p-workflow-source-security-scan.yaml@main
     with:
-      scope: changes
+      secret-scan-scope: changes
       blocking-severity: off
 ```
 
@@ -19,7 +19,7 @@ jobs:
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `scope` | string | Yes | - | `changes` for PR/push scanning or `full-history` for scheduled monitoring. TruffleHog uses this to choose git history scope. Trivy scans the current checked-out source tree. |
+| `secret-scan-scope` | string | Yes | - | `changes` for PR/push scanning or `full-history` for scheduled monitoring. TruffleHog uses this to choose git history scope. Trivy scans the current checked-out source tree. |
 | `blocking-severity` | string | No | `off` | Minimum finding severity that blocks the workflow: `off`, `low`, `medium`, `high`, or `critical`. Verified secrets are treated as `critical`. With `off`, the policy job may fail on findings, but the workflow continues. |
 | `ignore-unfixed` | boolean | No | `true` | Passed to Trivy vulnerability scanning. |
 | `dry-run` | boolean | No | `false` | When `true`, skips scanner installs, scans, sticky PR comments, artifact upload, and policy enforcement. The summary reports that the scan was skipped. |
@@ -56,7 +56,7 @@ If the repository root contains `.p2p-security-ignore.yaml`, source vulnerabilit
 
 `source-security-findings.json` uses top-level `vulnerabilities`, `licenses`, and `secrets` collections. When an ignore file is present, it also includes `ignored.vulnerabilities` and `ignored.secrets`.
 
-The source scan scope is scanner-specific. With `scope: changes`, TruffleHog limits git scanning to the changed commit range, while Trivy still scans the current checked-out source tree. With `scope: full-history`, TruffleHog scans reachable git history, while Trivy still scans only the current branch's checked-out tree. Trivy is not limited to `working-directory`, so shared manifests and related modules outside the P2P make target directory are still covered.
+The source scan scope is scanner-specific. With `secret-scan-scope: changes`, TruffleHog limits git scanning to the changed commit range, while Trivy still scans the current checked-out source tree. With `secret-scan-scope: full-history`, TruffleHog scans reachable git history, while Trivy still scans only the current branch's checked-out tree. Trivy is not limited to `working-directory`, so shared manifests and related modules outside the P2P make target directory are still covered.
 
 ## Security ignore file
 

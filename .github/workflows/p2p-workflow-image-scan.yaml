@@ -212,6 +212,7 @@ jobs:
           PIPELINE_STAGE: ${{ inputs.pipeline-stage }}
           GITHUB_ENV_INPUT: ${{ inputs.github_env }}
           VERSION: ${{ inputs.version }}
+          ARTIFACT_DIR: ${{ steps.manifest.outputs.artifact-dir }}
           P2P_SECURITY_IGNORE_HELPER: ${{ github.workspace }}/.p2p-workflow-src/.github/scripts/p2p-security-ignore.js
           P2P_IMAGE_SECURITY_REPORT: ${{ github.workspace }}/.p2p-workflow-src/.github/scripts/image-security-report.js
         with:
@@ -233,9 +234,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: image-scan-reports-${{ inputs.pipeline-stage }}-${{ inputs.github_env || 'local' }}
-          path: |
-            ${{ steps.manifest.outputs.artifact-dir }}
-            ${{ steps.report.outputs.json-file }}
+          path: ${{ steps.manifest.outputs.artifact-dir }}
           if-no-files-found: error
           retention-days: 30
 

@@ -51,7 +51,7 @@ jobs:
   source-security-scan:
     uses: ./.github/workflows/p2p-workflow-source-security-scan.yaml
     with:
-      scope: full-history
+      secret-scan-scope: full-history
       blocking-severity: ${{ inputs.security-scan-blocking-severity }}
       dry-run: ${{ inputs.dry-run }}
       timeout-minutes: ${{ inputs.timeout-minutes }}
@@ -76,9 +76,9 @@ jobs:
         run: |
           set -euo pipefail
           if [ -n "${IMAGE_NAMES//[[:space:],]/}" ]; then
-            anchor=$(printf '%s' "$IMAGE_NAMES" | tr ',\n' '  ' | awk '{print $1}')
+            anchor=$(printf '%s' "$IMAGE_NAMES" | tr ',\n' '  ' | awk 'NF { print $1; exit }')
           else
-            anchor=$(make --no-print-directory -C "$WORKING_DIR" p2p-images | awk '{print $1}')
+            anchor=$(make --no-print-directory -C "$WORKING_DIR" p2p-images | awk 'NF { print $1; exit }')
           fi
           if [ -z "$anchor" ]; then
             echo "::error::No anchor image found (image-names empty and 'make p2p-images' returned nothing)."
@@ -90,6 +90,9 @@ jobs:
   image-scan-fast-feedback:
     needs: [resolve-anchor-image]
     uses: ./.github/workflows/p2p-workflow-security-image-scan-stage.yaml
+    permissions:
+      contents: read
+      id-token: write
     secrets:
       env_vars: ${{ secrets.env_vars }}
       container_registry_user: ${{ secrets.container_registry_user }}
@@ -113,6 +116,9 @@ jobs:
   image-scan-extended-test:
     needs: [resolve-anchor-image]
     uses: ./.github/workflows/p2p-workflow-security-image-scan-stage.yaml
+    permissions:
+      contents: read
+      id-token: write
     secrets:
       env_vars: ${{ secrets.env_vars }}
       container_registry_user: ${{ secrets.container_registry_user }}
@@ -136,6 +142,9 @@ jobs:
   image-scan-prod:
     needs: [resolve-anchor-image]
     uses: ./.github/workflows/p2p-workflow-security-image-scan-stage.yaml
+    permissions:
+      contents: read
+      id-token: write
     secrets:
       env_vars: ${{ secrets.env_vars }}
       container_registry_user: ${{ secrets.container_registry_user }}

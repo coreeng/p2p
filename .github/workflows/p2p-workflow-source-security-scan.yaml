@@ -1,7 +1,7 @@
 on:
   workflow_call:
     inputs:
-      scope:
+      secret-scan-scope:
         required: true
         type: string
       blocking-severity:
@@ -51,7 +51,7 @@ jobs:
 
       - id: scan-range
         name: Determine scan range
-        if: inputs.scope == 'changes'
+        if: inputs.secret-scan-scope == 'changes'
         shell: bash
         env:
           EVENT_NAME: ${{ github.event_name }}
@@ -85,7 +85,7 @@ jobs:
         if: ${{ inputs.dry-run == false }}
         shell: bash
         env:
-          SCOPE: ${{ inputs.scope }}
+          SCOPE: ${{ inputs.secret-scan-scope }}
           BASE: ${{ steps.scan-range.outputs.base }}
         run: |
           set -euo pipefail
@@ -103,6 +103,14 @@ jobs:
           trufflehog "${ARGS[@]}" > "$out"
           echo "findings_file=$out" >> "$GITHUB_OUTPUT"
 
+      - name: Checkout P2P workflow sources
+        if: ${{ always() && inputs.dry-run == false }}
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .p2p-workflow-src
+
       - id: redact
         name: Build redacted secret findings
         if: ${{ always() && inputs.dry-run == false }}
@@ -114,44 +122,7 @@ jobs:
         run: |
           set -euo pipefail
           redacted="$RUNNER_TEMP/findings.ndjson"
-          : > "$redacted"
-          if [ -s "$FINDINGS" ]; then
-            while IFS= read -r line; do
-              [ -z "$line" ] && continue
-              detector=$(jq -r '.DetectorName // .DetectorType // "unknown"' <<< "$line")
-              raw=$(jq -r '.Raw // ""' <<< "$line")
-              id=$(printf '%s\0%s' "$detector" "$raw" | sha256sum | cut -d' ' -f1)
-              jq -c \
-                --arg id "$id" \
-                --arg server "$SERVER_URL" \
-                --arg repo "$REPOSITORY" '
-                (.SourceMetadata.Data.Git.commit // "") as $commit |
-                (.SourceMetadata.Data.Git.file // "") as $file |
-                (.SourceMetadata.Data.Git.line // "") as $line |
-                ($file | split("/") | map(@uri) | join("/")) as $file_uri |
-                {
-                  id: $id,
-                  detector: (.DetectorName // .DetectorType // "unknown"),
-                  status: (
-                    if .Verified == true then "verified"
-                    elif (.VerificationError // null) != null then "unknown"
-                    else "unverified"
-                    end
-                  ),
-                  file: (if $file == "" then null else $file end),
-                  line: (if $line == "" then null else $line end),
-                  commit: (if $commit == "" then null else $commit end),
-                  url: (
-                    if $commit == "" then null
-                    else $server + "/" + $repo + "/blob/" + $commit
-                      + (if $file == "" then "" else "/" + $file_uri end)
-                      + (if $line == "" then "" else "#L" + ($line | tostring) end)
-                    end
-                  )
-                }
-              ' <<< "$line" >> "$redacted"
-            done < "$FINDINGS"
-          fi
+          node .p2p-workflow-src/.github/scripts/source-secret-redact.js "$FINDINGS" "$redacted"
           echo "redacted_file=$redacted" >> "$GITHUB_OUTPUT"
 
       - name: Upload redacted secret findings
@@ -251,7 +222,7 @@ jobs:
         name: Build source security report
         uses: actions/github-script@v9
         env:
-          SCOPE: ${{ inputs.scope }}
+          SCOPE: ${{ inputs.secret-scan-scope }}
           BASE: ${{ needs.secret-scan.outputs.base }}
           BLOCKING_SEVERITY: ${{ inputs.blocking-severity }}
           DRY_RUN: ${{ inputs.dry-run }}

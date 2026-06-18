@@ -71,7 +71,7 @@ image-scan           (needs: build)
                      security-scan-blocking-severity (default: off).
 
 source-security-scan  (independent of build; runs in parallel)
-                      Calls p2p-workflow-source-security-scan with scope: changes.
+                      Calls p2p-workflow-source-security-scan with secret-scan-scope: changes.
                       Reports source vulnerabilities, restricted/forbidden licenses,
                       and git-tree secrets. Blocks only on vulnerabilities at or above
                       security-scan-blocking-severity or verified secrets when the

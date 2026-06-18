@@ -59,6 +59,8 @@ jobs:
 
 Teams read results in the GitHub Actions workflow run summary and artifacts. The source scan writes source vulnerability and secret results to the workflow run summary on every non-dry-run scan. On pull requests, source scan comments are posted when the workflow has `pull-requests: write`; image scan comments are also posted when that permission is granted through the caller chain. If the permission is omitted, image scanning still runs and uploads artifacts, but PR comment posting is non-fatal.
 
+Application repositories may add a P2P-owned `.p2p-security-ignore.yaml` file at the repository root to record accepted source and image security findings. Valid, unexpired ignore entries remove matching findings from active report tables, active totals, blocking counts, and policy failures while keeping ignored records in normalized JSON artifacts for dashboard ingestion. Malformed ignore files, unsupported schema versions, invalid shapes, or invalid expiry dates fail report generation instead of silently weakening policy.
+
 ## Scanner choices
 
 P2P uses Trivy for vulnerability scanning.

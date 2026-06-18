@@ -204,6 +204,79 @@ async function runReportWithoutIgnoreFile() {
   return { outputs, summary };
 }
 
+async function runUnsafeMarkdownReport() {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'source-markdown-'));
+  const root = path.join(tmp, 'source-security');
+  const workspace = path.join(tmp, 'repo');
+  fs.mkdirSync(path.join(root, 'trivy'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'trufflehog'), { recursive: true });
+  fs.mkdirSync(workspace, { recursive: true });
+  fs.writeFileSync(path.join(root, 'trivy', 'trivy-fs.json'), JSON.stringify({
+    Results: [
+      {
+        Target: 'package`lock`.json</summary><script>alert(1)</script>',
+        Vulnerabilities: [
+          {
+            VulnerabilityID: 'UNSAFE] [link',
+            PkgName: 'pkg<script>alert(1)</script>',
+            InstalledVersion: '1.0.0',
+            FixedVersion: '1.0.1',
+            Severity: 'HIGH',
+            PrimaryURL: 'javascript:alert(1)',
+          },
+        ],
+      },
+    ],
+  }));
+  fs.writeFileSync(path.join(root, 'trufflehog', 'findings.ndjson'), [
+    JSON.stringify({
+      id: 'unsafe-secret',
+      detector: 'Github',
+      status: 'verified',
+      file: 'config`prod`.env',
+      line: 12,
+      commit: 'abc`def1234567890',
+      url: 'javascript:alert(1)',
+    }),
+    '',
+  ].join('\n'));
+
+  const outputs = {};
+  let summary = '';
+  await buildSourceSecurityReport({
+    env: {
+      ROOT: root,
+      GITHUB_WORKSPACE: workspace,
+      DRY_RUN: 'false',
+      BLOCKING_SEVERITY: 'high',
+      SCOPE: 'changes',
+      BASE: 'base-sha',
+      SECRET_SCAN_RESULT: 'success',
+      SCA_SCAN_RESULT: 'success',
+      P2P_SECURITY_IGNORE_HELPER: helperPath,
+      GITHUB_SERVER_URL: 'https://github.example',
+      GITHUB_REPOSITORY: 'org/repo',
+      GITHUB_RUN_ID: '42',
+    },
+    core: {
+      setOutput: (key, value) => { outputs[key] = value; },
+      setFailed: () => {},
+      info: () => {},
+      warning: () => {},
+      summary: {
+        addRaw(markdown) {
+          summary = markdown;
+          return this;
+        },
+        write() {
+          return Promise.resolve();
+        },
+      },
+    },
+  });
+  return { outputs, summary };
+}
+
 async function runAllIgnoredReport() {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'source-all-ignored-'));
   const root = path.join(tmp, 'source-security');
@@ -501,6 +574,51 @@ async function runReportWithInvalidIgnoreFile(ignoreFile) {
   await buildSourceSecurityReport({ core: sandbox.core, env: sandbox.process.env });
 }
 
+async function runReportWithCorruptTruffleHogOutput() {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'source-corrupt-secret-'));
+  const root = path.join(tmp, 'source-security');
+  const workspace = path.join(tmp, 'repo');
+  fs.mkdirSync(path.join(root, 'trivy'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'trufflehog'), { recursive: true });
+  fs.mkdirSync(workspace, { recursive: true });
+  fs.writeFileSync(path.join(root, 'trivy', 'trivy-fs.json'), JSON.stringify({ Results: [] }));
+  fs.writeFileSync(path.join(root, 'trufflehog', 'findings.ndjson'), '{not json\n');
+
+  const outputs = {};
+  let summary = '';
+  await buildSourceSecurityReport({
+    env: {
+      ROOT: root,
+      GITHUB_WORKSPACE: workspace,
+      DRY_RUN: 'false',
+      BLOCKING_SEVERITY: 'high',
+      SCOPE: 'changes',
+      BASE: 'base-sha',
+      SECRET_SCAN_RESULT: 'success',
+      SCA_SCAN_RESULT: 'success',
+      P2P_SECURITY_IGNORE_HELPER: helperPath,
+      GITHUB_SERVER_URL: 'https://github.example',
+      GITHUB_REPOSITORY: 'org/repo',
+      GITHUB_RUN_ID: '42',
+    },
+    core: {
+      setOutput: (key, value) => { outputs[key] = value; },
+      setFailed: () => {},
+      info: () => {},
+      warning: () => {},
+      summary: {
+        addRaw(markdown) {
+          summary = markdown;
+          return this;
+        },
+        write() {
+          return Promise.resolve();
+        },
+      },
+    },
+  });
+}
+
 (async () => {
   const result = await runReport();
   assert.deepStrictEqual(result.failures, []);
@@ -547,6 +665,17 @@ async function runReportWithInvalidIgnoreFile(ignoreFile) {
   assert.strictEqual(noIgnore.outputs['vulnerability-blocking'], 1);
   assert(!noIgnore.summary.includes('**Ignored:**'));
   assert(!noIgnore.summary.includes('### Ignored source findings'));
+
+  const unsafeMarkdown = await runUnsafeMarkdownReport();
+  assert(!unsafeMarkdown.summary.includes('javascript:alert(1)'));
+  assert(!unsafeMarkdown.summary.includes('<script>'));
+  assert(!unsafeMarkdown.summary.includes('package`lock`.json</summary>'));
+  assert(!unsafeMarkdown.summary.includes('`package`lock`.json'));
+  assert(unsafeMarkdown.summary.includes('<code>package`lock`.json'));
+  assert(!unsafeMarkdown.summary.includes('`config`prod`.env`'));
+  assert(!unsafeMarkdown.summary.includes('`abc`def1234`'));
+  assert(unsafeMarkdown.summary.includes('<code>config`prod`.env</code>'));
+  assert(unsafeMarkdown.summary.includes('UNSAFE'));
 
   const allIgnored = await runAllIgnoredReport();
   assert.deepStrictEqual(allIgnored.failures, []);
@@ -614,6 +743,10 @@ async function runReportWithInvalidIgnoreFile(ignoreFile) {
       name,
     );
   }
+  await assert.rejects(
+    () => runReportWithCorruptTruffleHogOutput(),
+    error => error.message.includes('Failed to process TruffleHog source report'),
+  );
   console.log('source security ignore report fixtures passed');
 })().catch(error => {
   console.error(error);

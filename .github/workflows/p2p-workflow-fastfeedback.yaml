@@ -103,7 +103,7 @@ jobs:
   source-security-scan:
     uses: ./.github/workflows/p2p-workflow-source-security-scan.yaml
     with:
-      scope: changes
+      secret-scan-scope: changes
       blocking-severity: ${{ inputs.security-scan-blocking-severity }}
       dry-run: ${{ inputs.dry-run }}
       timeout-minutes: 10
@@ -111,6 +111,9 @@ jobs:
   image-scan:
     needs: [build]
     uses: ./.github/workflows/p2p-workflow-image-scan.yaml
+    permissions:
+      contents: read
+      id-token: write
     secrets:
       env_vars: ${{ secrets.env_vars }}
       container_registry_user: ${{ secrets.container_registry_user }}

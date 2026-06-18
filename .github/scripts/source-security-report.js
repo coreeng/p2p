@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { escapeCell } = require('./markdown.js');
+const { code, escapeCell, markdownLink } = require('./markdown.js');
 
 const CANONICAL_SEVERITIES = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNKNOWN'];
 const SEV_RANK = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3, UNKNOWN: 4 };
@@ -23,7 +23,6 @@ const blockingSeveritySet = (value, core) => {
   return new Set(byThreshold[threshold]);
 };
 const normalizeSeverity = value => CANONICAL_SEVERITIES.includes(value) ? value : 'UNKNOWN';
-const code = value => `<code>${escapeCell(value)}</code>`;
 const readJson = (file, fallback) => {
   if (!file || !fs.existsSync(file) || fs.statSync(file).size === 0) return fallback;
   return JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -165,8 +164,8 @@ for (const line of readLines(trufflehogPath)) {
   let secret;
   try {
     secret = JSON.parse(line);
-  } catch {
-    continue;
+  } catch (error) {
+    throw new Error(`Failed to process TruffleHog source report ${trufflehogPath}: ${error.message}`);
   }
   secrets.push({
     id: secret.id,
@@ -244,7 +243,7 @@ if (!dryRun) {
       `| ${summaryHeader.map(() => '---').join(' | ')} |`,
       ...vulnerabilityGroups.map(group => {
         const counts = summarySeverities.map(sev => String(group.countsBySeverity[sev] || 0));
-        return `| \`${escapeCell(group.source)}\` | ${[...counts, String(group.total)].join(' | ')} |`;
+        return `| ${code(group.source)} | ${[...counts, String(group.total)].join(' | ')} |`;
       }),
       '',
     );
@@ -260,7 +259,7 @@ if (!dryRun) {
         '',
         '| Severity | Package | Installed | Fixed | CVE/ID | Source |',
         '|---|---|---|---|---|---|',
-        ...rows.map(v => `| ${SEV_EMOJI[v.severity]} ${v.severity} | ${escapeCell(v.package)} | ${escapeCell(v.installed)} | ${escapeCell(v.fixed)} | [${escapeCell(v.id)}](${v.url}) | ${escapeCell(v.source)} |`),
+        ...rows.map(v => `| ${SEV_EMOJI[v.severity]} ${v.severity} | ${escapeCell(v.package)} | ${escapeCell(v.installed)} | ${escapeCell(v.fixed)} | ${markdownLink(v.id, v.url)} | ${escapeCell(v.source)} |`),
         '',
         '</details>',
         '',
@@ -277,7 +276,7 @@ if (!dryRun) {
       `| ${summaryHeader.map(() => '---').join(' | ')} |`,
       ...licenseGroups.map(group => {
         const counts = licenseSummarySeverities.map(sev => String(group.countsBySeverity[sev] || 0));
-        return `| \`${escapeCell(group.source)}\` | ${[...counts, String(group.total)].join(' | ')} |`;
+        return `| ${code(group.source)} | ${[...counts, String(group.total)].join(' | ')} |`;
       }),
       '',
     );
@@ -308,8 +307,9 @@ if (!dryRun) {
       '| Detector | Status | File | Line | Commit |',
       '|---|---|---|---|---|',
       ...selectedSecrets.map(s => {
-        const file = s.file ? `\`${escapeCell(s.file)}\`` : '-';
-        const commit = s.commit ? (s.url ? `[\`${escapeCell(s.commit.slice(0, 12))}\`](${s.url})` : `\`${escapeCell(s.commit.slice(0, 12))}\``) : '-';
+        const file = s.file ? code(s.file) : '-';
+        const shortCommit = s.commit ? s.commit.slice(0, 12) : '';
+        const commit = shortCommit ? (s.url ? markdownLink(shortCommit, s.url) : code(shortCommit)) : '-';
         return `| ${escapeCell(s.detector)} | ${escapeCell(s.status)} | ${file} | ${escapeCell(s.line)} | ${commit} |`;
       }),
       '',
