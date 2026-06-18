@@ -54,6 +54,7 @@ async function runScanFunction(scanFunction, options = {}) {
           status: 183,
           stdout: [
             JSON.stringify({
+              id: 'scanner-provided-secret-id',
               DetectorName: 'Github',
               Verified: true,
               Raw: 'raw-image-secret-value',
@@ -116,6 +117,7 @@ async function runScanFunction(scanFunction, options = {}) {
     const findings = reportText.trim().split('\n').map(item => JSON.parse(item));
     const finding = findings.find(item => item.DetectorName === 'Github');
     assert.match(finding.id, /^p2psec_[0-9a-f]{16}$/);
+    assert.notStrictEqual(finding.id, 'scanner-provided-secret-id');
     assert.strictEqual(finding.DetectorName, 'Github');
     assert.strictEqual(finding.SourceMetadata.Data.Docker.file, '/app/secret.env');
   }

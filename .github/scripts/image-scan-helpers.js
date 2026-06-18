@@ -194,7 +194,7 @@ function redactTruffleHogJsonl(output, p2pRedactedSecretId) {
       throw new Error('malformed TruffleHog JSONL');
     }
     const id = p2pRedactedSecretId(finding.RawV2 || finding.Raw || finding.Redacted || line);
-    return JSON.stringify({ id, ...stripRawSecretFields(finding) });
+    return JSON.stringify({ ...stripRawSecretFields(finding), id });
   }).join('\n');
 }
 

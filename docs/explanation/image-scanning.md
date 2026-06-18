@@ -8,7 +8,7 @@ For a given stage, the workflow scans standard P2P image names from the `image-n
 
 In the pipeline stage workflows, image scanning is built into fast-feedback, extended-test, and prod: fast-feedback calls it after the build job, while extended-test and prod call it before promotion or deployment on main-branch runs.
 
-The scheduled [`p2p-workflow-security-scan`](../reference/p2p-workflow-security-scan.md) umbrella runs image scanning alongside source security scanning. It resolves the first configured image name as the anchor, looks up the latest version in each stage registry path, and then invokes image scanning once for fast-feedback, extended-test, and prod with the full configured image-name list.
+The scheduled [`p2p-workflow-security-scan`](../reference/p2p-workflow-security-scan.md) umbrella runs image scanning alongside source security scanning. It resolves the first configured image name as the anchor, looks up the latest version for each stage/environment matrix entry, and then invokes image scanning with the full configured image-name list for each matching entry.
 
 ## Blocking and reporting
 

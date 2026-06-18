@@ -32,7 +32,7 @@ jobs:
 |------|------|----------|---------|-------------|
 | `pipeline-stage` | string | Yes | — | One of `fast-feedback`, `extended-test`, `prod`. Selects the registry path (`<region>-docker.pkg.dev/<project>/tenant/<tenant>/<stage>`) the images are pulled from. |
 | `version` | string | Yes | — | Image tag to scan. Used with each standard P2P image name to build the stage Artifact Registry reference. |
-| `github_env` | string | No | `''` | GitHub Environment used for GCP auth and concurrency grouping. Required in practice — image pulls go through Workload Identity Federation bound to this environment. |
+| `github_env` | string | No | `''` | GitHub Environment used for environment-scoped variables and GCP auth. Required in practice — image pulls go through Workload Identity Federation bound to this environment. |
 | `tenant-name` | string | No | `''` | Tenant identifier. Falls back to `vars.TENANT_NAME` when empty. |
 | `region` | string | No | `europe-west2` | GCP region for the Artifact Registry. Overridden by `vars.REGION` when set on the environment. |
 | `working-directory` | string | No | `.` | Directory from which `make p2p-images` is executed when `image-names` is empty. |
