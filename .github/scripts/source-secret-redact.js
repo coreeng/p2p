@@ -14,14 +14,14 @@ const pathToUrlPath = file => String(file || '')
 
 const redactFinding = (finding, { serverUrl, repository }) => {
   const detector = finding.DetectorName || finding.DetectorType || 'unknown';
-  const raw = finding.Raw || '';
   const git = finding.SourceMetadata?.Data?.Git || {};
   const commit = git.commit || null;
   const file = git.file || null;
   const line = git.line || null;
+  const identity = finding.RawV2 || finding.Raw || finding.Redacted || `${detector}:${file || '-'}:${line || '-'}:${commit || '-'}`;
 
   return {
-    id: secretId(detector, raw),
+    id: secretId(detector, identity),
     detector,
     status: finding.Verified === true ? 'verified' : (finding.VerificationError ? 'unknown' : 'unverified'),
     file,

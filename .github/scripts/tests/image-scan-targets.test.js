@@ -8,7 +8,7 @@ const {
 } = require('../image-scan-helpers');
 const { p2pRedactedSecretId } = require('../p2p-security-ignore');
 
-async function runScanFunction(scanFunction) {
+async function runScanFunction(scanFunction, options = {}) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'image-targets-'));
   const pulledList = path.join(tmp, 'pulled-images.txt');
   fs.writeFileSync(
@@ -51,7 +51,7 @@ async function runScanFunction(scanFunction) {
       spawnSyncImpl(command, args) {
         calls.push({ command, args });
         return {
-          status: 0,
+          status: 183,
           stdout: [
             JSON.stringify({
               DetectorName: 'Github',
@@ -70,7 +70,7 @@ async function runScanFunction(scanFunction) {
                 RawSecret: 'nested-raw-image-secret-value',
               },
             }),
-            'malformed raw-image-secret-value',
+            ...(options.malformedSecretOutput ? ['malformed raw-image-secret-value'] : []),
             '',
           ].join('\n'),
           stderr: '',
@@ -79,12 +79,12 @@ async function runScanFunction(scanFunction) {
     });
   }
 
-  assert.deepStrictEqual(failures, []);
-  return { calls, outputs };
+  return { calls, outputs, failures };
 }
 
 (async () => {
   const trivyRun = await runScanFunction(scanImages);
+  assert.deepStrictEqual(trivyRun.failures, []);
   assert.deepStrictEqual(
     trivyRun.calls.map(call => call.args[call.args.length - 1]),
     [
@@ -94,6 +94,7 @@ async function runScanFunction(scanFunction) {
   );
 
   const secretRun = await runScanFunction(secretScanImages);
+  assert.deepStrictEqual(secretRun.failures, []);
   assert.deepStrictEqual(
     secretRun.calls.map(call => call.args[2]),
     [
@@ -114,12 +115,18 @@ async function runScanFunction(scanFunction) {
     assert(!reportText.includes('malformed raw-image-secret-value'));
     const findings = reportText.trim().split('\n').map(item => JSON.parse(item));
     const finding = findings.find(item => item.DetectorName === 'Github');
-    const parseErrorFinding = findings.find(item => item.parseError === true);
     assert.match(finding.id, /^p2psec_[0-9a-f]{16}$/);
     assert.strictEqual(finding.DetectorName, 'Github');
     assert.strictEqual(finding.SourceMetadata.Data.Docker.file, '/app/secret.env');
-    assert.match(parseErrorFinding.id, /^p2psec_[0-9a-f]{16}$/);
   }
+
+  const malformedSecretRun = await runScanFunction(secretScanImages, { malformedSecretOutput: true });
+  assert.deepStrictEqual(
+    malformedSecretRun.failures,
+    ['Failed to parse TruffleHog image JSONL for europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/prod/api:1.2.3 (linux/amd64).'],
+  );
+  assert(!malformedSecretRun.failures.join('\n').includes('raw-image-secret-value'));
+  assert.strictEqual(fs.readFileSync(malformedSecretRun.outputs['report-list'], 'utf8'), '');
 
   console.log('image scan target fixtures passed');
 })().catch(error => {

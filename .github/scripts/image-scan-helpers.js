@@ -191,10 +191,7 @@ function redactTruffleHogJsonl(output, p2pRedactedSecretId) {
     try {
       finding = JSON.parse(line);
     } catch {
-      return JSON.stringify({
-        id: p2pRedactedSecretId(line),
-        parseError: true,
-      });
+      throw new Error('malformed TruffleHog JSONL');
     }
     const id = p2pRedactedSecretId(finding.RawV2 || finding.Raw || finding.Redacted || line);
     return JSON.stringify({ id, ...stripRawSecretFields(finding) });
@@ -234,7 +231,13 @@ async function secretScanImages({
       core.setFailed(`trufflehog exited with ${proc.status}: ${proc.stderr || proc.error?.message || '(no stderr)'}`);
       return;
     }
-    const redactedOutput = redactTruffleHogJsonl(proc.stdout || '', p2pRedactedSecretId);
+    let redactedOutput;
+    try {
+      redactedOutput = redactTruffleHogJsonl(proc.stdout || '', p2pRedactedSecretId);
+    } catch {
+      core.setFailed(`Failed to parse TruffleHog image JSONL for ${ref} (${plat}).`);
+      return;
+    }
     fsImpl.writeFileSync(out, redactedOutput ? `${redactedOutput}\n` : '');
     fsImpl.appendFileSync(reportList, `${ref}\t${plat}\t${digest}\t${out}\n`);
   }

@@ -27,9 +27,25 @@ const readJson = (file, fallback) => {
   if (!file || !fs.existsSync(file) || fs.statSync(file).size === 0) return fallback;
   return JSON.parse(fs.readFileSync(file, 'utf8'));
 };
+const readRequiredJson = (file, label) => {
+  if (!file || !fs.existsSync(file) || fs.statSync(file).size === 0) {
+    throw new Error(`Failed to process ${label} ${file}: output was missing or empty`);
+  }
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch (error) {
+    throw new Error(`Failed to process ${label} ${file}: ${error.message}`);
+  }
+};
 const readLines = file => {
   if (!file || !fs.existsSync(file) || fs.statSync(file).size === 0) return [];
   return fs.readFileSync(file, 'utf8').split('\n').filter(Boolean);
+};
+const readRequiredLines = (file, label) => {
+  if (!file || !fs.existsSync(file)) {
+    throw new Error(`Failed to process ${label} ${file}: output was missing`);
+  }
+  return readLines(file);
 };
 const vulnerabilityUrl = (id, primaryUrl) => {
   const normalizedId = String(id || '').toUpperCase();
@@ -119,7 +135,9 @@ const reportSeveritySet = severitySet('LOW,MEDIUM,HIGH,CRITICAL');
 const blockingSet = blockingSeveritySet(env.BLOCKING_SEVERITY, core);
 const reportedSeverities = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
 const securityIgnore = loadSecurityIgnore(env.GITHUB_WORKSPACE);
-const trivy = readJson(trivyPath, { Results: [] });
+const trivy = !dryRun && env.SCA_SCAN_RESULT === 'success'
+  ? readRequiredJson(trivyPath, 'Trivy source report')
+  : readJson(trivyPath, { Results: [] });
 const vulnerabilities = [];
 const licenses = [];
 
@@ -160,7 +178,10 @@ const activeVulnerabilities = vulnerabilitySplit.active;
 const ignoredVulnerabilities = vulnerabilitySplit.ignored.sort(sortBySeverityOnly);
 
 const secrets = [];
-for (const line of readLines(trufflehogPath)) {
+const trufflehogLines = !dryRun && env.SECRET_SCAN_RESULT === 'success'
+  ? readRequiredLines(trufflehogPath, 'TruffleHog source report')
+  : readLines(trufflehogPath);
+for (const line of trufflehogLines) {
   let secret;
   try {
     secret = JSON.parse(line);

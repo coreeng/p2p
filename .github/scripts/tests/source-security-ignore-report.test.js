@@ -619,6 +619,94 @@ async function runReportWithCorruptTruffleHogOutput() {
   });
 }
 
+async function runReportWithInvalidTrivyOutput(mode) {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'source-invalid-trivy-'));
+  const root = path.join(tmp, 'source-security');
+  const workspace = path.join(tmp, 'repo');
+  fs.mkdirSync(path.join(root, 'trivy'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'trufflehog'), { recursive: true });
+  fs.mkdirSync(workspace, { recursive: true });
+  if (mode === 'empty') {
+    fs.writeFileSync(path.join(root, 'trivy', 'trivy-fs.json'), '');
+  } else if (mode === 'invalid') {
+    fs.writeFileSync(path.join(root, 'trivy', 'trivy-fs.json'), '{not json');
+  }
+  fs.writeFileSync(path.join(root, 'trufflehog', 'findings.ndjson'), '');
+
+  const outputs = {};
+  await buildSourceSecurityReport({
+    env: {
+      ROOT: root,
+      GITHUB_WORKSPACE: workspace,
+      DRY_RUN: 'false',
+      BLOCKING_SEVERITY: 'high',
+      SCOPE: 'changes',
+      BASE: 'base-sha',
+      SECRET_SCAN_RESULT: 'success',
+      SCA_SCAN_RESULT: 'success',
+      P2P_SECURITY_IGNORE_HELPER: helperPath,
+      GITHUB_SERVER_URL: 'https://github.example',
+      GITHUB_REPOSITORY: 'org/repo',
+      GITHUB_RUN_ID: '42',
+    },
+    core: {
+      setOutput: (key, value) => { outputs[key] = value; },
+      setFailed: () => {},
+      info: () => {},
+      warning: () => {},
+      summary: {
+        addRaw() {
+          return this;
+        },
+        write() {
+          return Promise.resolve();
+        },
+      },
+    },
+  });
+}
+
+async function runReportWithMissingTruffleHogOutput() {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'source-missing-secret-'));
+  const root = path.join(tmp, 'source-security');
+  const workspace = path.join(tmp, 'repo');
+  fs.mkdirSync(path.join(root, 'trivy'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'trufflehog'), { recursive: true });
+  fs.mkdirSync(workspace, { recursive: true });
+  fs.writeFileSync(path.join(root, 'trivy', 'trivy-fs.json'), JSON.stringify({ Results: [] }));
+
+  await buildSourceSecurityReport({
+    env: {
+      ROOT: root,
+      GITHUB_WORKSPACE: workspace,
+      DRY_RUN: 'false',
+      BLOCKING_SEVERITY: 'high',
+      SCOPE: 'changes',
+      BASE: 'base-sha',
+      SECRET_SCAN_RESULT: 'success',
+      SCA_SCAN_RESULT: 'success',
+      P2P_SECURITY_IGNORE_HELPER: helperPath,
+      GITHUB_SERVER_URL: 'https://github.example',
+      GITHUB_REPOSITORY: 'org/repo',
+      GITHUB_RUN_ID: '42',
+    },
+    core: {
+      setOutput: () => {},
+      setFailed: () => {},
+      info: () => {},
+      warning: () => {},
+      summary: {
+        addRaw() {
+          return this;
+        },
+        write() {
+          return Promise.resolve();
+        },
+      },
+    },
+  });
+}
+
 (async () => {
   const result = await runReport();
   assert.deepStrictEqual(result.failures, []);
@@ -747,6 +835,17 @@ async function runReportWithCorruptTruffleHogOutput() {
     () => runReportWithCorruptTruffleHogOutput(),
     error => error.message.includes('Failed to process TruffleHog source report'),
   );
+  await assert.rejects(
+    () => runReportWithMissingTruffleHogOutput(),
+    error => error.message.includes('Failed to process TruffleHog source report'),
+  );
+  for (const mode of ['missing', 'empty', 'invalid']) {
+    await assert.rejects(
+      () => runReportWithInvalidTrivyOutput(mode),
+      error => error.message.includes('Failed to process Trivy source report'),
+      mode,
+    );
+  }
   console.log('source security ignore report fixtures passed');
 })().catch(error => {
   console.error(error);
