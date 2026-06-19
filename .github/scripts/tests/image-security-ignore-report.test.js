@@ -761,6 +761,9 @@ async function runPartialScannerReportLists() {
   assert.deepStrictEqual(partialLists.failures, []);
   assert.strictEqual(partialLists.outputs['scan-status'], 'failed');
   assert.strictEqual(partialLists.outputs['security-risk'], 'unknown');
+  assert(partialLists.summary.includes('### Scanner output warnings'));
+  assert(partialLists.summary.includes('Trivy and TruffleHog image report lists cover different images/platforms.'));
+  assert(!partialLists.summary.includes('_No vulnerabilities or secrets found._'));
 
   const unclassified = await runUnclassifiedImageReport();
   assert.deepStrictEqual(unclassified.failures, []);

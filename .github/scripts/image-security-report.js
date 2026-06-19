@@ -342,7 +342,17 @@ const buildImageSecurityReport = async ({ core, env = process.env } = {}) => {
     ));
 
   const allSecretRows = secretSummaries.flatMap(group => group.rows);
-  const scanStatus = listExists && secretListExists && sameReportKeys(vulnerabilityReportKeys, secretReportKeys) ? 'ok' : 'failed';
+  const reportKeysMatch = sameReportKeys(vulnerabilityReportKeys, secretReportKeys);
+  const scanStatus = listExists && secretListExists && reportKeysMatch ? 'ok' : 'failed';
+  const scannerWarnings = [];
+  if (scanStatus !== 'ok') {
+    scannerWarnings.push('One or more image scanners did not produce complete results; findings may be incomplete.');
+    if (!listExists) scannerWarnings.push('Trivy image report list was not available.');
+    if (!secretListExists) scannerWarnings.push('TruffleHog image report list was not available.');
+    if (listExists && secretListExists && !reportKeysMatch) {
+      scannerWarnings.push('Trivy and TruffleHog image report lists cover different images/platforms.');
+    }
+  }
   const securityRisk = scanStatus === 'failed' ? 'unknown' : maxSecurityRisk(allUniqueRows, allSecretRows);
   const totalSecretUnique = allSecretRows.length;
   const selectedSecretRows = [
@@ -360,9 +370,13 @@ const buildImageSecurityReport = async ({ core, env = process.env } = {}) => {
   const envSuffix = env.GITHUB_ENV_INPUT ? ` / ${env.GITHUB_ENV_INPUT}` : '';
   const out = [`## Image scan (${env.PIPELINE_STAGE}${envSuffix})`];
 
+  if (scannerWarnings.length > 0) {
+    out.push('', '### Scanner output warnings', '', ...scannerWarnings.map(warning => `- ${warning}`));
+  }
+
   if (!listExists && !secretListExists) {
     out.push('', '_Scan skipped (dry-run or upstream failure)._');
-  } else if (total === 0 && secretTotal === 0 && ignoredImageVulnerabilities.length === 0 && ignoredImageSecrets.length === 0) {
+  } else if (scanStatus === 'ok' && total === 0 && secretTotal === 0 && ignoredImageVulnerabilities.length === 0 && ignoredImageSecrets.length === 0) {
     out.push(
       '',
       `**Version:** \`${env.VERSION}\` · **Vulnerabilities:** 0 · **Secrets:** 0`,
