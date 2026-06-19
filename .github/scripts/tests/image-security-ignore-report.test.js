@@ -407,9 +407,9 @@ async function runMarkdownEscapingReport() {
     REPORT_LIST: reportList,
     SECRET_REPORT_LIST: secretList,
     BLOCKING_SEVERITY: 'high',
-    PIPELINE_STAGE: 'prod',
-    GITHUB_ENV_INPUT: '',
-    VERSION: '1.2.3',
+    PIPELINE_STAGE: 'prod`<script>|stage',
+    GITHUB_ENV_INPUT: 'env`<script>|name',
+    VERSION: '1.2`<script>|3',
     P2P_SECURITY_IGNORE_HELPER: helperPath,
     GITHUB_SERVER_URL: 'https://github.example',
     GITHUB_REPOSITORY: 'org/repo',
@@ -736,6 +736,12 @@ async function runPartialScannerReportLists() {
   assert(markdownEscaping.summary.includes('[CVE-2026-LINK\\] \\[bad\\|row](https://example.test/CVE-2026-LINK)'));
   assert(!markdownEscaping.summary.includes('`bad`script`'));
   assert(!markdownEscaping.summary.includes('`sha256:`layer1``'));
+  assert(!markdownEscaping.summary.includes('prod`<script>|stage'));
+  assert(!markdownEscaping.summary.includes('env`<script>|name'));
+  assert(!markdownEscaping.summary.includes('`1.2`<script>|3`'));
+  assert(markdownEscaping.summary.includes('## Image scan (<code>prod`&lt;script&gt;\\|stage</code> / <code>env`&lt;script&gt;\\|name</code>)'));
+  assert(markdownEscaping.summary.includes('**Version:** <code>1.2`&lt;script&gt;\\|3</code>'));
+  assert(markdownEscaping.summary.includes('**Blocking severity:** <code>high</code>'));
   assert(markdownEscaping.summary.includes('<code>sha256:`layer1`</code>'));
   assert(!markdownEscaping.summary.includes('bad<script>|img'));
   assert(!markdownEscaping.summary.includes('linux/amd64<script>|plat'));

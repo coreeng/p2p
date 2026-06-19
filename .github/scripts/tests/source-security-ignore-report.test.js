@@ -314,7 +314,7 @@ async function runUnsafeMarkdownReport() {
       DRY_RUN: 'false',
       BLOCKING_SEVERITY: 'high',
       SCOPE: 'changes',
-      BASE: 'base-sha',
+      BASE: 'base`<script>|sha',
       SECRET_SCAN_RESULT: 'success',
       SCA_SCAN_RESULT: 'success',
       P2P_SECURITY_IGNORE_HELPER: helperPath,
@@ -830,6 +830,9 @@ async function runReportWithMissingTruffleHogOutput() {
   assert(unsafeMarkdown.summary.includes('<code>package`lock`.json'));
   assert(!unsafeMarkdown.summary.includes('`config`prod`.env`'));
   assert(!unsafeMarkdown.summary.includes('`abc`def1234`'));
+  assert(!unsafeMarkdown.summary.includes('`base`<script>|sha..HEAD`'));
+  assert(unsafeMarkdown.summary.includes('<code>base`&lt;script&gt;\\|sha..HEAD</code>'));
+  assert(unsafeMarkdown.summary.includes('**Blocking severity:** <code>high</code>'));
   assert(unsafeMarkdown.summary.includes('<code>config`prod`.env</code>'));
   assert(unsafeMarkdown.summary.includes('UNSAFE'));
 

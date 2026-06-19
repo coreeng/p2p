@@ -254,10 +254,10 @@ if (dryRun) {
 
 if (!dryRun) {
   out.push(
-    `**Scan range:** \`${scanRange}\` · **Vulnerabilities:** ${activeVulnerabilities.length} total · ${vulnerabilityBlocking} blocking`,
+    `**Scan range:** ${code(scanRange)} · **Vulnerabilities:** ${activeVulnerabilities.length} total · ${vulnerabilityBlocking} blocking`,
     `· **Licenses:** ${licenses.length} total · 0 blocking`,
     `· **Secrets:** ${activeSecrets.length} total · ${secretBlocking} blocking`,
-    `**Severities reported:** \`LOW,MEDIUM,HIGH,CRITICAL\` · **Blocking severity:** \`${env.BLOCKING_SEVERITY}\``,
+    `**Severities reported:** ${code('LOW,MEDIUM,HIGH,CRITICAL')} · **Blocking severity:** ${code(env.BLOCKING_SEVERITY)}`,
     '',
     `[📦 Download full reports](${runUrl})`,
     '',

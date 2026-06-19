@@ -367,8 +367,8 @@ const buildImageSecurityReport = async ({ core, env = process.env } = {}) => {
   }
   for (const arr of selectedSecretsByImage.values()) arr.sort(secretRowSort);
 
-  const envSuffix = env.GITHUB_ENV_INPUT ? ` / ${env.GITHUB_ENV_INPUT}` : '';
-  const out = [`## Image scan (${env.PIPELINE_STAGE}${envSuffix})`];
+  const envSuffix = env.GITHUB_ENV_INPUT ? ` / ${code(env.GITHUB_ENV_INPUT)}` : '';
+  const out = [`## Image scan (${code(env.PIPELINE_STAGE)}${envSuffix})`];
 
   if (scannerWarnings.length > 0) {
     out.push('', '### Scanner output warnings', '', ...scannerWarnings.map(warning => `- ${warning}`));
@@ -379,16 +379,16 @@ const buildImageSecurityReport = async ({ core, env = process.env } = {}) => {
   } else if (scanStatus === 'ok' && total === 0 && secretTotal === 0 && ignoredImageVulnerabilities.length === 0 && ignoredImageSecrets.length === 0) {
     out.push(
       '',
-      `**Version:** \`${env.VERSION}\` · **Vulnerabilities:** 0 · **Secrets:** 0`,
+      `**Version:** ${code(env.VERSION)} · **Vulnerabilities:** 0 · **Secrets:** 0`,
       '',
       '_No vulnerabilities or secrets found._',
     );
   } else {
     out.push(
       '',
-      `**Version:** \`${env.VERSION}\` · **Vulnerabilities:** ${total} total · ${blocking} blocking`,
+      `**Version:** ${code(env.VERSION)} · **Vulnerabilities:** ${total} total · ${blocking} blocking`,
       `· **Secrets:** ${secretTotal} total · ${secretBlocking} blocking`,
-      `**Severities reported:** \`LOW,MEDIUM,HIGH,CRITICAL\` · **Blocking severity:** \`${env.BLOCKING_SEVERITY}\``,
+      `**Severities reported:** ${code('LOW,MEDIUM,HIGH,CRITICAL')} · **Blocking severity:** ${code(env.BLOCKING_SEVERITY)}`,
       '',
       `[📦 Download full reports](${runUrl})`,
       '',
