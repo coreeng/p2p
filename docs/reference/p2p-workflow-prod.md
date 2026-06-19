@@ -5,6 +5,10 @@
 ## Usage
 
 ```yaml
+permissions:
+  contents: read
+  id-token: write
+
 jobs:
   prod:
     uses: coreeng/p2p/.github/workflows/p2p-workflow-prod.yaml@main
@@ -17,6 +21,10 @@ jobs:
       container_registry_url: ${{ secrets.CONTAINER_REGISTRY_URL }}
       slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
 ```
+
+## Permissions
+
+This workflow runs image scanning before deployment. The image scan authenticates to Google Cloud with GitHub OIDC, so caller workflows must grant `id-token: write` alongside `contents: read`.
 
 ## Inputs
 
