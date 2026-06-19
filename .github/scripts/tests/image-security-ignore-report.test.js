@@ -243,6 +243,83 @@ async function runOffModeAllIgnoredReport() {
   });
 }
 
+async function runUnclassifiedImageReport() {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'image-unclassified-'));
+  const workspace = path.join(tmp, 'repo');
+  const trivyDir = path.join(tmp, 'trivy');
+  const secretDir = path.join(tmp, 'trufflehog-image');
+  fs.mkdirSync(workspace, { recursive: true });
+  fs.mkdirSync(trivyDir, { recursive: true });
+  fs.mkdirSync(secretDir, { recursive: true });
+
+  const vulnReport = path.join(trivyDir, 'unclassified-vuln.json');
+  fs.writeFileSync(vulnReport, JSON.stringify({
+    Results: [
+      {
+        Target: 'api-image (debian)',
+        Vulnerabilities: [
+          {
+            VulnerabilityID: 'CVE-2026-UNCLASSIFIED',
+            PkgName: 'openssl',
+            Severity: 'UNKNOWN',
+            PrimaryURL: 'https://example.test/CVE-2026-UNCLASSIFIED',
+          },
+          {
+            VulnerabilityID: 'CVE-2026-HIGH',
+            PkgName: 'curl',
+            Severity: 'HIGH',
+            PrimaryURL: 'https://example.test/CVE-2026-HIGH',
+          },
+        ],
+      },
+    ],
+  }));
+  const reportList = path.join(trivyDir, 'reports.txt');
+  fs.writeFileSync(reportList, [
+    `europe-west2-docker.pkg.dev/project/tenant/prod/prod/services/api:1.2.3\tlinux/amd64\tsha256:api\t${vulnReport}`,
+    '',
+  ].join('\n'));
+
+  const secretReport = path.join(secretDir, 'unclassified-secret.jsonl');
+  fs.writeFileSync(secretReport, [
+    JSON.stringify({
+      DetectorName: 'Slack',
+      Verified: false,
+      Raw: 'image-secret-value',
+      SourceMetadata: { Data: { Docker: { layer: 'sha256:layer1', file: '/app/.env' } } },
+    }),
+  ].join('\n') + '\n');
+  const secretList = path.join(secretDir, 'reports.txt');
+  fs.writeFileSync(secretList, [
+    `europe-west2-docker.pkg.dev/project/tenant/prod/prod/services/api:1.2.3\tlinux/amd64\tsha256:api\t${secretReport}`,
+    '',
+  ].join('\n'));
+
+  return runReportModule({
+    RUNNER_TEMP: tmp,
+    GITHUB_WORKSPACE: workspace,
+    REPORT_LIST: reportList,
+    SECRET_REPORT_LIST: secretList,
+    BLOCKING_SEVERITY: 'critical',
+    PIPELINE_STAGE: 'prod',
+    GITHUB_ENV_INPUT: '',
+    VERSION: '1.2.3',
+    REGION: 'europe-west2',
+    PROJECT_ID: 'project',
+    TENANT_NAME: 'prod',
+    P2P_SECURITY_IGNORE_HELPER: helperPath,
+    GITHUB_SERVER_URL: 'https://github.example',
+    GITHUB_REPOSITORY: 'org/repo',
+    GITHUB_RUN_ID: '42',
+  });
+}
+
+function readStatusStepNames(workflowPath) {
+  return fs.readFileSync(workflowPath, 'utf8')
+    .split('\n')
+    .filter(line => line.includes('Output security risk:'));
+}
+
 async function runMarkdownEscapingReport() {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'image-markdown-'));
   const workspace = path.join(tmp, 'repo');
@@ -464,6 +541,8 @@ async function runMalformedTruffleHogReportList() {
 (async () => {
   const result = await runReport();
   assert.deepStrictEqual(result.failures, []);
+  assert.strictEqual(result.outputs['security-risk'], 'critical');
+  assert.strictEqual(result.outputs['scan-status'], 'ok');
   assert.strictEqual(result.outputs['total-count'], 3);
   assert.strictEqual(result.outputs['blocking-count'], 3);
   assert.strictEqual(result.outputs['secret-total-count'], 2);
@@ -587,8 +666,15 @@ async function runMalformedTruffleHogReportList() {
     error => error.message.includes('Malformed TruffleHog image report list entry'),
   );
 
+  const unclassified = await runUnclassifiedImageReport();
+  assert.deepStrictEqual(unclassified.failures, []);
+  assert.strictEqual(unclassified.outputs['security-risk'], 'unclassified');
+  assert.strictEqual(unclassified.outputs['scan-status'], 'ok');
+
   const offMode = await runOffModeAllIgnoredReport();
   assert.deepStrictEqual(offMode.failures, []);
+  assert.strictEqual(offMode.outputs['security-risk'], 'ok');
+  assert.strictEqual(offMode.outputs['scan-status'], 'ok');
   assert.strictEqual(offMode.outputs['total-count'], 0);
   assert.strictEqual(offMode.outputs['blocking-count'], 0);
   assert.strictEqual(offMode.outputs['secret-total-count'], 0);
@@ -640,6 +726,10 @@ async function runMalformedTruffleHogReportList() {
   assert(!offMode.summary.includes('### Ignored image findings'));
   assert(!offMode.summary.includes('Accepted off-mode image vulnerability.'));
   assert(!offMode.summary.includes('Accepted off-mode image secret.'));
+  const imageStatusSteps = readStatusStepNames(path.resolve(__dirname, '../../workflows/p2p-workflow-image-scan.yaml'));
+  assert.deepStrictEqual(imageStatusSteps, [
+    '      - name: "Output security risk: ${{ needs.image-scan.outputs.security-risk || \'unknown\' }}; scan: ${{ needs.image-scan.outputs.scan-status || \'failed\' }}"',
+  ]);
   console.log('image security ignore report fixtures passed');
 })().catch(error => {
   console.error(error);

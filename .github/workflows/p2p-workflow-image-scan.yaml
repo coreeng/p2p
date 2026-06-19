@@ -59,6 +59,10 @@ on:
     outputs:
       json-file:
         value: ${{ jobs.image-scan.outputs.json-file }}
+      security-risk:
+        value: ${{ jobs.image-scan.outputs.security-risk }}
+      scan-status:
+        value: ${{ jobs.image-scan.outputs.scan-status }}
 
 jobs:
   image-scan:
@@ -72,6 +76,8 @@ jobs:
       blocking-count: ${{ steps.report.outputs.blocking-count }}
       secret-total-count: ${{ steps.report.outputs.secret-total-count }}
       secret-blocking-count: ${{ steps.report.outputs.secret-blocking-count }}
+      security-risk: ${{ steps.report.outputs.security-risk }}
+      scan-status: ${{ steps.report.outputs.scan-status }}
     env:
       PROJECT_ID: ${{ vars.PROJECT_ID }}
       PROJECT_NUMBER: ${{ vars.PROJECT_NUMBER }}
@@ -246,6 +252,9 @@ jobs:
     continue-on-error: ${{ inputs.blocking-severity == 'off' }}
     timeout-minutes: 1
     steps:
+      - name: "Output security risk: ${{ needs.image-scan.outputs.security-risk || 'unknown' }}; scan: ${{ needs.image-scan.outputs.scan-status || 'failed' }}"
+        run: ':'
+
       - name: Enforce policy
         shell: bash
         env:

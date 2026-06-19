@@ -36,10 +36,13 @@ The workflow inherits permissions from the caller. Grant:
 | `license-total` | Number of restricted or forbidden license findings in the normalized report. |
 | `secret-total` | Number of redacted TruffleHog findings in the normalized report. |
 | `secret-blocking` | Number of TruffleHog findings with `status: verified` when `blocking-severity` is not `off`. |
+| `security-risk` | Maximum active source vulnerability/secret risk after ignore rules: `critical`, `unclassified`, `high`, `medium`, `low`, `ok`, or `unknown`. License findings are not included. |
+| `scan-status` | `ok` when scanner results were extracted successfully, otherwise `failed`. |
 
 Results are also surfaced via:
 
 - workflow summary;
+- policy step named `Output security risk: <risk>; scan: <status>` for dashboard extraction;
 - sticky PR comment with `header: source-security-scan-findings` on `pull_request` events;
 - `source-security-scan-findings` artifact containing redacted TruffleHog findings, raw Trivy filesystem output, and `source-security-findings.json`.
 

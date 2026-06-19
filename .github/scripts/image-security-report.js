@@ -6,6 +6,14 @@ const platformSuffix = platforms => platforms.length > 0 ? ` (${escapeHtml(platf
 const CANONICAL_SEVERITIES = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNKNOWN'];
 const SEV_RANK = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3, UNKNOWN: 4 };
 const SEV_EMOJI = { CRITICAL: '🔴', HIGH: '🟠', MEDIUM: '🟡', LOW: '🔵', UNKNOWN: '⚪' };
+const SECURITY_RISK_BY_SEVERITY = {
+  CRITICAL: 'critical',
+  HIGH: 'high',
+  MEDIUM: 'medium',
+  LOW: 'low',
+  UNKNOWN: 'unclassified',
+};
+const SECURITY_RISK_RANK = { critical: 0, unclassified: 1, high: 2, medium: 3, low: 4, ok: 5 };
 
 const blockingSeveritySet = (value, core) => {
   const threshold = String(value || 'off').trim().toLowerCase();
@@ -81,6 +89,15 @@ const normalizeVulnerabilityRows = (rawRows, group, blockingSet, options = {}) =
       id: row.cve,
     }))
     .sort(rowSort);
+};
+
+const maxSecurityRisk = (vulnerabilities, secrets) => {
+  const risks = [
+    ...vulnerabilities.map(v => SECURITY_RISK_BY_SEVERITY[v.severity] || 'unclassified'),
+    ...secrets.map(s => s.status === 'verified' ? 'critical' : 'unclassified'),
+  ];
+  if (risks.length === 0) return 'ok';
+  return risks.sort((a, b) => SECURITY_RISK_RANK[a] - SECURITY_RISK_RANK[b])[0];
 };
 
 const buildImageSecurityReport = async ({ core, env = process.env } = {}) => {
@@ -313,6 +330,8 @@ const buildImageSecurityReport = async ({ core, env = process.env } = {}) => {
     ));
 
   const allSecretRows = secretSummaries.flatMap(group => group.rows);
+  const scanStatus = listExists && secretListExists ? 'ok' : 'failed';
+  const securityRisk = scanStatus === 'failed' ? 'unknown' : maxSecurityRisk(allUniqueRows, allSecretRows);
   const totalSecretUnique = allSecretRows.length;
   const selectedSecretRows = [
     ...allSecretRows.filter(r => r.isBlocking),
@@ -441,6 +460,8 @@ const buildImageSecurityReport = async ({ core, env = process.env } = {}) => {
   core.setOutput('blocking-count', blocking);
   core.setOutput('secret-total-count', secretTotal);
   core.setOutput('secret-blocking-count', secretBlocking);
+  core.setOutput('security-risk', securityRisk);
+  core.setOutput('scan-status', scanStatus);
   await core.summary.addRaw(md).write();
 };
 

@@ -36,10 +36,13 @@ Internal workflow called by [`p2p-workflow-fastfeedback`](p2p-workflow-fastfeedb
 | Name | Description |
 |------|-------------|
 | `json-file` | Path to `image-security-findings.json` inside the runner workspace. |
+| `security-risk` | Maximum active image vulnerability/secret risk after ignore rules: `critical`, `unclassified`, `high`, `medium`, `low`, `ok`, or `unknown`. |
+| `scan-status` | `ok` when scanner results were extracted successfully, otherwise `failed`. |
 
 Results are also surfaced via:
 
 - The workflow summary (`$GITHUB_STEP_SUMMARY`).
+- Policy step named `Output security risk: <risk>; scan: <status>` for dashboard extraction.
 - A sticky PR comment with `header: image-scan-findings-<stage>-<github_env>` on `pull_request` events when `dry-run: false` and the caller grants `pull-requests: write`. When `github_env` is empty, the header uses `local`.
 - The `image-scan-reports-<stage>-<github_env>` artifact, retained for 30 days. When `github_env` is empty, the artifact name uses `local`. Contains root `manifest.json`, `image-security-findings.json`, `trivy/` (one Trivy JSON per image x platform), and `trufflehog-image/` (one redacted TruffleHog JSON-lines file per image x platform).
 

@@ -204,6 +204,56 @@ async function runReportWithoutIgnoreFile() {
   return { outputs, summary };
 }
 
+async function runReportWithScannerWarning() {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'source-scan-warning-'));
+  const root = path.join(tmp, 'source-security');
+  const workspace = path.join(tmp, 'repo');
+  fs.mkdirSync(path.join(root, 'trivy'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'trufflehog'), { recursive: true });
+  fs.mkdirSync(workspace, { recursive: true });
+  fs.writeFileSync(path.join(root, 'trivy', 'trivy-fs.json'), JSON.stringify({ Results: [] }));
+  fs.writeFileSync(path.join(root, 'trufflehog', 'findings.ndjson'), '');
+
+  const outputs = {};
+  await buildSourceSecurityReport({
+    env: {
+      ROOT: root,
+      GITHUB_WORKSPACE: workspace,
+      DRY_RUN: 'false',
+      BLOCKING_SEVERITY: 'high',
+      SCOPE: 'changes',
+      BASE: 'base-sha',
+      SECRET_SCAN_RESULT: 'failure',
+      SCA_SCAN_RESULT: 'success',
+      P2P_SECURITY_IGNORE_HELPER: helperPath,
+      GITHUB_SERVER_URL: 'https://github.example',
+      GITHUB_REPOSITORY: 'org/repo',
+      GITHUB_RUN_ID: '42',
+    },
+    core: {
+      setOutput: (key, value) => { outputs[key] = value; },
+      setFailed: () => {},
+      info: () => {},
+      warning: () => {},
+      summary: {
+        addRaw() {
+          return this;
+        },
+        write() {
+          return Promise.resolve();
+        },
+      },
+    },
+  });
+  return { outputs };
+}
+
+function readStatusStepNames(workflowPath) {
+  return fs.readFileSync(workflowPath, 'utf8')
+    .split('\n')
+    .filter(line => line.includes('Output security risk:'));
+}
+
 async function runUnsafeMarkdownReport() {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'source-markdown-'));
   const root = path.join(tmp, 'source-security');
@@ -710,6 +760,8 @@ async function runReportWithMissingTruffleHogOutput() {
 (async () => {
   const result = await runReport();
   assert.deepStrictEqual(result.failures, []);
+  assert.strictEqual(result.outputs['security-risk'], 'unclassified');
+  assert.strictEqual(result.outputs['scan-status'], 'ok');
   assert.strictEqual(result.outputs['vulnerability-total'], 2);
   assert.strictEqual(result.outputs['vulnerability-blocking'], 0);
   assert.strictEqual(result.outputs['license-total'], 1);
@@ -749,6 +801,8 @@ async function runReportWithMissingTruffleHogOutput() {
   assert(!result.summary.includes('https://example.test/GHSA-xxjr-mmjv-4gpg'));
 
   const noIgnore = await runReportWithoutIgnoreFile();
+  assert.strictEqual(noIgnore.outputs['security-risk'], 'critical');
+  assert.strictEqual(noIgnore.outputs['scan-status'], 'ok');
   assert.strictEqual(noIgnore.outputs['vulnerability-total'], 1);
   assert.strictEqual(noIgnore.outputs['vulnerability-blocking'], 1);
   assert(!noIgnore.summary.includes('**Ignored:**'));
@@ -767,6 +821,8 @@ async function runReportWithMissingTruffleHogOutput() {
 
   const allIgnored = await runAllIgnoredReport();
   assert.deepStrictEqual(allIgnored.failures, []);
+  assert.strictEqual(allIgnored.outputs['security-risk'], 'ok');
+  assert.strictEqual(allIgnored.outputs['scan-status'], 'ok');
   assert.strictEqual(allIgnored.outputs['vulnerability-total'], 0);
   assert.strictEqual(allIgnored.outputs['vulnerability-blocking'], 0);
   assert.strictEqual(allIgnored.outputs['secret-total'], 0);
@@ -800,6 +856,8 @@ async function runReportWithMissingTruffleHogOutput() {
 
   const offModeVerifiedSecret = await runOffModeVerifiedSecretReport();
   assert.deepStrictEqual(offModeVerifiedSecret.failures, []);
+  assert.strictEqual(offModeVerifiedSecret.outputs['security-risk'], 'critical');
+  assert.strictEqual(offModeVerifiedSecret.outputs['scan-status'], 'ok');
   assert.strictEqual(offModeVerifiedSecret.outputs['secret-total'], 1);
   assert.strictEqual(offModeVerifiedSecret.outputs['secret-blocking'], 0);
   assert.deepStrictEqual(offModeVerifiedSecret.normalized.secrets.map(s => ({
@@ -839,6 +897,13 @@ async function runReportWithMissingTruffleHogOutput() {
     () => runReportWithMissingTruffleHogOutput(),
     error => error.message.includes('Failed to process TruffleHog source report'),
   );
+  const scannerWarning = await runReportWithScannerWarning();
+  assert.strictEqual(scannerWarning.outputs['security-risk'], 'unknown');
+  assert.strictEqual(scannerWarning.outputs['scan-status'], 'failed');
+  const sourceStatusSteps = readStatusStepNames(path.resolve(__dirname, '../../workflows/p2p-workflow-source-security-scan.yaml'));
+  assert.deepStrictEqual(sourceStatusSteps, [
+    '      - name: "Output security risk: ${{ needs.report.outputs.security-risk || \'unknown\' }}; scan: ${{ needs.report.outputs.scan-status || \'failed\' }}"',
+  ]);
   for (const mode of ['missing', 'empty', 'invalid']) {
     await assert.rejects(
       () => runReportWithInvalidTrivyOutput(mode),

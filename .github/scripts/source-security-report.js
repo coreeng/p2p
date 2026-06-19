@@ -5,6 +5,14 @@ const { code, escapeCell, markdownLink } = require('./markdown.js');
 const CANONICAL_SEVERITIES = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNKNOWN'];
 const SEV_RANK = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3, UNKNOWN: 4 };
 const SEV_EMOJI = { CRITICAL: '🔴', HIGH: '🟠', MEDIUM: '🟡', LOW: '🔵', UNKNOWN: '⚪' };
+const SECURITY_RISK_BY_SEVERITY = {
+  CRITICAL: 'critical',
+  HIGH: 'high',
+  MEDIUM: 'medium',
+  LOW: 'low',
+  UNKNOWN: 'unclassified',
+};
+const SECURITY_RISK_RANK = { critical: 0, unclassified: 1, high: 2, medium: 3, low: 4, ok: 5 };
 
 const severitySet = value => new Set(String(value || '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean));
 const blockingSeveritySet = (value, core) => {
@@ -103,6 +111,15 @@ const selectedRowsBySource = rows => {
   return bySource;
 };
 
+const maxSecurityRisk = (vulnerabilities, secrets) => {
+  const risks = [
+    ...vulnerabilities.map(v => SECURITY_RISK_BY_SEVERITY[v.severity] || 'unclassified'),
+    ...secrets.map(s => s.status === 'verified' ? 'critical' : 'unclassified'),
+  ];
+  if (risks.length === 0) return 'ok';
+  return risks.sort((a, b) => SECURITY_RISK_RANK[a] - SECURITY_RISK_RANK[b])[0];
+};
+
 const buildSourceSecurityReport = async ({ core, env = process.env } = {}) => {
 const securityIgnoreHelper = env.P2P_SECURITY_IGNORE_HELPER || path.join(__dirname, 'p2p-security-ignore.js');
 const {
@@ -131,7 +148,7 @@ if (!dryRun) {
     scannerWarnings.push('TruffleHog output was not available; secret results may be incomplete.');
   }
 }
-const reportSeveritySet = severitySet('LOW,MEDIUM,HIGH,CRITICAL');
+const reportSeveritySet = severitySet('LOW,MEDIUM,HIGH,CRITICAL,UNKNOWN');
 const blockingSet = blockingSeveritySet(env.BLOCKING_SEVERITY, core);
 const reportedSeverities = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
 const securityIgnore = loadSecurityIgnore(env.GITHUB_WORKSPACE);
@@ -206,6 +223,8 @@ const ignoredSecrets = secretSplit.ignored.sort((a, b) => a.detector.localeCompa
 
 const vulnerabilityBlocking = activeVulnerabilities.filter(v => v.blocking).length;
 const secretBlocking = blockingSet.has('CRITICAL') ? activeSecrets.filter(s => s.blocking).length : 0;
+const scanStatus = scannerWarnings.length > 0 ? 'failed' : 'ok';
+const securityRisk = scanStatus === 'failed' ? 'unknown' : maxSecurityRisk(activeVulnerabilities, activeSecrets);
 const normalized = { vulnerabilities: activeVulnerabilities, licenses, secrets: activeSecrets };
 if (securityIgnore.present) {
   normalized.ignored = {
@@ -354,6 +373,8 @@ core.setOutput('vulnerability-blocking', vulnerabilityBlocking);
 core.setOutput('license-total', licenses.length);
 core.setOutput('secret-total', activeSecrets.length);
 core.setOutput('secret-blocking', secretBlocking);
+core.setOutput('security-risk', securityRisk);
+core.setOutput('scan-status', scanStatus);
 await core.summary.addRaw(markdown).write();
 };
 

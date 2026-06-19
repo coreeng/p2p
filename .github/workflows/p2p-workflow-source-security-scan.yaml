@@ -35,6 +35,10 @@ on:
         value: ${{ jobs.report.outputs.secret-total }}
       secret-blocking:
         value: ${{ jobs.report.outputs.secret-blocking }}
+      security-risk:
+        value: ${{ jobs.report.outputs.security-risk }}
+      scan-status:
+        value: ${{ jobs.report.outputs.scan-status }}
 
 jobs:
   secret-scan:
@@ -191,6 +195,8 @@ jobs:
       license-total: ${{ steps.report.outputs.license-total }}
       secret-total: ${{ steps.report.outputs.secret-total }}
       secret-blocking: ${{ steps.report.outputs.secret-blocking }}
+      security-risk: ${{ steps.report.outputs.security-risk }}
+      scan-status: ${{ steps.report.outputs.scan-status }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -266,6 +272,9 @@ jobs:
     continue-on-error: ${{ inputs.blocking-severity == 'off' }}
     timeout-minutes: 1
     steps:
+      - name: "Output security risk: ${{ needs.report.outputs.security-risk || 'unknown' }}; scan: ${{ needs.report.outputs.scan-status || 'failed' }}"
+        run: ':'
+
       - name: Enforce scan policy
         shell: bash
         env:
