@@ -268,6 +268,11 @@ function assertSourcePolicyFailsOnAnyFindingButOnlyBlocksOnBlockingFindings(work
   assert(workflow.includes('Security finding(s) detected below blocking-severity=${BLOCKING_SEVERITY}; this policy job is allowed to fail without failing the workflow.'));
 }
 
+function assertSourceTrivyReportsUnknownSeverity(workflowPath) {
+  const workflow = fs.readFileSync(workflowPath, 'utf8');
+  assert(workflow.includes('--severity "UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL"'));
+}
+
 async function runUnsafeMarkdownReport() {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'source-markdown-'));
   const root = path.join(tmp, 'source-security');
@@ -925,6 +930,7 @@ async function runReportWithMissingTruffleHogOutput() {
   ]);
   assertWorkflowEnforcesScanStatus(path.resolve(__dirname, '../../workflows/p2p-workflow-source-security-scan.yaml'), 'report');
   assertSourcePolicyFailsOnAnyFindingButOnlyBlocksOnBlockingFindings(path.resolve(__dirname, '../../workflows/p2p-workflow-source-security-scan.yaml'));
+  assertSourceTrivyReportsUnknownSeverity(path.resolve(__dirname, '../../workflows/p2p-workflow-source-security-scan.yaml'));
   for (const mode of ['missing', 'empty', 'invalid']) {
     await assert.rejects(
       () => runReportWithInvalidTrivyOutput(mode),

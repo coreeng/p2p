@@ -169,7 +169,7 @@ jobs:
         run: |
           set -euo pipefail
           out="$RUNNER_TEMP/trivy-fs.json"
-          args=(fs --format json --scanners "vuln,license" --severity "LOW,MEDIUM,HIGH,CRITICAL" --exit-code 0 --output "$out")
+          args=(fs --format json --scanners "vuln,license" --severity "UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL" --exit-code 0 --output "$out")
           if [ "$IGNORE_UNFIXED" = "true" ]; then
             args+=(--ignore-unfixed)
           fi

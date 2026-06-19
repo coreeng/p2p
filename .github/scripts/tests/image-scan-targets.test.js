@@ -94,6 +94,13 @@ async function runScanFunction(scanFunction, options = {}) {
       'europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/prod/worker:1.2.3@sha256:worker',
     ],
   );
+  assert.deepStrictEqual(
+    trivyRun.calls.map(call => call.args.slice(call.args.indexOf('--severity'), call.args.indexOf('--severity') + 2)),
+    [
+      ['--severity', 'UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL'],
+      ['--severity', 'UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL'],
+    ],
+  );
 
   const secretRun = await runScanFunction(secretScanImages);
   assert.deepStrictEqual(secretRun.failures, []);

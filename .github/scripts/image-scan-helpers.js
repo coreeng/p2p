@@ -153,7 +153,7 @@ async function scanImages({
     const args = [
       'image',
       '--format', 'json',
-      '--severity', 'LOW,MEDIUM,HIGH,CRITICAL',
+      '--severity', 'UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL',
       ...(ignoreUnfixed ? ['--ignore-unfixed'] : []),
       '--scanners', 'vuln',
       '--exit-code', '0',
