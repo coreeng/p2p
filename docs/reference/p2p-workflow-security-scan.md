@@ -39,6 +39,7 @@ jobs:
 | `working-directory` | string | No | `.` | Working directory for `make p2p-images` and downstream make targets. |
 | `region` | string | No | `europe-west2` | GCP region; overridden by `vars.REGION`. |
 | `dry-run` | boolean | No | `false` | Passed through to child workflows; skips registry lookups and scans. |
+| `checkout-version` | string | No | `''` | Internal consistency input for child checkouts. Application wrappers should normally omit it. |
 | `security-scan-blocking-severity` | string | No | `off` | Minimum security finding severity that blocks the umbrella workflow: `off`, `low`, `medium`, `high`, or `critical`. Verified secrets are treated as `critical`. Child policy jobs fail on active findings, but the umbrella workflow continues when findings are below the blocking threshold. |
 | `timeout-minutes` | number | No | `30` | Timeout for the `source-security-scan` job. Image-scan jobs use their own default. |
 

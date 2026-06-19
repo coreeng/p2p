@@ -117,6 +117,7 @@ jobs:
       region: ${{ inputs.region }}
       working-directory: ${{ inputs.working-directory }}
       dry-run: ${{ inputs.dry-run }}
+      checkout-version: ${{ inputs.version-prefix }}${{ inputs.version }}
       blocking-severity: ${{ inputs.security-scan-blocking-severity }}
 
   promote:

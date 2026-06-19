@@ -106,6 +106,7 @@ jobs:
       secret-scan-scope: changes
       blocking-severity: ${{ inputs.security-scan-blocking-severity }}
       dry-run: ${{ inputs.dry-run }}
+      checkout-version: ${{ inputs.checkout-version }}
       timeout-minutes: 10
 
   image-scan:
@@ -127,6 +128,7 @@ jobs:
       region: ${{ inputs.region }}
       working-directory: ${{ inputs.working-directory }}
       dry-run: ${{ inputs.dry-run }}
+      checkout-version: ${{ inputs.checkout-version }}
       blocking-severity: ${{ inputs.security-scan-blocking-severity }}
 
   functional-test:

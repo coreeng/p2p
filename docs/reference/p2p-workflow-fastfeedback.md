@@ -78,11 +78,13 @@ build
 
 image-scan           (needs: build)
                      Calls p2p-workflow-image-scan against the built images.
+                     Checks out the same checkout-version ref for image target resolution.
                      Blocks the workflow on findings at or above
                      security-scan-blocking-severity (default: off).
 
 source-security-scan  (independent of build; runs in parallel)
                       Calls p2p-workflow-source-security-scan with secret-scan-scope: changes.
+                      Checks out the same checkout-version ref as build/test jobs.
                       Reports source vulnerabilities, restricted/forbidden licenses,
                       and git-tree secrets. Blocks only on vulnerabilities at or above
                       security-scan-blocking-severity or verified secrets when the

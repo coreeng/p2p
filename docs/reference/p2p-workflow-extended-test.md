@@ -72,6 +72,7 @@ run-tests     Runs p2p-extended-test make target.
 image-scan    (independent of run-tests; runs in parallel)
               Calls p2p-workflow-image-scan against the source images.
               Only runs on main-branch.
+              checkout-version = version-prefix + version.
               Blocks the workflow on findings at or above
               security-scan-blocking-severity (default: off).
 

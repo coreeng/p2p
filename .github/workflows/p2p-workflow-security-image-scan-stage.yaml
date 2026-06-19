@@ -42,6 +42,10 @@ on:
         required: false
         type: boolean
         default: false
+      checkout-version:
+        required: false
+        type: string
+        default: ''
       security-scan-blocking-severity:
         description: |
           Minimum severity that blocks the workflow for image-scan findings:
@@ -88,4 +92,5 @@ jobs:
       working-directory: ${{ inputs.working-directory }}
       image-names: ${{ inputs.image-names }}
       dry-run: ${{ inputs.dry-run }}
+      checkout-version: ${{ inputs.checkout-version }}
       blocking-severity: ${{ inputs.security-scan-blocking-severity }}

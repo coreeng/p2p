@@ -64,6 +64,7 @@ validate-version
 
 └── image-scan  Calls p2p-workflow-image-scan against the prod-registry images.
                 Only runs on main-branch.
+                checkout-version = version-prefix + version.
                 Blocks the workflow on findings at or above
                 security-scan-blocking-severity (default: off).
 └── prod-deploy (needs: image-scan)

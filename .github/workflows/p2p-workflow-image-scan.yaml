@@ -44,6 +44,10 @@ on:
         required: false
         type: boolean
         default: false
+      checkout-version:
+        required: false
+        type: string
+        default: ''
       blocking-severity:
         required: false
         type: string
@@ -89,6 +93,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.dry-run == false && inputs.checkout-version || '' }}
 
       - name: Checkout P2P workflow sources
         uses: actions/checkout@v6

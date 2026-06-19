@@ -35,6 +35,10 @@ on:
         required: false
         type: boolean
         default: false
+      checkout-version:
+        required: false
+        type: string
+        default: ''
       security-scan-blocking-severity:
         description: |
           Minimum severity that blocks the workflow for source-security-scan
@@ -54,6 +58,7 @@ jobs:
       secret-scan-scope: full-history
       blocking-severity: ${{ inputs.security-scan-blocking-severity }}
       dry-run: ${{ inputs.dry-run }}
+      checkout-version: ${{ inputs.checkout-version }}
       timeout-minutes: ${{ inputs.timeout-minutes }}
 
   # Resolve a single anchor image used to look up the latest version per
@@ -67,6 +72,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.dry-run == false && inputs.checkout-version || '' }}
       - id: pick
         name: Pick anchor image
         shell: bash
@@ -111,6 +118,7 @@ jobs:
       github_env: ${{ matrix.deploy_env }}
       working-directory: ${{ inputs.working-directory }}
       dry-run: ${{ inputs.dry-run }}
+      checkout-version: ${{ inputs.checkout-version }}
       security-scan-blocking-severity: ${{ inputs.security-scan-blocking-severity }}
 
   image-scan-extended-test:
@@ -137,6 +145,7 @@ jobs:
       github_env: ${{ matrix.deploy_env }}
       working-directory: ${{ inputs.working-directory }}
       dry-run: ${{ inputs.dry-run }}
+      checkout-version: ${{ inputs.checkout-version }}
       security-scan-blocking-severity: ${{ inputs.security-scan-blocking-severity }}
 
   image-scan-prod:
@@ -163,4 +172,5 @@ jobs:
       github_env: ${{ matrix.deploy_env }}
       working-directory: ${{ inputs.working-directory }}
       dry-run: ${{ inputs.dry-run }}
+      checkout-version: ${{ inputs.checkout-version }}
       security-scan-blocking-severity: ${{ inputs.security-scan-blocking-severity }}

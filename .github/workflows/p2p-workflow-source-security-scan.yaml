@@ -16,6 +16,10 @@ on:
         required: false
         type: boolean
         default: false
+      checkout-version:
+        required: false
+        type: string
+        default: ''
       timeout-minutes:
         required: false
         type: number
@@ -51,6 +55,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
         with:
+          ref: ${{ inputs.dry-run == false && inputs.checkout-version || '' }}
           fetch-depth: 0
 
       - id: scan-range
@@ -145,6 +150,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.dry-run == false && inputs.checkout-version || '' }}
 
       - name: Install Trivy
         if: ${{ inputs.dry-run == false }}
@@ -200,6 +207,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.dry-run == false && inputs.checkout-version || '' }}
 
       - name: Checkout P2P workflow sources
         uses: actions/checkout@v6

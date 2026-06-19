@@ -18,6 +18,7 @@ Internal workflow called by [`p2p-workflow-fastfeedback`](p2p-workflow-fastfeedb
 | `working-directory` | string | No | `.` | Directory from which `make p2p-images` is executed when `image-names` is empty. |
 | `image-names` | string | No | `''` | Newline-, comma-, or whitespace-separated list of standard P2P image names to scan. When set, this list is used instead of `make p2p-images`. |
 | `dry-run` | boolean | No | `false` | When `true`, skips GCP auth, registry login, Trivy install, the scan itself, the sticky PR comment, the artifact upload, and the policy step. The `Build report` step still runs and produces a "Scan skipped" summary. |
+| `checkout-version` | string | No | `''` | Git ref to check out before resolving image names. Ignored when `dry-run` is `true`; the workflow checks out the default ref. |
 | `blocking-severity` | string | No | `off` | Minimum finding severity that blocks the workflow: `off`, `low`, `medium`, `high`, or `critical`. Verified image secrets are treated as `critical`. The policy job fails on active vulnerability or secret findings, but the workflow continues when findings are below the blocking threshold. |
 | `ignore-unfixed` | boolean | No | `true` | When `true`, passes `--ignore-unfixed` to Trivy — only vulnerabilities with a fixed version are reported. |
 | `timeout-minutes` | number | No | `20` | Job timeout. |
@@ -64,7 +65,7 @@ The job runs under `environment: ${{ inputs.github_env }}` and authenticates to 
 
 ## Image resolution
 
-If `image-names` is set, the workflow splits it on commas or whitespace and scans exactly those standard P2P image names. If it is empty, the workflow runs `make p2p-images` in `working-directory`; that target must print standard P2P image names with no registry and no tag. Each image name is combined with the registry path for `pipeline-stage` and the `version` input to form the full reference:
+If `image-names` is set, the workflow splits it on commas or whitespace and scans exactly those standard P2P image names. If it is empty, the workflow runs `make p2p-images` in `working-directory` after checking out `checkout-version`; that target must print standard P2P image names with no registry and no tag. Each image name is combined with the registry path for `pipeline-stage` and the `version` input to form the full reference:
 
 ```
 <region>-docker.pkg.dev/<project>/tenant/<tenant>/<pipeline-stage>/<image>:<version>

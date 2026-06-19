@@ -14,6 +14,7 @@ Internal workflow called from [`p2p-workflow-fastfeedback`](p2p-workflow-fastfee
 | `blocking-severity` | string | No | `off` | Minimum finding severity that blocks the workflow: `off`, `low`, `medium`, `high`, or `critical`. Verified secrets are treated as `critical`. The policy job fails on active vulnerability or secret findings, but the workflow continues when findings are below the blocking threshold. |
 | `ignore-unfixed` | boolean | No | `true` | Passed to Trivy vulnerability scanning. |
 | `dry-run` | boolean | No | `false` | When `true`, skips scanner installs, scans, sticky PR comments, artifact upload, and policy enforcement. The summary reports that the scan was skipped. |
+| `checkout-version` | string | No | `''` | Git ref to check out before scanning. Ignored when `dry-run` is `true`; the workflow checks out the default ref. |
 | `timeout-minutes` | number | No | `30` | Job timeout for scanner jobs. |
 
 ## Permissions
@@ -50,7 +51,7 @@ If the repository root contains `.p2p-security-ignore.yaml`, source vulnerabilit
 
 `source-security-findings.json` uses top-level `vulnerabilities`, `licenses`, and `secrets` collections. When an ignore file is present, it also includes `ignored.vulnerabilities` and `ignored.secrets`.
 
-The source scan scope is scanner-specific. With `secret-scan-scope: changes`, TruffleHog limits git scanning to the changed commit range, while Trivy still scans the current checked-out source tree. With `secret-scan-scope: full-history`, TruffleHog scans reachable git history, while Trivy still scans only the current branch's checked-out tree. Trivy is not limited to `working-directory`, so shared manifests and related modules outside the P2P make target directory are still covered.
+The source scan scope is scanner-specific. With `secret-scan-scope: changes`, TruffleHog limits git scanning to the changed commit range, while Trivy still scans the current checked-out source tree. With `secret-scan-scope: full-history`, TruffleHog scans reachable git history, while Trivy still scans only the current branch's checked-out tree. When called from fast-feedback, the source scan checks out the same `checkout-version` ref as build, test, and promotion jobs. Trivy is not limited to `working-directory`, so shared manifests and related modules outside the P2P make target directory are still covered.
 
 ## Security ignore file
 
