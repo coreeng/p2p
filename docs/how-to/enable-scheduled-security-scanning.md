@@ -50,7 +50,7 @@ To make scheduled scans block on findings, set `security-scan-blocking-severity`
 
 ## 3. Image discovery
 
-By default, the umbrella runs `make p2p-images` from `working-directory` and uses the first returned image name as the anchor for latest-version discovery. All image names returned by `make p2p-images` are then passed to each stage image scan.
+By default, the umbrella runs `make p2p-images` from `working-directory` and uses the first returned image name as the anchor for latest-version discovery. Each stage image scan then resolves its scan targets independently: it uses the explicit `image-names` input when provided, or runs `make p2p-images` from `working-directory` when `image-names` is empty.
 
 If your repository cannot use `make p2p-images` for scheduled scans, pass `image-names` explicitly:
 
@@ -70,15 +70,15 @@ jobs:
         worker
 ```
 
-The first image name is used to find the latest deployed version in each stage registry path. If a stage has no deployed image tag yet, that stage scan is skipped after writing a log line.
+The first explicit image name is used to find the latest deployed version in each stage registry path. If `image-names` is empty, the first name returned by `make p2p-images` is used for discovery. If a stage has no deployed image tag yet, that stage scan is skipped after writing a log line.
 
 ## 4. Review the reports
 
 Each run emits:
 
 - workflow summaries for source security and each image scan;
-- `source-security-scan-findings`, retained for 30 days;
-- `image-scan-reports-<stage>-<github_env>` for each scanned stage/environment, retained for 30 days.
+- on non-dry-run source scans where report generation completes, `source-security-scan-findings`, retained for 30 days;
+- on successful non-dry-run image scans where a latest image tag is found, `image-scan-reports-<stage>-<github_env>` for each scanned stage/environment, retained for 30 days.
 
 The source artifact contains redacted TruffleHog output, raw Trivy filesystem output, and normalized merged JSON. Each image artifact contains a root `manifest.json`, Trivy vulnerability JSON reports, and TruffleHog image JSON-lines reports.
 

@@ -4,7 +4,7 @@ If fast-feedback, extended-test, or prod surfaces a security finding, use this g
 
 ## 1. Read the PR comment
 
-On pull requests, the scanners upsert sticky comments in the PR conversation instead of posting a new comment on every run.
+On pull requests, the scanners upsert sticky comments in the PR conversation instead of posting a new comment on every run when the caller grants `pull-requests: write`.
 
 | Source | Sticky comment header | Artifact |
 |---|---|---|
@@ -16,7 +16,7 @@ On pull requests, the scanners upsert sticky comments in the PR conversation ins
 
 Restricted and forbidden license findings are shown for triage only. The source scan reports only HIGH and CRITICAL license classifications. Trivy's license classification is not a legal decision and is not a P2P-wide organization policy; confirm the finding against your organization's open-source policy before taking enforcement action.
 
-Image-scan PR comments are optional for backward compatibility with orchestrator workflows that existed before image scanning posted comments. If the caller does not grant `pull-requests: write`, the workflow still writes the summary and uploads artifacts, but the sticky PR comment is skipped by the non-fatal comment step.
+PR comments are optional for backward compatibility with orchestrator workflows that existed before security scans posted comments. If the caller does not grant `pull-requests: write`, the workflows still write summaries and upload artifacts, but the sticky PR comment steps are non-fatal and cannot update the PR.
 
 The source-security comment renders source vulnerabilities, restricted or forbidden licenses, and git-tree secrets under one header. Vulnerability rows include package, installed version, fixed version, CVE, and source where available. License rows identify the package and detected license. Git-tree secret rows show `Detector`, `Status`, `File`, `Line`, and `Commit`.
 

@@ -1,6 +1,6 @@
 # p2p-workflow-source-security-scan
 
-> Scans repository source for committed secrets, dependency vulnerabilities, and restricted or forbidden licenses. Produces a workflow summary, a compact sticky PR comment, and a `source-security-scan-findings` artifact. A separate policy job fails on active vulnerability or secret findings; the configured blocking severity controls whether that policy failure fails the workflow.
+> Scans repository source for committed secrets, dependency vulnerabilities, and restricted or forbidden licenses. Produces a workflow summary, optionally posts a sticky PR comment on `pull_request` events when permissions allow, and uploads a `source-security-scan-findings` artifact. A separate policy job fails on active vulnerability or secret findings; the configured blocking severity controls whether that policy failure fails the workflow.
 
 ## Usage
 
@@ -13,7 +13,7 @@ Internal workflow called from [`p2p-workflow-fastfeedback`](p2p-workflow-fastfee
 | `secret-scan-scope` | string | Yes | - | `changes` for PR/push scanning or `full-history` for scheduled monitoring. TruffleHog uses this to choose git history scope. Trivy scans the current checked-out source tree. |
 | `blocking-severity` | string | No | `off` | Minimum finding severity that blocks the workflow: `off`, `low`, `medium`, `high`, or `critical`. When blocking is enabled, verified secrets are treated as `critical`. The policy job fails on active vulnerability or secret findings, but the workflow continues when findings are below the blocking threshold. |
 | `ignore-unfixed` | boolean | No | `true` | Passed to Trivy vulnerability scanning. |
-| `dry-run` | boolean | No | `false` | When `true`, skips scanner installs, scans, sticky PR comments, artifact upload, and policy enforcement. The summary reports that the scan was skipped. |
+| `dry-run` | boolean | No | `false` | When `true`, skips scanner installs, scans, sticky PR comments, artifact upload, and policy enforcement. The summary reports that the scan was skipped. Dry-run still parses `.p2p-security-ignore.yaml`, so a malformed ignore file can fail report generation. |
 | `checkout-version` | string | No | `''` | Git ref to check out before scanning. Ignored when `dry-run` is `true`; the workflow checks out the default ref. |
 | `timeout-minutes` | number | No | `30` | Job timeout for scanner jobs. |
 
@@ -30,8 +30,8 @@ The workflow inherits permissions from the caller. Grant:
 
 | Name | Description |
 |------|-------------|
-| `report-file` | Path to the generated markdown report inside the runner workspace. |
-| `json-file` | Path to `source-security-findings.json` inside the runner workspace. |
+| `report-file` | Path to the generated markdown report on the runner, normally under `runner.temp`. |
+| `json-file` | Path to `source-security-findings.json` on the runner, normally under `runner.temp`. |
 | `vulnerability-total` | Number of source vulnerability findings in the normalized report. |
 | `vulnerability-blocking` | Number of reported vulnerability findings at or above `blocking-severity`. |
 | `license-total` | Number of restricted or forbidden license findings in the normalized report. |

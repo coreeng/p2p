@@ -5,6 +5,10 @@
 ## Usage
 
 ```yaml
+permissions:
+  contents: read
+  id-token: write
+
 jobs:
   get-version:
     uses: coreeng/p2p/.github/workflows/p2p-get-latest-image-extended-test.yaml@main
@@ -39,7 +43,7 @@ jobs:
 
 | Name | Description |
 |------|-------------|
-| `version` | The highest semver-sorted image tag found in the `extended-test` registry path. |
+| `version` | The highest semver-sorted image tag found in the `extended-test` registry path, `0.0.0` when `dry-run` is `true`, or empty when no tags are found. |
 
 ## Job Graph
 

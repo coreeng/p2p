@@ -43,9 +43,9 @@ jobs:
 | [p2p-workflow-fastfeedback](docs/reference/p2p-workflow-fastfeedback.md) | Build, test (functional + NFT + integration), promote |
 | [p2p-workflow-extended-test](docs/reference/p2p-workflow-extended-test.md) | Run extended tests, promote to prod registry |
 | [p2p-workflow-prod](docs/reference/p2p-workflow-prod.md) | Deploy to production |
+| [p2p-workflow-security-scan](docs/reference/p2p-workflow-security-scan.md) | Run source and latest image security scans |
 | [p2p-get-latest-image-extended-test](docs/reference/p2p-get-latest-image-extended-test.md) | Resolve latest image version in extended-test registry |
 | [p2p-get-latest-image-prod](docs/reference/p2p-get-latest-image-prod.md) | Resolve latest image version in prod registry |
-| [p2p-workflow-security-scan](docs/reference/p2p-workflow-security-scan.md) | Umbrella workflow for scheduled security scans. Runs source-security-scan plus per-stage image-scans for the latest version in fast-feedback, extended-test, and prod. |
 
 ### Internal Workflows
 

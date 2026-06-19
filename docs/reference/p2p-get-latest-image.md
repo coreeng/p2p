@@ -5,6 +5,10 @@
 ## Usage
 
 ```yaml
+permissions:
+  contents: read
+  id-token: write
+
 jobs:
   get-version:
     uses: coreeng/p2p/.github/workflows/p2p-get-latest-image.yaml@main
@@ -32,7 +36,7 @@ jobs:
 
 | Name | Required | Description |
 |------|----------|-------------|
-| `env_vars` | No | Newline-delimited `KEY=VALUE` pairs decoded into the job environment. |
+| `env_vars` | No | Accepted for wrapper workflow interface compatibility; not currently consumed by this workflow. |
 
 ## Outputs
 

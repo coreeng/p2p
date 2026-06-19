@@ -45,7 +45,7 @@ Grant `pull-requests: write` when the workflow runs on pull requests so source a
 | `working-directory` | `string` | No | `.` | Repository path from which make targets are executed. |
 | `skip-fastfeedback-integration-on-prs` | `boolean` | No | `false` | When `true`, skips the `integration-test` job on pull requests (runs unconditionally on main or tags). |
 | `skip-subnamespaces-create` | `boolean` | No | `false` | Skips creating subnamespaces before running make targets. |
-| `artifacts` | `string` | No | `''` | Comma-separated list of artifact paths to upload after each stage. |
+| `artifacts` | `string` | No | `''` | YAML-formatted map of make target names to artifact paths. Paths matching each active command are uploaded after that command runs. |
 | `security-scan-blocking-severity` | `string` | No | `off` | Minimum security finding severity that blocks the workflow: `off`, `low`, `medium`, `high`, or `critical`. When blocking is enabled, verified secrets are treated as `critical`. Policy jobs fail on active findings, but the workflow continues when findings are below the blocking threshold. |
 
 ## Secrets

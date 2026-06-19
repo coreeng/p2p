@@ -36,7 +36,7 @@ jobs:
 |------|------|----------|---------|-------------|
 | `tenant-name` | string | No | `''` | Tenant identifier passed through to child workflows. Falls back to `vars.TENANT_NAME` when empty. |
 | `image-names` | string | No | `''` | Newline-, comma-, or whitespace-separated list of standard P2P image names. The first entry is the version-lookup anchor for each stage, and the full list is passed to each image scan. If empty, image scans fall back to `make p2p-images` in `working-directory`. |
-| `working-directory` | string | No | `.` | Working directory for `make p2p-images` and downstream make targets. |
+| `working-directory` | string | No | `.` | Working directory for `make p2p-images` when `image-names` is empty. |
 | `region` | string | No | `europe-west2` | GCP region; overridden by `vars.REGION`. |
 | `dry-run` | boolean | No | `false` | Passed through to child workflows; still resolves the anchor image from `image-names` or `make p2p-images`, then skips registry lookups and scans. |
 | `checkout-version` | string | No | `''` | Internal consistency input for child checkouts. Application wrappers should normally omit it. |
@@ -47,7 +47,7 @@ jobs:
 
 | Name | Required | Description |
 |------|----------|-------------|
-| `env_vars` | No | Forwarded to all child workflows. |
+| `env_vars` | No | Forwarded to image discovery and image scan child workflows. |
 | `container_registry_user` | No | Forwarded to image-scan when private base images need authentication. |
 | `container_registry_pat` | No | Forwarded to image-scan. |
 | `container_registry_url` | No | Forwarded to image-scan. |
@@ -57,8 +57,8 @@ jobs:
 None. Results are surfaced via:
 
 - Each child job's workflow summary (`$GITHUB_STEP_SUMMARY`).
-- `source-security-scan-findings` artifact from the source-security-scan job. Contains redacted TruffleHog output, raw Trivy filesystem output, and normalized merged JSON. Scheduled source scanning uses TruffleHog for reachable git history and Trivy for the current branch's checked-out source tree.
-- `image-scan-reports-<stage>-<github_env>` artifact from each image-scan job. Each artifact contains root `manifest.json`, `trivy/` vulnerability JSON reports, and `trufflehog-image/` secret JSON-lines reports. `manifest.json` records the P2P stage (`fast-feedback`, `extended-test`, or `prod`) and is the supported artifact index.
+- On non-dry-run source scans where report generation completes, the `source-security-scan-findings` artifact from the source-security-scan job. It contains redacted TruffleHog output, raw Trivy filesystem output when available, and normalized merged JSON. Scheduled source scanning uses TruffleHog for reachable git history and Trivy for the current branch's checked-out source tree. Scanner warnings or incomplete scanner output still fail the scan-status policy job.
+- On successful non-dry-run image scans where a latest image tag is found, the `image-scan-reports-<stage>-<github_env>` artifact from each image-scan job. Each artifact contains root `manifest.json`, `trivy/` vulnerability JSON reports, and `trufflehog-image/` secret JSON-lines reports. `manifest.json` records the P2P stage (`fast-feedback`, `extended-test`, or `prod`) and is the supported artifact index.
 
 ## Job Graph
 

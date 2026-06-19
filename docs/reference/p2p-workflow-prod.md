@@ -10,10 +10,19 @@ permissions:
   id-token: write
 
 jobs:
+  get-latest-version:
+    uses: coreeng/p2p/.github/workflows/p2p-get-latest-image-prod.yaml@main
+    with:
+      image-name: my-app
+    secrets:
+      env_vars: ${{ secrets.ENV_VARS }}
+      slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+
   prod:
+    needs: [get-latest-version]
     uses: coreeng/p2p/.github/workflows/p2p-workflow-prod.yaml@main
     with:
-      version: ${{ needs.fast-feedback.outputs.version }}
+      version: ${{ needs.get-latest-version.outputs.version }}
     secrets:
       env_vars: ${{ secrets.ENV_VARS }}
       container_registry_user: ${{ secrets.CONTAINER_REGISTRY_USER }}

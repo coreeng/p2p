@@ -34,7 +34,7 @@ Rules for v1:
 - Image entries require `name`; it matches the standard P2P image name, not a registry reference, tag, stage, or GitHub environment.
 - Vulnerability ignores require `id` and `reason`. `package` is optional for source and image vulnerabilities. `paths` is optional for source vulnerabilities and narrows matching to Trivy filesystem result target paths.
 - Secret ignores require `id` and `reason`. `path` is optional for source and image secrets.
-- `expires` is optional for vulnerabilities and secrets. If absent, the ignore has no expiry. If present and in the past, the ignore no longer applies.
+- `expires` is optional for vulnerabilities and secrets. If present, it must use `YYYY-MM-DD`. If absent, the ignore has no expiry. If present and in the past, the ignore no longer applies.
 - Optional narrowing fields use exact matching in v1. Globs and regular expressions are not supported.
 - License finding ignores, stage-specific ignores, multiple ignore files, and `working-directory`-relative ignore files are out of scope for v1.
 
