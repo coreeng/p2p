@@ -285,7 +285,7 @@ async function runUnsafeMarkdownReport() {
             PkgName: 'pkg<script>alert(1)</script>',
             InstalledVersion: '1.0.0',
             FixedVersion: '1.0.1',
-            Severity: 'HIGH',
+            Severity: 'UNRECOGNIZED',
             PrimaryURL: 'javascript:alert(1)',
           },
         ],
@@ -833,6 +833,8 @@ async function runReportWithMissingTruffleHogOutput() {
   assert(!unsafeMarkdown.summary.includes('`base`<script>|sha..HEAD`'));
   assert(unsafeMarkdown.summary.includes('<code>base`&lt;script&gt;\\|sha..HEAD</code>'));
   assert(unsafeMarkdown.summary.includes('**Blocking severity:** <code>high</code>'));
+  assert(unsafeMarkdown.summary.includes('**Severities reported:** <code>LOW,MEDIUM,HIGH,CRITICAL,UNKNOWN</code>'));
+  assert(unsafeMarkdown.summary.includes('⚪ UNKNOWN'));
   assert(unsafeMarkdown.summary.includes('<code>config`prod`.env</code>'));
   assert(unsafeMarkdown.summary.includes('UNSAFE'));
 

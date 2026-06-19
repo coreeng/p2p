@@ -775,6 +775,9 @@ async function runPartialScannerReportLists() {
   assert.deepStrictEqual(unclassified.failures, []);
   assert.strictEqual(unclassified.outputs['security-risk'], 'unclassified');
   assert.strictEqual(unclassified.outputs['scan-status'], 'ok');
+  assert(unclassified.summary.includes('**Severities reported:** <code>LOW,MEDIUM,HIGH,CRITICAL,UNKNOWN</code>'));
+  assert(unclassified.summary.includes('⚪ UNKNOWN'));
+  assert(unclassified.summary.includes('| <code>services/api</code> | 0 | 1 | 0 | 0 | 1 | 2 |'));
 
   const offMode = await runOffModeAllIgnoredReport();
   assert.deepStrictEqual(offMode.failures, []);

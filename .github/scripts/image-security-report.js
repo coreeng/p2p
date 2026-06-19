@@ -6,6 +6,7 @@ const platformSuffix = platforms => platforms.length > 0 ? ` (${escapeHtml(platf
 const CANONICAL_SEVERITIES = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNKNOWN'];
 const SEV_RANK = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3, UNKNOWN: 4 };
 const SEV_EMOJI = { CRITICAL: '🔴', HIGH: '🟠', MEDIUM: '🟡', LOW: '🔵', UNKNOWN: '⚪' };
+const REPORTED_SEVERITY_TEXT = 'LOW,MEDIUM,HIGH,CRITICAL,UNKNOWN';
 const SECURITY_RISK_BY_SEVERITY = {
   CRITICAL: 'critical',
   HIGH: 'high',
@@ -117,7 +118,7 @@ const buildImageSecurityReport = async ({ core, env = process.env } = {}) => {
     p2pRedactedSecretId,
   } = require(securityIgnoreHelper);
   const blockingSet = blockingSeveritySet(env.BLOCKING_SEVERITY, core);
-  const reportedSeverities = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
+  const reportedSeverities = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNKNOWN'];
   const list = env.REPORT_LIST;
   const listExists = !!(list && fs.existsSync(list) && fs.statSync(list).size > 0);
   const runUrl = `${env.GITHUB_SERVER_URL}/${env.GITHUB_REPOSITORY}/actions/runs/${env.GITHUB_RUN_ID}`;
@@ -388,7 +389,7 @@ const buildImageSecurityReport = async ({ core, env = process.env } = {}) => {
       '',
       `**Version:** ${code(env.VERSION)} · **Vulnerabilities:** ${total} total · ${blocking} blocking`,
       `· **Secrets:** ${secretTotal} total · ${secretBlocking} blocking`,
-      `**Severities reported:** ${code('LOW,MEDIUM,HIGH,CRITICAL')} · **Blocking severity:** ${code(env.BLOCKING_SEVERITY)}`,
+      `**Severities reported:** ${code(REPORTED_SEVERITY_TEXT)} · **Blocking severity:** ${code(env.BLOCKING_SEVERITY)}`,
       '',
       `[📦 Download full reports](${runUrl})`,
       '',

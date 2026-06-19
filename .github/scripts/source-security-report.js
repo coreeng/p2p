@@ -5,6 +5,7 @@ const { code, escapeCell, markdownLink } = require('./markdown.js');
 const CANONICAL_SEVERITIES = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNKNOWN'];
 const SEV_RANK = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3, UNKNOWN: 4 };
 const SEV_EMOJI = { CRITICAL: '🔴', HIGH: '🟠', MEDIUM: '🟡', LOW: '🔵', UNKNOWN: '⚪' };
+const REPORTED_SEVERITY_TEXT = 'LOW,MEDIUM,HIGH,CRITICAL,UNKNOWN';
 const SECURITY_RISK_BY_SEVERITY = {
   CRITICAL: 'critical',
   HIGH: 'high',
@@ -150,7 +151,7 @@ if (!dryRun) {
 }
 const reportSeveritySet = severitySet('LOW,MEDIUM,HIGH,CRITICAL,UNKNOWN');
 const blockingSet = blockingSeveritySet(env.BLOCKING_SEVERITY, core);
-const reportedSeverities = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
+const reportedSeverities = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNKNOWN'];
 const securityIgnore = loadSecurityIgnore(env.GITHUB_WORKSPACE);
 const trivy = !dryRun && env.SCA_SCAN_RESULT === 'success'
   ? readRequiredJson(trivyPath, 'Trivy source report')
@@ -257,7 +258,7 @@ if (!dryRun) {
     `**Scan range:** ${code(scanRange)} · **Vulnerabilities:** ${activeVulnerabilities.length} total · ${vulnerabilityBlocking} blocking`,
     `· **Licenses:** ${licenses.length} total · 0 blocking`,
     `· **Secrets:** ${activeSecrets.length} total · ${secretBlocking} blocking`,
-    `**Severities reported:** ${code('LOW,MEDIUM,HIGH,CRITICAL')} · **Blocking severity:** ${code(env.BLOCKING_SEVERITY)}`,
+    `**Severities reported:** ${code(REPORTED_SEVERITY_TEXT)} · **Blocking severity:** ${code(env.BLOCKING_SEVERITY)}`,
     '',
     `[📦 Download full reports](${runUrl})`,
     '',
