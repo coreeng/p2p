@@ -57,7 +57,8 @@ const rowSort = (a, b) => (
 const normalizeVulnerabilityRows = (rawRows, group, blockingSet, options = {}) => {
   const dedup = new Map();
   for (const rawRow of rawRows) {
-    const key = [rawRow.severity, rawRow.installed, rawRow.fixed, rawRow.id, rawRow.source].join('\u0000');
+    const ignoreKey = rawRow.ignore ? JSON.stringify([rawRow.package, rawRow.ignore]) : '';
+    const key = [rawRow.severity, rawRow.installed, rawRow.fixed, rawRow.id, rawRow.source, ignoreKey].join('\u0000');
     if (!dedup.has(key)) {
       dedup.set(key, {
         severity: rawRow.severity,
