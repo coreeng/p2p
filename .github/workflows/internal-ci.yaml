@@ -194,7 +194,7 @@ jobs:
           assert 'json-file: $' + '{{ steps.report.outputs.json-file }}' in workflow
 
           report_module = Path('.github/scripts/image-security-report.js').read_text()
-          assert '## Image scan (${env.PIPELINE_STAGE}${envSuffix})' in report_module
+          assert '## Image scan (${code(env.PIPELINE_STAGE)}${envSuffix})' in report_module
           PY
 
       - name: Test image scan target construction
