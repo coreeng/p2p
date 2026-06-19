@@ -71,6 +71,7 @@ on:
 permissions:
   contents: read
   id-token: write
+  pull-requests: write
 
 jobs:
   version:
@@ -104,9 +105,11 @@ In the GitHub Actions UI you'll see:
 1. `version` starts immediately and tags the commit (on `main`) or produces a pre-release version string (on a PR).
 2. `fastfeedback` starts once `version` completes. Inside it, the job graph runs:
    - `build` runs first across every environment in `FAST_FEEDBACK`.
+   - `source-security-scan` runs independently of `build`.
+   - `image-scan` runs once `build` succeeds.
    - `functional-test` and `nft-test` run in parallel once build succeeds.
    - `integration-test` runs after both `functional-test` and `nft-test` succeed.
-   - `promote` runs last (on `main` only) and copies the image into the `EXTENDED_TEST` registry path.
+   - `promote` runs last (on `main` only), after `integration-test`, `image-scan`, and `source-security-scan` have all succeeded, and copies the image into the `EXTENDED_TEST` registry path.
 
 ## What happens next
 
@@ -115,6 +118,13 @@ On a pull request, the pipeline runs build, functional, nft, and integration tes
 The `p2p-nft` and `p2p-integration` targets are optional. Define them only when you need them; the pipeline exits those steps successfully and continues when they are absent.
 
 See [Pipeline model](../explanation/pipeline-model.md) for the full picture of how stages, environments, and promotion interact. See [Make targets](../explanation/make-targets.md) for the complete list of targets and the environment variables available to them.
+
+## Security scans
+
+Fast-feedback also calls source security scanning and image scanning automatically on each pull request and push. Source security scanning covers source dependency vulnerabilities, restricted or forbidden licenses, and git-tree secrets. Image scanning covers both known CVEs and embedded secrets. At this level, `security-scan-blocking-severity` defaults to `off`, so the scans report findings without blocking the workflow by default.
+
+Look in the workflow summary and uploaded artifact for the details, and on pull requests you'll also get a sticky comment with the latest results.
+See [Image scanning](../explanation/image-scanning.md), [Secrets scanning](../explanation/secrets-scanning.md), and [Triage security findings](../how-to/triage-security-findings.md) for what each scan checks and how to respond.
 
 ## Multi-component repositories
 

@@ -1,0 +1,318 @@
+on:
+  workflow_call:
+    secrets:
+      env_vars:
+        required: false
+      container_registry_user:
+        required: false
+      container_registry_pat:
+        required: false
+      container_registry_url:
+        required: false
+    inputs:
+      github_env:
+        required: false
+        type: string
+        default: ''
+      pipeline-stage:
+        description: 'fast-feedback | extended-test | prod'
+        required: true
+        type: string
+      version:
+        required: true
+        type: string
+      tenant-name:
+        required: false
+        type: string
+        default: ''
+      region:
+        required: false
+        type: string
+        default: europe-west2
+      working-directory:
+        required: false
+        type: string
+        default: '.'
+      image-names:
+        description: |
+          Newline- or comma-separated list of standard P2P image names to scan
+          before falling back to p2p-images.
+        required: false
+        type: string
+        default: ''
+      dry-run:
+        required: false
+        type: boolean
+        default: false
+      checkout-version:
+        required: false
+        type: string
+        default: ''
+      blocking-severity:
+        required: false
+        type: string
+        default: 'off'
+      ignore-unfixed:
+        required: false
+        type: boolean
+        default: true
+      timeout-minutes:
+        required: false
+        type: number
+        default: 20
+    outputs:
+      json-file:
+        value: ${{ jobs.image-scan.outputs.json-file }}
+      security-risk:
+        value: ${{ jobs.image-scan.outputs.security-risk }}
+      scan-status:
+        value: ${{ jobs.image-scan.outputs.scan-status }}
+
+jobs:
+  image-scan:
+    name: image-scan (${{ inputs.github_env != '' && format('{0}, {1}', inputs.pipeline-stage, inputs.github_env) || inputs.pipeline-stage }})
+    runs-on: ubuntu-24.04
+    environment: ${{ inputs.github_env }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    outputs:
+      json-file: ${{ steps.report.outputs.json-file }}
+      total-count: ${{ steps.report.outputs.total-count }}
+      blocking-count: ${{ steps.report.outputs.blocking-count }}
+      secret-total-count: ${{ steps.report.outputs.secret-total-count }}
+      secret-blocking-count: ${{ steps.report.outputs.secret-blocking-count }}
+      security-risk: ${{ steps.report.outputs.security-risk }}
+      scan-status: ${{ steps.report.outputs.scan-status }}
+    env:
+      PROJECT_ID: ${{ vars.PROJECT_ID }}
+      PROJECT_NUMBER: ${{ vars.PROJECT_NUMBER }}
+      REGION: ${{ vars.REGION || inputs.region }}
+      VERSION: ${{ inputs.version }}
+      SERVICE_ACCOUNT: p2p-${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}@${{ vars.PROJECT_ID }}.iam.gserviceaccount.com
+      TENANT_NAME: ${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}
+      WORKLOAD_IDENTITY_PROVIDER: projects/${{ vars.PROJECT_NUMBER }}/locations/global/workloadIdentityPools/p2p-${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}/providers/p2p-${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.dry-run == false && inputs.checkout-version || '' }}
+
+      - name: Checkout P2P workflow sources
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .p2p-workflow-src
+
+      - name: Authenticate to Google Cloud
+        id: auth
+        if: ${{ inputs.dry-run == false }}
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ env.SERVICE_ACCOUNT }}
+          project_id: ${{ env.PROJECT_ID }}
+          token_format: access_token
+          access_token_lifetime: 3600s
+
+      - name: Login to Artifact Registry
+        if: ${{ inputs.dry-run == false }}
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGION }}-docker.pkg.dev
+          username: oauth2accesstoken
+          password: ${{ steps.auth.outputs.access_token }}
+
+      - name: Login to tenant provided registry
+        if: ${{ inputs.dry-run == false }}
+        env:
+          REGISTRY_USER: ${{ secrets.container_registry_user }}
+          REGISTRY_PAT: ${{ secrets.container_registry_pat }}
+          REGISTRY_URL: ${{ secrets.container_registry_url }}
+        run: |
+          set -euo pipefail
+          if [ -z "${REGISTRY_USER:-}" ] || [ -z "${REGISTRY_PAT:-}" ] || [ -z "${REGISTRY_URL:-}" ]; then
+            echo "Tenant registry credentials not provided; skipping tenant registry login."
+            exit 0
+          fi
+          echo "${REGISTRY_PAT}" | docker login "${REGISTRY_URL}" -u "${REGISTRY_USER}" --password-stdin
+
+      - id: resolve-images
+        name: Resolve image references
+        uses: actions/github-script@v9
+        env:
+          PIPELINE_STAGE: ${{ inputs.pipeline-stage }}
+          WORKING_DIR: ${{ inputs.working-directory }}
+          IMAGE_NAMES: ${{ inputs.image-names }}
+          P2P_IMAGE_SCAN_HELPERS: ${{ github.workspace }}/.p2p-workflow-src/.github/scripts/image-scan-helpers.js
+        with:
+          script: |
+            const { resolveImages } = require(process.env.P2P_IMAGE_SCAN_HELPERS);
+            await resolveImages({ core });
+
+      - id: pull-images
+        name: Pull images
+        if: ${{ inputs.dry-run == false }}
+        uses: actions/github-script@v9
+        env:
+          IMAGE_REFS: ${{ steps.resolve-images.outputs.image-refs }}
+          P2P_IMAGE_SCAN_HELPERS: ${{ github.workspace }}/.p2p-workflow-src/.github/scripts/image-scan-helpers.js
+        with:
+          script: |
+            const { pullImages } = require(process.env.P2P_IMAGE_SCAN_HELPERS);
+            await pullImages({ core });
+
+      - name: Install Trivy
+        if: ${{ inputs.dry-run == false }}
+        uses: aquasecurity/setup-trivy@v0.2.6
+        with:
+          version: v0.70.0
+          cache: true
+
+      - name: Install TruffleHog
+        if: ${{ inputs.dry-run == false }}
+        shell: bash
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/v3.95.3/scripts/install.sh \
+            | sh -s -- -b "$RUNNER_TEMP" v3.95.3
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+
+      - id: scan
+        name: Scan images
+        if: ${{ inputs.dry-run == false }}
+        uses: actions/github-script@v9
+        env:
+          PULLED_LIST: ${{ steps.pull-images.outputs.list-path }}
+          IGNORE_UNFIXED: ${{ inputs.ignore-unfixed }}
+          P2P_IMAGE_SCAN_HELPERS: ${{ github.workspace }}/.p2p-workflow-src/.github/scripts/image-scan-helpers.js
+        with:
+          script: |
+            const { scanImages } = require(process.env.P2P_IMAGE_SCAN_HELPERS);
+            await scanImages({ core });
+
+      - id: secret-scan
+        name: Scan images for secrets
+        if: ${{ inputs.dry-run == false }}
+        uses: actions/github-script@v9
+        env:
+          PULLED_LIST: ${{ steps.pull-images.outputs.list-path }}
+          P2P_SECURITY_IGNORE_HELPER: ${{ github.workspace }}/.p2p-workflow-src/.github/scripts/p2p-security-ignore.js
+          P2P_IMAGE_SCAN_HELPERS: ${{ github.workspace }}/.p2p-workflow-src/.github/scripts/image-scan-helpers.js
+        with:
+          script: |
+            const { secretScanImages } = require(process.env.P2P_IMAGE_SCAN_HELPERS);
+            await secretScanImages({ core });
+
+      - id: manifest
+        name: Build image scan manifest
+        if: ${{ inputs.dry-run == false }}
+        uses: actions/github-script@v9
+        env:
+          PIPELINE_STAGE: ${{ inputs.pipeline-stage }}
+          REPORT_LIST: ${{ steps.scan.outputs.report-list }}
+          SECRET_REPORT_LIST: ${{ steps.secret-scan.outputs.report-list }}
+          REPORT_ROOT: ${{ steps.scan.outputs.reports-dir }}
+          SECRET_REPORT_ROOT: ${{ steps.secret-scan.outputs.reports-dir }}
+          P2P_IMAGE_SCAN_HELPERS: ${{ github.workspace }}/.p2p-workflow-src/.github/scripts/image-scan-helpers.js
+        with:
+          script: |
+            const { buildManifest } = require(process.env.P2P_IMAGE_SCAN_HELPERS);
+            await buildManifest({ core });
+
+      - id: report
+        name: Build report
+        if: always()
+        uses: actions/github-script@v9
+        env:
+          REPORT_LIST: ${{ steps.scan.outputs.report-list }}
+          SECRET_REPORT_LIST: ${{ steps.secret-scan.outputs.report-list }}
+          BLOCKING_SEVERITY: ${{ inputs.blocking-severity }}
+          PIPELINE_STAGE: ${{ inputs.pipeline-stage }}
+          GITHUB_ENV_INPUT: ${{ inputs.github_env }}
+          VERSION: ${{ inputs.version }}
+          ARTIFACT_DIR: ${{ steps.manifest.outputs.artifact-dir }}
+          P2P_SECURITY_IGNORE_HELPER: ${{ github.workspace }}/.p2p-workflow-src/.github/scripts/p2p-security-ignore.js
+          P2P_IMAGE_SECURITY_REPORT: ${{ github.workspace }}/.p2p-workflow-src/.github/scripts/image-security-report.js
+        with:
+          script: |
+            const { buildImageSecurityReport } = require(process.env.P2P_IMAGE_SECURITY_REPORT);
+            await buildImageSecurityReport({ core, env: process.env });
+
+      - name: Post sticky PR comment
+        if: ${{ always() && github.event_name == 'pull_request' && inputs.dry-run == false }}
+        continue-on-error: true
+        uses: marocchino/sticky-pull-request-comment@v3
+        with:
+          header: image-scan-findings-${{ inputs.pipeline-stage }}-${{ inputs.github_env || 'local' }}
+          path: ${{ steps.report.outputs.comment-path }}
+          recreate: true
+
+      - name: Upload image-scan reports
+        if: ${{ inputs.dry-run == false && steps.manifest.outputs.artifact-dir != '' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: image-scan-reports-${{ inputs.pipeline-stage }}-${{ inputs.github_env || 'local' }}
+          path: ${{ steps.manifest.outputs.artifact-dir }}
+          if-no-files-found: error
+          retention-days: 30
+
+  scan-status-policy:
+    name: image-scan-status-policy (${{ inputs.github_env != '' && format('{0}, {1}', inputs.pipeline-stage, inputs.github_env) || inputs.pipeline-stage }})
+    runs-on: ubuntu-24.04
+    needs: [image-scan]
+    if: ${{ always() && inputs.dry-run == false }}
+    timeout-minutes: 1
+    steps:
+      - name: Enforce scanner execution status
+        shell: bash
+        env:
+          SCAN_STATUS: ${{ needs.image-scan.outputs.scan-status || 'failed' }}
+        run: |
+          set -euo pipefail
+          if [ "${SCAN_STATUS}" != "ok" ]; then
+            echo "::error::Security scan did not complete successfully. scan-status=${SCAN_STATUS}"
+            exit 1
+          fi
+
+  policy:
+    name: image-scan-policy (${{ inputs.github_env != '' && format('{0}, {1}', inputs.pipeline-stage, inputs.github_env) || inputs.pipeline-stage }})
+    runs-on: ubuntu-24.04
+    needs: [image-scan]
+    if: ${{ always() && inputs.dry-run == false }}
+    continue-on-error: ${{ inputs.blocking-severity == 'off' || (needs.image-scan.outputs.blocking-count == '0' && needs.image-scan.outputs.secret-blocking-count == '0') }}
+    timeout-minutes: 1
+    steps:
+      - name: "Output security risk: ${{ needs.image-scan.outputs.security-risk || 'unknown' }}; scan: ${{ needs.image-scan.outputs.scan-status || 'failed' }}"
+        run: ':'
+
+      - name: Enforce policy
+        shell: bash
+        env:
+          BLOCKING_SEVERITY: ${{ inputs.blocking-severity }}
+          BLOCKING: ${{ needs.image-scan.outputs.blocking-count }}
+          TOTAL: ${{ needs.image-scan.outputs.total-count }}
+          SECRET_BLOCKING: ${{ needs.image-scan.outputs.secret-blocking-count }}
+          SECRET_TOTAL: ${{ needs.image-scan.outputs.secret-total-count }}
+        run: |
+          set -euo pipefail
+          case "${BLOCKING_SEVERITY}" in
+            off|low|medium|high|critical) ;;
+            *)
+              echo "::error::blocking-severity must be one of: off, low, medium, high, critical. Got: ${BLOCKING_SEVERITY}"
+              exit 1
+              ;;
+          esac
+          echo "Trivy: total=${TOTAL:-0}, blocking=${BLOCKING:-0}"
+          echo "TruffleHog: total=${SECRET_TOTAL:-0}, blocking=${SECRET_BLOCKING:-0}"
+          echo "blocking-severity=${BLOCKING_SEVERITY}"
+          if [ "${BLOCKING_SEVERITY}" = "off" ]; then
+            if [ "${TOTAL:-0}" -gt 0 ] || [ "${SECRET_TOTAL:-0}" -gt 0 ]; then
+              echo "::error::Security finding(s) detected. blocking-severity=off, so this policy job is allowed to fail without failing the workflow."
+              exit 1
+            fi
+          elif [ "${BLOCKING:-0}" -gt 0 ] || [ "${SECRET_BLOCKING:-0}" -gt 0 ]; then
+            echo "::error::Security finding(s) at or above blocking-severity=${BLOCKING_SEVERITY} detected."
+            exit 1
+          elif [ "${TOTAL:-0}" -gt 0 ] || [ "${SECRET_TOTAL:-0}" -gt 0 ]; then
+            echo "::error::Security finding(s) detected below blocking-severity=${BLOCKING_SEVERITY}; this policy job is allowed to fail without failing the workflow."
+            exit 1
+          fi

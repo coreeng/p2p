@@ -1,0 +1,338 @@
+on:
+  workflow_call:
+    inputs:
+      secret-scan-scope:
+        required: true
+        type: string
+      blocking-severity:
+        required: false
+        type: string
+        default: 'off'
+      ignore-unfixed:
+        required: false
+        type: boolean
+        default: true
+      dry-run:
+        required: false
+        type: boolean
+        default: false
+      checkout-version:
+        required: false
+        type: string
+        default: ''
+      timeout-minutes:
+        required: false
+        type: number
+        default: 30
+    outputs:
+      report-file:
+        value: ${{ jobs.report.outputs.report-file }}
+      json-file:
+        value: ${{ jobs.report.outputs.json-file }}
+      vulnerability-total:
+        value: ${{ jobs.report.outputs.vulnerability-total }}
+      vulnerability-blocking:
+        value: ${{ jobs.report.outputs.vulnerability-blocking }}
+      license-total:
+        value: ${{ jobs.report.outputs.license-total }}
+      secret-total:
+        value: ${{ jobs.report.outputs.secret-total }}
+      secret-blocking:
+        value: ${{ jobs.report.outputs.secret-blocking }}
+      security-risk:
+        value: ${{ jobs.report.outputs.security-risk }}
+      scan-status:
+        value: ${{ jobs.report.outputs.scan-status }}
+
+jobs:
+  secret-scan:
+    name: secret-scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    outputs:
+      base: ${{ steps.scan-range.outputs.base }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.dry-run == false && inputs.checkout-version || '' }}
+          fetch-depth: 0
+
+      - id: scan-range
+        name: Determine scan range
+        if: inputs.secret-scan-scope == 'changes'
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            # PR scan: diff PR branch against the target branch tip
+            echo "base=$PR_BASE_SHA" >> "$GITHUB_OUTPUT"
+          elif [ -n "$PUSH_BEFORE_SHA" ] && [ "$PUSH_BEFORE_SHA" != "0000000000000000000000000000000000000000" ]; then
+            # Push scan: diff the exact range that was just pushed
+            echo "base=$PUSH_BEFORE_SHA" >> "$GITHUB_OUTPUT"
+          elif git rev-parse HEAD^ >/dev/null 2>&1; then
+            # Fallback (e.g. workflow_dispatch, tags, brand-new branch): scan the latest commit
+            echo "base=$(git rev-parse HEAD^)" >> "$GITHUB_OUTPUT"
+          else
+            # Initial commit with no parent: scan just the single commit at HEAD
+            echo "base=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install TruffleHog
+        if: ${{ inputs.dry-run == false }}
+        shell: bash
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/v3.95.3/scripts/install.sh \
+            | sh -s -- -b "$RUNNER_TEMP" v3.95.3
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+
+      - id: scan
+        name: TruffleHog OSS secrets scan
+        if: ${{ inputs.dry-run == false }}
+        shell: bash
+        env:
+          SCOPE: ${{ inputs.secret-scan-scope }}
+          BASE: ${{ steps.scan-range.outputs.base }}
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/source-secret-findings.ndjson"
+          # Collect every finding regardless of verification state; the
+          # blocking decision is taken downstream by classifying each
+          # finding (verified / unknown / unverified) from redacted JSON.
+          ARGS=(git "file://$GITHUB_WORKSPACE" --json "--results=verified,unverified,unknown" --no-update)
+          if [ "$SCOPE" = "changes" ]; then
+            ARGS+=(--branch=HEAD)
+            if [ -n "$BASE" ]; then
+              ARGS+=(--since-commit="$BASE")
+            fi
+          fi
+          trufflehog "${ARGS[@]}" > "$out"
+          echo "findings_file=$out" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout P2P workflow sources
+        if: ${{ always() && inputs.dry-run == false }}
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .p2p-workflow-src
+
+      - id: redact
+        name: Build redacted secret findings
+        if: ${{ always() && inputs.dry-run == false }}
+        shell: bash
+        env:
+          FINDINGS: ${{ steps.scan.outputs.findings_file }}
+          SERVER_URL: ${{ github.server_url }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          redacted="$RUNNER_TEMP/findings.ndjson"
+          node .p2p-workflow-src/.github/scripts/source-secret-redact.js "$FINDINGS" "$redacted"
+          echo "redacted_file=$redacted" >> "$GITHUB_OUTPUT"
+
+      - name: Upload redacted secret findings
+        if: ${{ always() && inputs.dry-run == false }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: source-security-internal-secret-findings
+          path: ${{ steps.redact.outputs.redacted_file }}
+          if-no-files-found: warn
+          retention-days: 1
+
+  sca-scan:
+    name: sca-scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.dry-run == false && inputs.checkout-version || '' }}
+
+      - name: Install Trivy
+        if: ${{ inputs.dry-run == false }}
+        uses: aquasecurity/setup-trivy@v0.2.6
+        with:
+          version: v0.70.0
+          cache: true
+
+      - id: scan
+        name: Trivy filesystem SCA scan
+        if: ${{ inputs.dry-run == false }}
+        shell: bash
+        env:
+          IGNORE_UNFIXED: ${{ inputs.ignore-unfixed }}
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/trivy-fs.json"
+          args=(fs --format json --scanners "vuln,license" --severity "UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL" --exit-code 0 --output "$out")
+          if [ "$IGNORE_UNFIXED" = "true" ]; then
+            args+=(--ignore-unfixed)
+          fi
+          args+=("$GITHUB_WORKSPACE")
+          trivy "${args[@]}"
+          if [ ! -f "$out" ]; then
+            echo '{"Results":[]}' > "$out"
+          fi
+          echo "trivy_file=$out" >> "$GITHUB_OUTPUT"
+
+      - name: Upload Trivy findings
+        if: ${{ always() && inputs.dry-run == false }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: source-security-internal-trivy-findings
+          path: ${{ steps.scan.outputs.trivy_file }}
+          if-no-files-found: warn
+          retention-days: 1
+
+  report:
+    name: source-security-report
+    runs-on: ubuntu-24.04
+    needs: [secret-scan, sca-scan]
+    if: always()
+    outputs:
+      report-file: ${{ steps.report.outputs.report-file }}
+      json-file: ${{ steps.report.outputs.json-file }}
+      vulnerability-total: ${{ steps.report.outputs.vulnerability-total }}
+      vulnerability-blocking: ${{ steps.report.outputs.vulnerability-blocking }}
+      license-total: ${{ steps.report.outputs.license-total }}
+      secret-total: ${{ steps.report.outputs.secret-total }}
+      secret-blocking: ${{ steps.report.outputs.secret-blocking }}
+      security-risk: ${{ steps.report.outputs.security-risk }}
+      scan-status: ${{ steps.report.outputs.scan-status }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.dry-run == false && inputs.checkout-version || '' }}
+
+      - name: Checkout P2P workflow sources
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .p2p-workflow-src
+
+      - name: Download secret findings
+        if: ${{ inputs.dry-run == false }}
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: source-security-internal-secret-findings
+          path: ${{ runner.temp }}/source-security/trufflehog
+
+      - name: Download Trivy findings
+        if: ${{ inputs.dry-run == false }}
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: source-security-internal-trivy-findings
+          path: ${{ runner.temp }}/source-security/trivy
+
+      - id: report
+        name: Build source security report
+        uses: actions/github-script@v9
+        env:
+          SCOPE: ${{ inputs.secret-scan-scope }}
+          BASE: ${{ needs.secret-scan.outputs.base }}
+          BLOCKING_SEVERITY: ${{ inputs.blocking-severity }}
+          DRY_RUN: ${{ inputs.dry-run }}
+          ROOT: ${{ runner.temp }}/source-security
+          SECRET_SCAN_RESULT: ${{ needs.secret-scan.result }}
+          SCA_SCAN_RESULT: ${{ needs.sca-scan.result }}
+          P2P_SECURITY_IGNORE_HELPER: ${{ github.workspace }}/.p2p-workflow-src/.github/scripts/p2p-security-ignore.js
+        with:
+          script: |
+            const path = require('path');
+            const reportModule = path.join(process.env.GITHUB_WORKSPACE, '.p2p-workflow-src', '.github', 'scripts', 'source-security-report.js');
+            const { buildSourceSecurityReport } = require(reportModule);
+            await buildSourceSecurityReport({ core });
+
+      - name: Upsert sticky PR comment
+        if: ${{ always() && github.event_name == 'pull_request' && inputs.dry-run == false }}
+        continue-on-error: true
+        uses: marocchino/sticky-pull-request-comment@v3
+        with:
+          header: source-security-scan-findings
+          path: ${{ steps.report.outputs.report-file }}
+          recreate: true
+
+      - name: Upload source security artifact
+        if: ${{ always() && inputs.dry-run == false }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: source-security-scan-findings
+          path: |
+            ${{ runner.temp }}/source-security/trufflehog
+            ${{ runner.temp }}/source-security/trivy
+            ${{ steps.report.outputs.json-file }}
+          if-no-files-found: warn
+          retention-days: 30
+
+  scan-status-policy:
+    name: source-security-scan-status-policy
+    runs-on: ubuntu-24.04
+    needs: [report]
+    if: ${{ always() && inputs.dry-run == false }}
+    timeout-minutes: 1
+    steps:
+      - name: Enforce scanner execution status
+        shell: bash
+        env:
+          SCAN_STATUS: ${{ needs.report.outputs.scan-status || 'failed' }}
+        run: |
+          set -euo pipefail
+          if [ "${SCAN_STATUS}" != "ok" ]; then
+            echo "::error::Security scan did not complete successfully. scan-status=${SCAN_STATUS}"
+            exit 1
+          fi
+
+  policy:
+    name: source-security-policy
+    runs-on: ubuntu-24.04
+    needs: [report]
+    if: ${{ always() && inputs.dry-run == false }}
+    continue-on-error: ${{ inputs.blocking-severity == 'off' || (needs.report.outputs.vulnerability-blocking == '0' && needs.report.outputs.secret-blocking == '0') }}
+    timeout-minutes: 1
+    steps:
+      - name: "Output security risk: ${{ needs.report.outputs.security-risk || 'unknown' }}; scan: ${{ needs.report.outputs.scan-status || 'failed' }}"
+        run: ':'
+
+      - name: Enforce scan policy
+        shell: bash
+        env:
+          BLOCKING_SEVERITY: ${{ inputs.blocking-severity }}
+          VULN_TOTAL: ${{ needs.report.outputs.vulnerability-total }}
+          VULN_BLOCKING: ${{ needs.report.outputs.vulnerability-blocking }}
+          LICENSE_TOTAL: ${{ needs.report.outputs.license-total }}
+          SECRET_TOTAL: ${{ needs.report.outputs.secret-total }}
+          SECRET_BLOCKING: ${{ needs.report.outputs.secret-blocking }}
+        run: |
+          set -euo pipefail
+          case "${BLOCKING_SEVERITY}" in
+            off|low|medium|high|critical) ;;
+            *)
+              echo "::error::blocking-severity must be one of: off, low, medium, high, critical. Got: ${BLOCKING_SEVERITY}"
+              exit 1
+              ;;
+          esac
+          echo "Trivy source vulnerabilities: total=${VULN_TOTAL:-0}, blocking=${VULN_BLOCKING:-0}"
+          echo "Trivy restricted/forbidden licenses: total=${LICENSE_TOTAL:-0}, blocking=0"
+          echo "TruffleHog secrets: total=${SECRET_TOTAL:-0}, blocking=${SECRET_BLOCKING:-0}"
+          echo "blocking-severity=${BLOCKING_SEVERITY}"
+          if [ "${BLOCKING_SEVERITY}" = "off" ]; then
+            if [ "${VULN_TOTAL:-0}" -gt 0 ] || [ "${SECRET_TOTAL:-0}" -gt 0 ]; then
+              echo "::error::Security finding(s) detected. blocking-severity=off, so this policy job is allowed to fail without failing the workflow."
+              exit 1
+            fi
+          elif [ "${VULN_BLOCKING:-0}" -gt 0 ] || [ "${SECRET_BLOCKING:-0}" -gt 0 ]; then
+            echo "::error::Security finding(s) at or above blocking-severity=${BLOCKING_SEVERITY} detected."
+            exit 1
+          elif [ "${VULN_TOTAL:-0}" -gt 0 ] || [ "${SECRET_TOTAL:-0}" -gt 0 ]; then
+            echo "::error::Security finding(s) detected below blocking-severity=${BLOCKING_SEVERITY}; this policy job is allowed to fail without failing the workflow."
+            exit 1
+          fi

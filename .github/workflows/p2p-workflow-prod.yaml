@@ -41,9 +41,8 @@ on:
         type: string
         default: ''
       version:
-        required: false
+        required: true
         type: string
-        default: ''
       version-prefix:
         required: false
         type: string
@@ -54,10 +53,61 @@ on:
         required: false
         type: boolean
         default: false
+      security-scan-blocking-severity:
+        description: |
+          Minimum severity that blocks the workflow for image-scan findings:
+          off, low, medium, high, or critical.
+        required: false
+        type: string
+        default: off
 
 jobs:
+  validate-version:
+    name: validate-version
+    if: success() && github.ref == inputs.main-branch
+    runs-on: ubuntu-24.04
+    timeout-minutes: 1
+    env:
+      VERSION: ${{ inputs.version }}
+    steps:
+      - name: Require version
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${VERSION//[[:space:]]/}" ]; then
+            echo "::error::p2p-workflow-prod requires a non-empty version input."
+            exit 1
+          fi
+
+  image-scan:
+    needs: [validate-version]
+    if: success() && github.ref == inputs.main-branch
+    uses: ./.github/workflows/p2p-workflow-image-scan.yaml
+    permissions:
+      contents: read
+      id-token: write
+    secrets:
+      env_vars: ${{ secrets.env_vars }}
+      container_registry_user: ${{ secrets.container_registry_user }}
+      container_registry_pat: ${{ secrets.container_registry_pat }}
+      container_registry_url: ${{ secrets.container_registry_url }}
+    strategy:
+      matrix: ${{ fromJSON(inputs.source) }}
+      fail-fast: false
+    with:
+      pipeline-stage: prod
+      github_env: ${{ matrix.deploy_env }}
+      tenant-name: ${{ inputs.tenant-name }}
+      version: ${{ inputs.version }}
+      region: ${{ inputs.region }}
+      working-directory: ${{ inputs.working-directory }}
+      dry-run: ${{ inputs.dry-run }}
+      checkout-version: ${{ inputs.version-prefix }}${{ inputs.version }}
+      blocking-severity: ${{ inputs.security-scan-blocking-severity }}
+
   prod-deploy:
     name: prod-deploy
+    needs: [image-scan]
     if: success() && github.ref == inputs.main-branch
     uses: ./.github/workflows/p2p-execute-command.yaml
     secrets:
@@ -82,7 +132,7 @@ jobs:
       skip-subnamespaces-create: ${{ inputs.skip-subnamespaces-create }}
 
   notify-failure:
-    needs: [prod-deploy]
+    needs: [validate-version, image-scan, prod-deploy]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     if: always() && github.ref == inputs.main-branch && contains(needs.*.result, 'failure')

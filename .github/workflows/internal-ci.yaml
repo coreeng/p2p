@@ -58,6 +58,179 @@ jobs:
       dry-run: true
       version: ${{ needs.test_version.outputs.version }}
 
+  test_source_security_scan:
+    uses: ./.github/workflows/p2p-workflow-source-security-scan.yaml
+    with:
+      secret-scan-scope: changes
+      blocking-severity: off
+      dry-run: true
+      timeout-minutes: 10
+
+  test_scheduled_security_scan:
+    uses: ./.github/workflows/p2p-workflow-security-scan.yaml
+    secrets:
+      env_vars: |
+        TEST_VARIABLE=value
+    with:
+      image-names: p2p
+      dry-run: true
+      security-scan-blocking-severity: off
+      timeout-minutes: 10
+
+  test_security_ignore_helper:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: Test shared P2P security ignore helper
+        run: |
+          set -euo pipefail
+          node .github/scripts/tests/security-ignore-helper.test.js
+
+  test_source_security_ignore_report:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: Test source security ignores split active and ignored findings
+        run: |
+          set -euo pipefail
+          node .github/scripts/tests/source-security-ignore-report.test.js
+          node .github/scripts/tests/source-secret-redaction.test.js
+
+  test_image_scan:
+    needs: [test_version]
+    strategy:
+      matrix:
+        pipeline-stage: [fast-feedback, extended-test, prod]
+    uses: ./.github/workflows/p2p-workflow-image-scan.yaml
+    secrets:
+      env_vars: |
+        TEST_VARIABLE=value
+    with:
+      dry-run: true
+      pipeline-stage: ${{ matrix.pipeline-stage }}
+      version: ${{ needs.test_version.outputs.version }}
+
+  test_image_security_ignore_report:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: Test image security ignores split active and ignored findings
+        run: |
+          set -euo pipefail
+          node .github/scripts/tests/image-security-ignore-report.test.js
+
+  test_image_ref_resolution:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: Test image reference resolver
+        run: |
+          node .github/scripts/tests/image-ref-resolution.test.js
+
+      - name: Test scheduled image name pass-through
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+
+          workflow = Path('.github/workflows/p2p-workflow-security-scan.yaml').read_text()
+          assert "awk 'NF { print $1; exit }'" in workflow
+
+          needle = 'image-names: $' + '{{ inputs.image-names }}'
+          count = workflow.count(needle)
+          assert count == 3, f'expected 3 image-names pass-throughs, got {count}'
+
+          blocking = 'security-scan-blocking-severity: $' + '{{ inputs.security-scan-blocking-severity }}'
+          blocking_count = workflow.count(blocking)
+          assert blocking_count == 3, f'expected 3 scheduled blocking-severity pass-throughs, got {blocking_count}'
+
+          stage_workflow = Path('.github/workflows/p2p-workflow-security-image-scan-stage.yaml').read_text()
+          assert 'blocking-severity: $' + '{{ inputs.security-scan-blocking-severity }}' in stage_workflow
+
+          ci_workflow = Path('.github/workflows/internal-ci.yaml').read_text()
+          scheduled_security_call = 'uses: ./.github/workflows/' + 'p2p-workflow-security-scan.yaml'
+          assert scheduled_security_call in ci_workflow
+          PY
+
+      - name: Test scheduled image scans use stage matrices
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+
+          workflow = Path('.github/workflows/p2p-workflow-security-scan.yaml').read_text()
+          assert workflow.count('uses: ./.github/workflows/p2p-workflow-security-image-scan-stage.yaml') == 3
+          for name in (
+              'fast-feedback-source',
+              'extended-test-source',
+              'prod-source',
+              'fast-feedback-github-env',
+              'extended-test-github-env',
+              'prod-github-env',
+          ):
+              assert f'{name}:' not in workflow, f'{name} should be derived from repository variables'
+          for var in ('FAST_FEEDBACK', 'EXTENDED_TEST', 'PROD'):
+              assert f'matrix: $' + f'{{{{ fromJSON(vars.{var}) }}}}' in workflow, f'missing matrix for vars.{var}'
+          assert workflow.count('github_env: $' + '{{ matrix.deploy_env }}') == 3
+          PY
+
+      - name: Test image scan comments identify stage
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+
+          latest_workflow = Path('.github/workflows/p2p-get-latest-image.yaml').read_text()
+          assert 'name: get-latest-image ($' + '{{ inputs.registry-path }}, $' + '{{ inputs.github_env }})' in latest_workflow
+
+          workflow = Path('.github/workflows/p2p-workflow-image-scan.yaml').read_text()
+          assert "name: image-scan ($" + "{{ inputs.github_env != '' && format('{0}, {1}', inputs.pipeline-stage, inputs.github_env) || inputs.pipeline-stage }})" in workflow
+          assert 'name: ' + "'image-scan ($" + '{{ inputs.github_env }})' not in workflow
+          assert 'PIPELINE_STAGE: $' + '{{ inputs.pipeline-stage }}' in workflow
+          assert 'header: image-scan-findings-$' + '{{ inputs.pipeline-stage }}-$' + '{{ inputs.github_env || ' in workflow
+          assert 'name: image-scan-reports-$' + '{{ inputs.pipeline-stage }}-$' + '{{ inputs.github_env || ' in workflow
+          assert 'json-file:' in workflow
+          assert 'value: $' + '{{ jobs.image-scan.outputs.json-file }}' in workflow
+          assert 'json-file: $' + '{{ steps.report.outputs.json-file }}' in workflow
+
+          report_module = Path('.github/scripts/image-security-report.js').read_text()
+          assert '## Image scan (${code(env.PIPELINE_STAGE)}${envSuffix})' in report_module
+          PY
+
+      - name: Test image scan target construction
+        run: |
+          set -euo pipefail
+          node .github/scripts/tests/image-scan-targets.test.js
+
+      - name: Test image scan manifest construction
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          workflow = Path('.github/workflows/p2p-workflow-image-scan.yaml')
+          upload_block = []
+          in_upload = False
+          for line in workflow.read_text().splitlines():
+              if line.startswith('      - name: Upload image-scan reports'):
+                  in_upload = True
+              elif in_upload and line.startswith('      - name: '):
+                  break
+              elif in_upload and line and not line.startswith('      '):
+                  break
+              if in_upload:
+                  upload_block.append(line)
+          upload_text = '\n'.join(upload_block)
+          for forbidden in ('always()', 'reports-dir', 'reports.txt', 'if-no-files-found: ignore'):
+              if forbidden in upload_text:
+                  raise SystemExit(f'Upload image-scan reports must not contain {forbidden}')
+          for required in ('steps.manifest.outputs.artifact-dir', 'if-no-files-found: error'):
+              if required not in upload_text:
+                  raise SystemExit(f'Upload image-scan reports is missing {required}')
+          PY
+
+          node .github/scripts/tests/image-scan-manifest.test.js
+
   get_image_extended_test:
     uses: ./.github/workflows/p2p-get-latest-image-extended-test.yaml
     secrets:

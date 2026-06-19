@@ -5,11 +5,24 @@
 ## Usage
 
 ```yaml
+permissions:
+  contents: read
+  id-token: write
+
 jobs:
+  get-latest-version:
+    uses: coreeng/p2p/.github/workflows/p2p-get-latest-image-prod.yaml@main
+    with:
+      image-name: my-app
+    secrets:
+      env_vars: ${{ secrets.ENV_VARS }}
+      slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+
   prod:
+    needs: [get-latest-version]
     uses: coreeng/p2p/.github/workflows/p2p-workflow-prod.yaml@main
     with:
-      version: ${{ needs.extended-test.outputs.version }}
+      version: ${{ needs.get-latest-version.outputs.version }}
     secrets:
       env_vars: ${{ secrets.ENV_VARS }}
       container_registry_user: ${{ secrets.CONTAINER_REGISTRY_USER }}
@@ -18,11 +31,15 @@ jobs:
       slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
 ```
 
+## Permissions
+
+This workflow runs image scanning before deployment. The image scan authenticates to Google Cloud with GitHub OIDC, so caller workflows must grant `id-token: write` alongside `contents: read`.
+
 ## Inputs
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `version` | `string` | No | `''` | Version identifier passed to the `p2p-prod` make target and included in Slack notifications. Optional, unlike other orchestrator workflows. |
+| `version` | `string` | Yes | — | Non-empty version identifier passed to the image scan and `p2p-prod` make target, and included in Slack notifications. |
 | `version-prefix` | `string` | No | `v` | Prefix prepended to `version` to form the `checkout-version` ref (e.g., `v` + `1.2.3` = `v1.2.3`). |
 | `dry-run` | `boolean` | No | `false` | When `true`, runs commands without making persistent changes and skips the success Slack notification. |
 | `main-branch` | `string` | No | `refs/heads/main` | Full ref of the main branch, used to gate the deploy job and Slack alerts. |
@@ -32,6 +49,7 @@ jobs:
 | `app-name` | `string` | No | `''` | Application name. Must equal the tenant name (each application has its own application tenant). |
 | `tenant-name` | `string` | No | `''` | Tenant name passed to the make target. |
 | `skip-subnamespaces-create` | `boolean` | No | `false` | Skips creating subnamespaces before running the make target. |
+| `security-scan-blocking-severity` | `string` | No | `off` | Minimum image-scan finding severity that blocks the workflow: `off`, `low`, `medium`, `high`, or `critical`. Verified image secrets are treated as `critical`. The policy job fails on active findings, but the workflow continues when findings are below the blocking threshold. |
 
 ## Secrets
 
@@ -50,11 +68,20 @@ This workflow defines no outputs.
 ## Job Graph
 
 ```
-prod-deploy     Runs p2p-prod make target.
+validate-version
+                Fails early when version is empty.
+
+└── image-scan  Calls p2p-workflow-image-scan against the prod-registry images.
                 Only runs on main-branch.
                 checkout-version = version-prefix + version.
+                Blocks the workflow on findings at or above
+                security-scan-blocking-severity (default: off).
+└── prod-deploy (needs: image-scan)
+                Runs p2p-prod make target.
+                Only runs on main-branch after image-scan succeeds.
+                checkout-version = version-prefix + version.
 
-notify-failure  (needs: prod-deploy; runs on main-branch when prod-deploy fails)
+notify-failure  (needs: validate-version, image-scan, prod-deploy; runs on main-branch when any job fails)
 notify-success  (needs: prod-deploy; runs on main-branch when prod-deploy succeeds and dry-run=false)
 ```
 
@@ -66,3 +93,5 @@ notify-success  (needs: prod-deploy; runs on main-branch when prod-deploy succee
 - [How to configure Slack alerts](../how-to/configure-slack-alerts.md)
 - [How to use multiple environments](../how-to/use-multiple-environments.md)
 - [How to customise versioning](../how-to/customise-versioning.md)
+- [How to triage security findings](../how-to/triage-security-findings.md)
+- [p2p-workflow-image-scan reference](p2p-workflow-image-scan.md)

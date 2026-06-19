@@ -5,6 +5,10 @@
 ## Usage
 
 ```yaml
+permissions:
+  contents: read
+  id-token: write
+
 jobs:
   get-version:
     uses: coreeng/p2p/.github/workflows/p2p-get-latest-image-prod.yaml@main
@@ -24,7 +28,7 @@ jobs:
 | `registry-path` | string | No | `prod` | Sub-path within the tenant registry to query. |
 | `tenant-name` | string | No | `''` | Tenant name. Falls back to the `TENANT_NAME` repository/environment variable when not set. |
 | `region` | string | No | `europe-west2` | GCP region. Overridden by the `REGION` repository/environment variable when set. |
-| `working-directory` | string | No | `'.'` | Working directory for the version-lookup step. |
+| `working-directory` | string | No | `'.'` | Accepted for caller interface compatibility; version lookup queries Artifact Registry and does not require a checkout. |
 | `dry-run` | boolean | No | `false` | When `true`, skips GCP authentication and returns `0.0.0` as the version. |
 | `main-branch` | string | No | `refs/heads/main` | The ref on which the workflow executes. The job and failure notification are skipped when the triggering ref does not match. |
 
@@ -39,7 +43,7 @@ jobs:
 
 | Name | Description |
 |------|-------------|
-| `version` | The highest semver-sorted image tag found in the `prod` registry path. |
+| `version` | The highest semver-sorted image tag found in the `prod` registry path, `0.0.0` when `dry-run` is `true`, or empty when no tags are found. |
 
 ## Job Graph
 

@@ -16,6 +16,7 @@ on:
 permissions:
   contents: read
   id-token: write
+  pull-requests: write
 
 jobs:
   # Compute the next semantic version from git tags
@@ -42,6 +43,7 @@ jobs:
 | [p2p-workflow-fastfeedback](docs/reference/p2p-workflow-fastfeedback.md) | Build, test (functional + NFT + integration), promote |
 | [p2p-workflow-extended-test](docs/reference/p2p-workflow-extended-test.md) | Run extended tests, promote to prod registry |
 | [p2p-workflow-prod](docs/reference/p2p-workflow-prod.md) | Deploy to production |
+| [p2p-workflow-security-scan](docs/reference/p2p-workflow-security-scan.md) | Run source and latest image security scans |
 | [p2p-get-latest-image-extended-test](docs/reference/p2p-get-latest-image-extended-test.md) | Resolve latest image version in extended-test registry |
 | [p2p-get-latest-image-prod](docs/reference/p2p-get-latest-image-prod.md) | Resolve latest image version in prod registry |
 
@@ -54,6 +56,9 @@ The primary workflows call these. Call them only through the primary workflows.
 | [p2p-execute-command](docs/reference/p2p-execute-command.md) | Leaf executor — runs a build tool target in a configured environment |
 | [p2p-promote-image](docs/reference/p2p-promote-image.md) | Authenticates to source/dest registries and runs the promotion make target |
 | [p2p-get-latest-image](docs/reference/p2p-get-latest-image.md) | Base workflow for querying latest image version from artifact registry |
+| [p2p-workflow-source-security-scan](docs/reference/p2p-workflow-source-security-scan.md) | Scans repository source for dependency vulnerabilities, restricted/forbidden licenses, and committed secrets; posts one compact sticky comment and uploads normalized findings. |
+| [p2p-workflow-image-scan](docs/reference/p2p-workflow-image-scan.md) | Scans built images for CVEs (Trivy) and embedded secrets (TruffleHog); uploads reports and, when PR comment permissions are granted, posts a sticky comment per stage/environment. Called by fast-feedback, extended-test, prod, and the scheduled security umbrella. |
+| p2p-workflow-security-image-scan-stage | Internal scheduled-security child workflow that pairs latest-version discovery and image scanning for one stage/environment. |
 
 ## Prerequisites
 
@@ -87,6 +92,6 @@ See [Environment Configuration](docs/explanation/environment-configuration.md) f
 | Category | What's inside |
 |----------|---------------|
 | [Tutorials](docs/tutorials/) | Step-by-step guides to get running |
-| [How-to Guides](docs/how-to/) | Solve specific problems: secrets, artifacts, Slack alerts, environments, versioning |
+| [How-to Guides](docs/how-to/) | Solve specific problems: secrets, artifacts, Slack alerts, environments, versioning, security findings |
 | [Reference](docs/reference/) | Complete inputs/outputs/secrets for every workflow |
-| [Explanation](docs/explanation/) | Concepts: pipeline model, versioning, environments, make targets |
+| [Explanation](docs/explanation/) | Concepts: pipeline model, versioning, environments, make targets, security scanning |

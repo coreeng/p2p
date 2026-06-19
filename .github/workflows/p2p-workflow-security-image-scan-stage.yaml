@@ -1,0 +1,96 @@
+on:
+  workflow_call:
+    secrets:
+      env_vars:
+        required: false
+      container_registry_user:
+        required: false
+      container_registry_pat:
+        required: false
+      container_registry_url:
+        required: false
+    inputs:
+      registry-path:
+        required: true
+        type: string
+      pipeline-stage:
+        required: true
+        type: string
+      github_env:
+        required: true
+        type: string
+      tenant-name:
+        required: false
+        type: string
+        default: ''
+      image-name:
+        required: true
+        type: string
+      image-names:
+        required: false
+        type: string
+        default: ''
+      working-directory:
+        required: false
+        type: string
+        default: '.'
+      region:
+        required: false
+        type: string
+        default: europe-west2
+      dry-run:
+        required: false
+        type: boolean
+        default: false
+      checkout-version:
+        required: false
+        type: string
+        default: ''
+      security-scan-blocking-severity:
+        description: |
+          Minimum severity that blocks the workflow for image-scan findings:
+          off, low, medium, high, or critical.
+        required: false
+        type: string
+        default: 'off'
+
+jobs:
+  discover-version:
+    uses: ./.github/workflows/p2p-get-latest-image.yaml
+    permissions:
+      contents: read
+      id-token: write
+    secrets:
+      env_vars: ${{ secrets.env_vars }}
+    with:
+      registry-path: ${{ inputs.registry-path }}
+      tenant-name: ${{ inputs.tenant-name }}
+      image-name: ${{ inputs.image-name }}
+      dry-run: ${{ inputs.dry-run }}
+      region: ${{ inputs.region }}
+      github_env: ${{ inputs.github_env }}
+      working-directory: ${{ inputs.working-directory }}
+
+  image-scan:
+    needs: [discover-version]
+    if: needs.discover-version.outputs.found == 'true'
+    uses: ./.github/workflows/p2p-workflow-image-scan.yaml
+    permissions:
+      contents: read
+      id-token: write
+    secrets:
+      env_vars: ${{ secrets.env_vars }}
+      container_registry_user: ${{ secrets.container_registry_user }}
+      container_registry_pat: ${{ secrets.container_registry_pat }}
+      container_registry_url: ${{ secrets.container_registry_url }}
+    with:
+      pipeline-stage: ${{ inputs.pipeline-stage }}
+      github_env: ${{ inputs.github_env }}
+      tenant-name: ${{ inputs.tenant-name }}
+      version: ${{ needs.discover-version.outputs.version }}
+      region: ${{ inputs.region }}
+      working-directory: ${{ inputs.working-directory }}
+      image-names: ${{ inputs.image-names }}
+      dry-run: ${{ inputs.dry-run }}
+      checkout-version: ${{ inputs.checkout-version }}
+      blocking-severity: ${{ inputs.security-scan-blocking-severity }}

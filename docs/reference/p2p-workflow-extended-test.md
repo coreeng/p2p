@@ -5,6 +5,10 @@
 ## Usage
 
 ```yaml
+permissions:
+  contents: read
+  id-token: write
+
 jobs:
   extended-test:
     uses: coreeng/p2p/.github/workflows/p2p-workflow-extended-test.yaml@main
@@ -17,6 +21,10 @@ jobs:
       container_registry_url: ${{ secrets.CONTAINER_REGISTRY_URL }}
       slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
 ```
+
+## Permissions
+
+This workflow runs image scanning before promotion. The image scan authenticates to Google Cloud with GitHub OIDC, so caller workflows must grant `id-token: write` alongside `contents: read`.
 
 ## Inputs
 
@@ -33,7 +41,8 @@ jobs:
 | `app-name` | `string` | No | `''` | Application name. Must equal the tenant name (each application has its own application tenant). |
 | `tenant-name` | `string` | No | `''` | Tenant name passed to all make targets. |
 | `skip-subnamespaces-create` | `boolean` | No | `false` | Skips creating subnamespaces before running make targets. |
-| `artifacts` | `string` | No | `''` | Comma-separated list of artifact paths to upload after each stage. |
+| `artifacts` | `string` | No | `''` | YAML-formatted map of make target names to artifact paths. Paths matching each active command are uploaded after that command runs. |
+| `security-scan-blocking-severity` | `string` | No | `off` | Minimum image-scan finding severity that blocks the workflow: `off`, `low`, `medium`, `high`, or `critical`. Verified image secrets are treated as `critical`. The policy job fails on active findings, but the workflow continues when findings are below the blocking threshold. |
 
 ## Secrets
 
@@ -55,11 +64,19 @@ This workflow defines no outputs.
 run-tests     Runs p2p-extended-test make target.
               Only runs on main-branch.
               checkout-version = version-prefix + version.
-└── promote   Promotes from source to destination environments.
+└── promote   (needs: run-tests, image-scan)
+              Promotes from source to destination environments.
               Only runs on main-branch.
               checkout-version = version-prefix + version.
 
-notify-failure  (needs: run-tests, promote; runs on main-branch when any job fails)
+image-scan    (independent of run-tests; runs in parallel)
+              Calls p2p-workflow-image-scan against the source images.
+              Only runs on main-branch.
+              checkout-version = version-prefix + version.
+              Blocks the workflow on findings at or above
+              security-scan-blocking-severity (default: off).
+
+notify-failure  (needs: run-tests, image-scan, promote; runs on main-branch when any job fails)
 ```
 
 All jobs use a matrix derived from `source`. The `promote` job uses a matrix derived from `destination`.
@@ -71,3 +88,5 @@ All jobs use a matrix derived from `source`. The `promote` job uses a matrix der
 - [How to configure Slack alerts](../how-to/configure-slack-alerts.md)
 - [How to use multiple environments](../how-to/use-multiple-environments.md)
 - [How to customise versioning](../how-to/customise-versioning.md)
+- [How to triage security findings](../how-to/triage-security-findings.md)
+- [p2p-workflow-image-scan reference](p2p-workflow-image-scan.md)

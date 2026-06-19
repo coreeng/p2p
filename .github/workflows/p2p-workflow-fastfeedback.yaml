@@ -65,6 +65,13 @@ on:
         required: false
         type: string
         default: ''
+      security-scan-blocking-severity:
+        description: |
+          Minimum severity that blocks the workflow for source-security-scan
+          and image-scan findings: off, low, medium, high, or critical.
+        required: false
+        type: string
+        default: off
     outputs:
       version:
         value: ${{ inputs.version }}
@@ -92,6 +99,37 @@ jobs:
       working-directory: ${{ inputs.working-directory }}
       skip-subnamespaces-create: ${{ inputs.skip-subnamespaces-create }}
       artifacts: ${{ inputs.artifacts }}
+
+  source-security-scan:
+    uses: ./.github/workflows/p2p-workflow-source-security-scan.yaml
+    with:
+      secret-scan-scope: changes
+      blocking-severity: ${{ inputs.security-scan-blocking-severity }}
+      dry-run: ${{ inputs.dry-run }}
+      checkout-version: ${{ inputs.checkout-version }}
+      timeout-minutes: 10
+
+  image-scan:
+    needs: [build]
+    uses: ./.github/workflows/p2p-workflow-image-scan.yaml
+    secrets:
+      env_vars: ${{ secrets.env_vars }}
+      container_registry_user: ${{ secrets.container_registry_user }}
+      container_registry_pat: ${{ secrets.container_registry_pat }}
+      container_registry_url: ${{ secrets.container_registry_url }}
+    strategy:
+      matrix: ${{ fromJSON(inputs.source) }}
+      fail-fast: false
+    with:
+      pipeline-stage: fast-feedback
+      github_env: ${{ matrix.deploy_env }}
+      tenant-name: ${{ inputs.tenant-name }}
+      version: ${{ inputs.version }}
+      region: ${{ inputs.region }}
+      working-directory: ${{ inputs.working-directory }}
+      dry-run: ${{ inputs.dry-run }}
+      checkout-version: ${{ inputs.checkout-version }}
+      blocking-severity: ${{ inputs.security-scan-blocking-severity }}
 
   functional-test:
     needs: [build]
@@ -171,7 +209,7 @@ jobs:
 
   promote:
     name: promote
-    needs: [integration-test]
+    needs: [integration-test, image-scan, source-security-scan]
     if: success() && ( github.ref == inputs.main-branch || github.ref_type == 'tag' )
     secrets:
       env_vars: ${{ secrets.env_vars }}
@@ -192,7 +230,7 @@ jobs:
       working-directory: ${{ inputs.working-directory }}
 
   notify-failure:
-    needs: [build, functional-test, nft-test, integration-test, promote]
+    needs: [build, source-security-scan, image-scan, functional-test, nft-test, integration-test, promote]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     if: always() && github.ref == inputs.main-branch && contains(needs.*.result, 'failure')

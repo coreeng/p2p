@@ -1,10 +1,15 @@
 # p2p-workflow-fastfeedback
 
-> Runs build, functional, NFT, and integration tests in the fast-feedback environment, then promotes to extended-test on main or tag pushes.
+> Runs build, functional, NFT, and integration tests in the fast-feedback environment, then promotes to extended-test on main or tag pushes. Also runs source security scanning independently of `build`, and image scanning after `build` completes.
 
 ## Usage
 
 ```yaml
+permissions:
+  contents: read
+  id-token: write
+  pull-requests: write
+
 jobs:
   fast-feedback:
     uses: coreeng/p2p/.github/workflows/p2p-workflow-fastfeedback.yaml@main
@@ -17,6 +22,12 @@ jobs:
       container_registry_url: ${{ secrets.CONTAINER_REGISTRY_URL }}
       slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
 ```
+
+## Permissions
+
+P2P workflows use GitHub's OIDC token to authenticate to platform services during build, test, promotion, and security scanning. Caller workflows should grant `id-token: write` alongside `contents: read` as part of the standard P2P setup.
+
+Grant `pull-requests: write` when the workflow runs on pull requests so source and image security scans can update their sticky PR comments. Without it, scans still write workflow summaries and artifacts, but PR comments cannot be posted.
 
 ## Inputs
 
@@ -34,7 +45,8 @@ jobs:
 | `working-directory` | `string` | No | `.` | Repository path from which make targets are executed. |
 | `skip-fastfeedback-integration-on-prs` | `boolean` | No | `false` | When `true`, skips the `integration-test` job on pull requests (runs unconditionally on main or tags). |
 | `skip-subnamespaces-create` | `boolean` | No | `false` | Skips creating subnamespaces before running make targets. |
-| `artifacts` | `string` | No | `''` | Comma-separated list of artifact paths to upload after each stage. |
+| `artifacts` | `string` | No | `''` | YAML-formatted map of make target names to artifact paths. Paths matching each active command are uploaded after that command runs. |
+| `security-scan-blocking-severity` | `string` | No | `off` | Minimum security finding severity that blocks the workflow: `off`, `low`, `medium`, `high`, or `critical`. When blocking is enabled, verified secrets are treated as `critical`. Policy jobs fail on active findings, but the workflow continues when findings are below the blocking threshold. |
 
 ## Secrets
 
@@ -61,13 +73,27 @@ build
     └── integration-test  (needs: functional-test, nft-test)
                           Skipped when skip-fastfeedback-integration-on-prs=true
                           AND ref is not main-branch AND ref_type is not tag.
-        └── promote       (needs: integration-test)
+        └── promote       (needs: integration-test, image-scan, source-security-scan)
                           Runs only on main-branch or tag pushes.
 
-notify-failure        (needs: all jobs; runs on main-branch when any job fails)
+image-scan           (needs: build)
+                     Calls p2p-workflow-image-scan against the built images.
+                     Checks out the same checkout-version ref for image target resolution.
+                     Blocks the workflow on findings at or above
+                     security-scan-blocking-severity (default: off).
+
+source-security-scan  (independent of build; runs in parallel)
+                      Calls p2p-workflow-source-security-scan with secret-scan-scope: changes.
+                      Checks out the same checkout-version ref as build/test jobs.
+                      Reports source vulnerabilities, restricted/forbidden licenses,
+                      and git-tree secrets. Blocks only on vulnerabilities at or above
+                      security-scan-blocking-severity or verified secrets when the
+                      threshold is not off.
+
+notify-failure       (needs: all jobs; runs on main-branch when any job fails)
 ```
 
-All jobs use a matrix derived from `source`. The `promote` job uses a matrix derived from `destination`.
+All jobs use a matrix derived from `source`. The `promote` job uses a matrix derived from `destination`. The `source-security-scan` job is not part of the matrix; it runs once per workflow.
 
 ## See also
 
@@ -76,3 +102,9 @@ All jobs use a matrix derived from `source`. The `promote` job uses a matrix der
 - [How to skip stages on pull requests](../how-to/skip-stages-on-prs.md)
 - [How to configure Slack alerts](../how-to/configure-slack-alerts.md)
 - [How to use multiple environments](../how-to/use-multiple-environments.md)
+- [How to triage security findings](../how-to/triage-security-findings.md)
+- [Secrets scanning explanation](../explanation/secrets-scanning.md)
+- [Image scanning explanation](../explanation/image-scanning.md)
+- [p2p-workflow-source-security-scan reference](p2p-workflow-source-security-scan.md)
+- [p2p-workflow-image-scan reference](p2p-workflow-image-scan.md)
+- [p2p-workflow-security-scan reference (scheduled umbrella)](p2p-workflow-security-scan.md)
