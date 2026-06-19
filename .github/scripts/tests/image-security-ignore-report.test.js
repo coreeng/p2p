@@ -320,6 +320,25 @@ function readStatusStepNames(workflowPath) {
     .filter(line => line.includes('Output security risk:'));
 }
 
+function assertWorkflowEnforcesScanStatus(workflowPath, outputName) {
+  const workflow = fs.readFileSync(workflowPath, 'utf8');
+  assert(workflow.includes(`SCAN_STATUS: \${{ needs.${outputName}.outputs.scan-status || 'failed' }}`));
+  assert(workflow.includes('if [ "${SCAN_STATUS}" != "ok" ]; then'));
+  assert(workflow.includes('Security scan did not complete successfully.'));
+}
+
+function assertImagePolicyFailsOnAnyFindingButOnlyBlocksOnBlockingFindings(workflowPath) {
+  const workflow = fs.readFileSync(workflowPath, 'utf8');
+  assert(workflow.includes("continue-on-error: ${{ inputs.blocking-severity == 'off' || (needs.image-scan.outputs.blocking-count == '0' && needs.image-scan.outputs.secret-blocking-count == '0') }}"));
+  assert(workflow.includes('elif [ "${TOTAL:-0}" -gt 0 ] || [ "${SECRET_TOTAL:-0}" -gt 0 ]; then'));
+  assert(workflow.includes('Security finding(s) detected below blocking-severity=${BLOCKING_SEVERITY}; this policy job is allowed to fail without failing the workflow.'));
+}
+
+function assertLatestImageLookupDoesNotRequireCallerCheckout(workflowPath) {
+  const workflow = fs.readFileSync(workflowPath, 'utf8');
+  assert(!workflow.includes('working-directory: ${{ inputs.working-directory }}'));
+}
+
 async function runMarkdownEscapingReport() {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'image-markdown-'));
   const workspace = path.join(tmp, 'repo');
@@ -538,6 +557,50 @@ async function runMalformedTruffleHogReportList() {
   });
 }
 
+async function runPartialScannerReportLists() {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'image-partial-lists-'));
+  const workspace = path.join(tmp, 'repo');
+  const trivyDir = path.join(tmp, 'trivy');
+  const secretDir = path.join(tmp, 'trufflehog-image');
+  fs.mkdirSync(workspace, { recursive: true });
+  fs.mkdirSync(trivyDir, { recursive: true });
+  fs.mkdirSync(secretDir, { recursive: true });
+
+  const apiReport = path.join(trivyDir, 'api.json');
+  const workerReport = path.join(trivyDir, 'worker.json');
+  fs.writeFileSync(apiReport, JSON.stringify({ Results: [] }));
+  fs.writeFileSync(workerReport, JSON.stringify({ Results: [] }));
+  const reportList = path.join(trivyDir, 'reports.txt');
+  fs.writeFileSync(reportList, [
+    `registry.example/prod/api:1.2.3\tlinux/amd64\tsha256:api\t${apiReport}`,
+    `registry.example/prod/worker:1.2.3\tlinux/amd64\tsha256:worker\t${workerReport}`,
+    '',
+  ].join('\n'));
+
+  const apiSecretReport = path.join(secretDir, 'api.jsonl');
+  fs.writeFileSync(apiSecretReport, '');
+  const secretList = path.join(secretDir, 'reports.txt');
+  fs.writeFileSync(secretList, [
+    `registry.example/prod/api:1.2.3\tlinux/amd64\tsha256:api\t${apiSecretReport}`,
+    '',
+  ].join('\n'));
+
+  return runReportModule({
+    RUNNER_TEMP: tmp,
+    GITHUB_WORKSPACE: workspace,
+    REPORT_LIST: reportList,
+    SECRET_REPORT_LIST: secretList,
+    BLOCKING_SEVERITY: 'high',
+    PIPELINE_STAGE: 'prod',
+    GITHUB_ENV_INPUT: '',
+    VERSION: '1.2.3',
+    P2P_SECURITY_IGNORE_HELPER: helperPath,
+    GITHUB_SERVER_URL: 'https://github.example',
+    GITHUB_REPOSITORY: 'org/repo',
+    GITHUB_RUN_ID: '42',
+  });
+}
+
 (async () => {
   const result = await runReport();
   assert.deepStrictEqual(result.failures, []);
@@ -666,6 +729,11 @@ async function runMalformedTruffleHogReportList() {
     error => error.message.includes('Malformed TruffleHog image report list entry'),
   );
 
+  const partialLists = await runPartialScannerReportLists();
+  assert.deepStrictEqual(partialLists.failures, []);
+  assert.strictEqual(partialLists.outputs['scan-status'], 'failed');
+  assert.strictEqual(partialLists.outputs['security-risk'], 'unknown');
+
   const unclassified = await runUnclassifiedImageReport();
   assert.deepStrictEqual(unclassified.failures, []);
   assert.strictEqual(unclassified.outputs['security-risk'], 'unclassified');
@@ -730,6 +798,9 @@ async function runMalformedTruffleHogReportList() {
   assert.deepStrictEqual(imageStatusSteps, [
     '      - name: "Output security risk: ${{ needs.image-scan.outputs.security-risk || \'unknown\' }}; scan: ${{ needs.image-scan.outputs.scan-status || \'failed\' }}"',
   ]);
+  assertWorkflowEnforcesScanStatus(path.resolve(__dirname, '../../workflows/p2p-workflow-image-scan.yaml'), 'image-scan');
+  assertImagePolicyFailsOnAnyFindingButOnlyBlocksOnBlockingFindings(path.resolve(__dirname, '../../workflows/p2p-workflow-image-scan.yaml'));
+  assertLatestImageLookupDoesNotRequireCallerCheckout(path.resolve(__dirname, '../../workflows/p2p-get-latest-image.yaml'));
   console.log('image security ignore report fixtures passed');
 })().catch(error => {
   console.error(error);

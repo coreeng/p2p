@@ -264,12 +264,30 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
+  scan-status-policy:
+    name: source-security-scan-status-policy
+    runs-on: ubuntu-24.04
+    needs: [report]
+    if: ${{ always() && inputs.dry-run == false }}
+    timeout-minutes: 1
+    steps:
+      - name: Enforce scanner execution status
+        shell: bash
+        env:
+          SCAN_STATUS: ${{ needs.report.outputs.scan-status || 'failed' }}
+        run: |
+          set -euo pipefail
+          if [ "${SCAN_STATUS}" != "ok" ]; then
+            echo "::error::Security scan did not complete successfully. scan-status=${SCAN_STATUS}"
+            exit 1
+          fi
+
   policy:
     name: source-security-policy
     runs-on: ubuntu-24.04
     needs: [report]
     if: ${{ always() && inputs.dry-run == false }}
-    continue-on-error: ${{ inputs.blocking-severity == 'off' }}
+    continue-on-error: ${{ inputs.blocking-severity == 'off' || (needs.report.outputs.vulnerability-blocking == '0' && needs.report.outputs.secret-blocking == '0') }}
     timeout-minutes: 1
     steps:
       - name: "Output security risk: ${{ needs.report.outputs.security-risk || 'unknown' }}; scan: ${{ needs.report.outputs.scan-status || 'failed' }}"
@@ -304,5 +322,8 @@ jobs:
             fi
           elif [ "${VULN_BLOCKING:-0}" -gt 0 ] || [ "${SECRET_BLOCKING:-0}" -gt 0 ]; then
             echo "::error::Security finding(s) at or above blocking-severity=${BLOCKING_SEVERITY} detected."
+            exit 1
+          elif [ "${VULN_TOTAL:-0}" -gt 0 ] || [ "${SECRET_TOTAL:-0}" -gt 0 ]; then
+            echo "::error::Security finding(s) detected below blocking-severity=${BLOCKING_SEVERITY}; this policy job is allowed to fail without failing the workflow."
             exit 1
           fi

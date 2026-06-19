@@ -1,6 +1,6 @@
 # p2p-workflow-source-security-scan
 
-> Scans repository source for committed secrets, dependency vulnerabilities, and restricted or forbidden licenses. Produces a workflow summary, a compact sticky PR comment, and a `source-security-scan-findings` artifact. A separate policy job fails on findings according to the configured blocking severity.
+> Scans repository source for committed secrets, dependency vulnerabilities, and restricted or forbidden licenses. Produces a workflow summary, a compact sticky PR comment, and a `source-security-scan-findings` artifact. A separate policy job fails on active vulnerability or secret findings; the configured blocking severity controls whether that policy failure fails the workflow.
 
 ## Usage
 
@@ -11,7 +11,7 @@ Internal workflow called from [`p2p-workflow-fastfeedback`](p2p-workflow-fastfee
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `secret-scan-scope` | string | Yes | - | `changes` for PR/push scanning or `full-history` for scheduled monitoring. TruffleHog uses this to choose git history scope. Trivy scans the current checked-out source tree. |
-| `blocking-severity` | string | No | `off` | Minimum finding severity that blocks the workflow: `off`, `low`, `medium`, `high`, or `critical`. Verified secrets are treated as `critical`. With `off`, the policy job may fail on findings, but the workflow continues. |
+| `blocking-severity` | string | No | `off` | Minimum finding severity that blocks the workflow: `off`, `low`, `medium`, `high`, or `critical`. Verified secrets are treated as `critical`. The policy job fails on active vulnerability or secret findings, but the workflow continues when findings are below the blocking threshold. |
 | `ignore-unfixed` | boolean | No | `true` | Passed to Trivy vulnerability scanning. |
 | `dry-run` | boolean | No | `false` | When `true`, skips scanner installs, scans, sticky PR comments, artifact upload, and policy enforcement. The summary reports that the scan was skipped. |
 | `timeout-minutes` | number | No | `30` | Job timeout for scanner jobs. |
@@ -63,7 +63,7 @@ See [How to ignore security findings](../how-to/ignore-security-findings.md) for
 The workflow is visibility-first by default. Scanner setup or execution errors always fail the workflow. Finding policy is controlled by `blocking-severity`:
 
 - `off`: findings do not fail the workflow, but the `source-security-policy` job fails when vulnerabilities or secrets are found;
-- `low`, `medium`, `high`, or `critical`: reported Trivy vulnerability findings at or above that threshold fail the workflow;
+- `low`, `medium`, `high`, or `critical`: reported Trivy vulnerability findings below that threshold fail only the policy job, while findings at or above that threshold fail the workflow;
 - verified TruffleHog secrets are treated as `critical` findings and fail the workflow for any non-`off` threshold.
 
 Restricted and forbidden license findings are report-only for every threshold. The source scan reports only HIGH and CRITICAL license classifications.

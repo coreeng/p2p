@@ -170,8 +170,9 @@ function loadSecurityIgnoreHelper(helperPath) {
   return require(helperPath || path.join(__dirname, 'p2p-security-ignore.js'));
 }
 
-function isRawSecretKey(key) {
-  return String(key || '').toLowerCase().includes('raw');
+function isSensitiveSecretKey(key) {
+  const normalized = String(key || '').toLowerCase();
+  return normalized.includes('raw') || normalized === 'redacted';
 }
 
 function stripRawSecretFields(value) {
@@ -179,7 +180,7 @@ function stripRawSecretFields(value) {
   if (!value || typeof value !== 'object') return value;
   const redacted = {};
   for (const [key, item] of Object.entries(value)) {
-    if (isRawSecretKey(key)) continue;
+    if (isSensitiveSecretKey(key)) continue;
     redacted[key] = stripRawSecretFields(item);
   }
   return redacted;

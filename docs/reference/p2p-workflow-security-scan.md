@@ -39,7 +39,7 @@ jobs:
 | `working-directory` | string | No | `.` | Working directory for `make p2p-images` and downstream make targets. |
 | `region` | string | No | `europe-west2` | GCP region; overridden by `vars.REGION`. |
 | `dry-run` | boolean | No | `false` | Passed through to child workflows; skips registry lookups and scans. |
-| `security-scan-blocking-severity` | string | No | `off` | Minimum security finding severity that blocks the umbrella workflow: `off`, `low`, `medium`, `high`, or `critical`. Verified secrets are treated as `critical`. With `off`, child policy jobs may fail on findings, but the umbrella workflow continues. |
+| `security-scan-blocking-severity` | string | No | `off` | Minimum security finding severity that blocks the umbrella workflow: `off`, `low`, `medium`, `high`, or `critical`. Verified secrets are treated as `critical`. Child policy jobs fail on active findings, but the umbrella workflow continues when findings are below the blocking threshold. |
 | `timeout-minutes` | number | No | `30` | Timeout for the `source-security-scan` job. Image-scan jobs use their own default. |
 
 ## Secrets
@@ -70,7 +70,7 @@ resolve-anchor-image
 source-security-scan                                   (independent; runs in parallel)
 ```
 
-Each matrix entry calls an internal stage workflow that first discovers the latest version for that stage/environment and then scans that exact version. The source-security-scan job runs in parallel with the per-stage matrices. For source scans, `secret-scan-scope: full-history` applies to TruffleHog git scanning; Trivy scans only the current checked-out branch tree. The `security-scan-blocking-severity` input is passed to every child scan. Its default `off` keeps scheduled scans report-only; setting it to `low`, `medium`, `high`, or `critical` makes findings at or above that severity fail the umbrella workflow.
+Each matrix entry calls an internal stage workflow that first discovers the latest version for that stage/environment and then scans that exact version. The source-security-scan job runs in parallel with the per-stage matrices. For source scans, `secret-scan-scope: full-history` applies to TruffleHog git scanning; Trivy scans only the current checked-out branch tree. The `security-scan-blocking-severity` input is passed to every child scan. Its default `off` keeps scheduled scans report-only; setting it to `low`, `medium`, `high`, or `critical` makes findings at or above that severity fail the umbrella workflow, while below-threshold findings fail only the child policy job.
 
 ## Version discovery
 

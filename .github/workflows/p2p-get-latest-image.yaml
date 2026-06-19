@@ -89,7 +89,6 @@ jobs:
         id: get-latest-image
         env:
           DRY_RUN: ${{ inputs.dry-run }}
-        working-directory: ${{ inputs.working-directory }}
         run: |
             set -o pipefail
             if [ "$DRY_RUN" == false ]; then

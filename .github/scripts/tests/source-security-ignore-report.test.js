@@ -254,6 +254,20 @@ function readStatusStepNames(workflowPath) {
     .filter(line => line.includes('Output security risk:'));
 }
 
+function assertWorkflowEnforcesScanStatus(workflowPath, outputName) {
+  const workflow = fs.readFileSync(workflowPath, 'utf8');
+  assert(workflow.includes(`SCAN_STATUS: \${{ needs.${outputName}.outputs.scan-status || 'failed' }}`));
+  assert(workflow.includes('if [ "${SCAN_STATUS}" != "ok" ]; then'));
+  assert(workflow.includes('Security scan did not complete successfully.'));
+}
+
+function assertSourcePolicyFailsOnAnyFindingButOnlyBlocksOnBlockingFindings(workflowPath) {
+  const workflow = fs.readFileSync(workflowPath, 'utf8');
+  assert(workflow.includes("continue-on-error: ${{ inputs.blocking-severity == 'off' || (needs.report.outputs.vulnerability-blocking == '0' && needs.report.outputs.secret-blocking == '0') }}"));
+  assert(workflow.includes('elif [ "${VULN_TOTAL:-0}" -gt 0 ] || [ "${SECRET_TOTAL:-0}" -gt 0 ]; then'));
+  assert(workflow.includes('Security finding(s) detected below blocking-severity=${BLOCKING_SEVERITY}; this policy job is allowed to fail without failing the workflow.'));
+}
+
 async function runUnsafeMarkdownReport() {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'source-markdown-'));
   const root = path.join(tmp, 'source-security');
@@ -904,6 +918,8 @@ async function runReportWithMissingTruffleHogOutput() {
   assert.deepStrictEqual(sourceStatusSteps, [
     '      - name: "Output security risk: ${{ needs.report.outputs.security-risk || \'unknown\' }}; scan: ${{ needs.report.outputs.scan-status || \'failed\' }}"',
   ]);
+  assertWorkflowEnforcesScanStatus(path.resolve(__dirname, '../../workflows/p2p-workflow-source-security-scan.yaml'), 'report');
+  assertSourcePolicyFailsOnAnyFindingButOnlyBlocksOnBlockingFindings(path.resolve(__dirname, '../../workflows/p2p-workflow-source-security-scan.yaml'));
   for (const mode of ['missing', 'empty', 'invalid']) {
     await assert.rejects(
       () => runReportWithInvalidTrivyOutput(mode),

@@ -59,6 +59,7 @@ async function runScanFunction(scanFunction, options = {}) {
               Verified: true,
               Raw: 'raw-image-secret-value',
               RawV2: 'raw-image-secret-value-v2',
+              Redacted: 'redacted-image-secret-value',
               SourceMetadata: {
                 Data: {
                   Docker: {
@@ -110,8 +111,10 @@ async function runScanFunction(scanFunction, options = {}) {
     assert(!reportText.includes('"Raw"'));
     assert(!reportText.includes('"RawV2"'));
     assert(!reportText.includes('RawSecret'));
+    assert(!reportText.includes('Redacted'));
     assert(!reportText.includes('raw-image-secret-value'));
     assert(!reportText.includes('raw-image-secret-value-v2'));
+    assert(!reportText.includes('redacted-image-secret-value'));
     assert(!reportText.includes('nested-raw-image-secret-value'));
     assert(!reportText.includes('malformed raw-image-secret-value'));
     const findings = reportText.trim().split('\n').map(item => JSON.parse(item));

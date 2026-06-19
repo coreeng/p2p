@@ -100,6 +100,13 @@ const maxSecurityRisk = (vulnerabilities, secrets) => {
   return risks.sort((a, b) => SECURITY_RISK_RANK[a] - SECURITY_RISK_RANK[b])[0];
 };
 
+const reportKey = (ref, platform, digest) => [ref, platform, digest].join('\u0000');
+
+const sameReportKeys = (left, right) => (
+  left.size === right.size
+  && Array.from(left).every(key => right.has(key))
+);
+
 const buildImageSecurityReport = async ({ core, env = process.env } = {}) => {
   const securityIgnoreHelper = env.P2P_SECURITY_IGNORE_HELPER || path.join(__dirname, 'p2p-security-ignore.js');
   const {
@@ -140,6 +147,7 @@ const buildImageSecurityReport = async ({ core, env = process.env } = {}) => {
   let blocking = 0;
   const imageGroups = {};
   const ignoredImageVulnerabilities = [];
+  const vulnerabilityReportKeys = new Set();
 
   if (listExists) {
     const entries = fs.readFileSync(list, 'utf8').split('\n').filter(Boolean);
@@ -149,6 +157,7 @@ const buildImageSecurityReport = async ({ core, env = process.env } = {}) => {
         throw new Error(`Malformed Trivy report list entry: ${line}`);
       }
       const [ref, plat, digest, out] = fields;
+      vulnerabilityReportKeys.add(reportKey(ref, plat, digest));
       if (!fs.existsSync(out) || fs.statSync(out).size === 0) {
         throw new Error(`Missing or empty Trivy report for ${ref} (${plat}): ${out}`);
       }
@@ -209,6 +218,7 @@ const buildImageSecurityReport = async ({ core, env = process.env } = {}) => {
   const secretListExists = !!(secretList && fs.existsSync(secretList) && fs.statSync(secretList).size > 0);
   const secretImageGroups = {};
   const ignoredImageSecrets = [];
+  const secretReportKeys = new Set();
   let secretTotal = 0;
   let secretBlocking = 0;
   if (secretListExists) {
@@ -219,6 +229,7 @@ const buildImageSecurityReport = async ({ core, env = process.env } = {}) => {
         throw new Error(`Malformed TruffleHog image report list entry: ${line}`);
       }
       const [ref, plat, digest, out] = fields;
+      secretReportKeys.add(reportKey(ref, plat, digest));
       if (!fs.existsSync(out)) {
         throw new Error(`Missing TruffleHog image report for ${ref} (${plat}): ${out}`);
       }
@@ -330,7 +341,7 @@ const buildImageSecurityReport = async ({ core, env = process.env } = {}) => {
     ));
 
   const allSecretRows = secretSummaries.flatMap(group => group.rows);
-  const scanStatus = listExists && secretListExists ? 'ok' : 'failed';
+  const scanStatus = listExists && secretListExists && sameReportKeys(vulnerabilityReportKeys, secretReportKeys) ? 'ok' : 'failed';
   const securityRisk = scanStatus === 'failed' ? 'unknown' : maxSecurityRisk(allUniqueRows, allSecretRows);
   const totalSecretUnique = allSecretRows.length;
   const selectedSecretRows = [

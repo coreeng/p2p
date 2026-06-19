@@ -117,12 +117,17 @@ jobs:
           password: ${{ steps.auth.outputs.access_token }}
 
       - name: Login to tenant provided registry
+        if: ${{ inputs.dry-run == false }}
         env:
           REGISTRY_USER: ${{ secrets.container_registry_user }}
           REGISTRY_PAT: ${{ secrets.container_registry_pat }}
           REGISTRY_URL: ${{ secrets.container_registry_url }}
-        if: ${{ inputs.dry-run == false && env.REGISTRY_USER && env.REGISTRY_PAT }}
         run: |
+          set -euo pipefail
+          if [ -z "${REGISTRY_USER:-}" ] || [ -z "${REGISTRY_PAT:-}" ] || [ -z "${REGISTRY_URL:-}" ]; then
+            echo "Tenant registry credentials not provided; skipping tenant registry login."
+            exit 0
+          fi
           echo "${REGISTRY_PAT}" | docker login "${REGISTRY_URL}" -u "${REGISTRY_USER}" --password-stdin
 
       - id: resolve-images
@@ -244,12 +249,30 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+  scan-status-policy:
+    name: image-scan-status-policy (${{ inputs.github_env != '' && format('{0}, {1}', inputs.pipeline-stage, inputs.github_env) || inputs.pipeline-stage }})
+    runs-on: ubuntu-24.04
+    needs: [image-scan]
+    if: ${{ always() && inputs.dry-run == false }}
+    timeout-minutes: 1
+    steps:
+      - name: Enforce scanner execution status
+        shell: bash
+        env:
+          SCAN_STATUS: ${{ needs.image-scan.outputs.scan-status || 'failed' }}
+        run: |
+          set -euo pipefail
+          if [ "${SCAN_STATUS}" != "ok" ]; then
+            echo "::error::Security scan did not complete successfully. scan-status=${SCAN_STATUS}"
+            exit 1
+          fi
+
   policy:
     name: image-scan-policy (${{ inputs.github_env != '' && format('{0}, {1}', inputs.pipeline-stage, inputs.github_env) || inputs.pipeline-stage }})
     runs-on: ubuntu-24.04
     needs: [image-scan]
     if: ${{ always() && inputs.dry-run == false }}
-    continue-on-error: ${{ inputs.blocking-severity == 'off' }}
+    continue-on-error: ${{ inputs.blocking-severity == 'off' || (needs.image-scan.outputs.blocking-count == '0' && needs.image-scan.outputs.secret-blocking-count == '0') }}
     timeout-minutes: 1
     steps:
       - name: "Output security risk: ${{ needs.image-scan.outputs.security-risk || 'unknown' }}; scan: ${{ needs.image-scan.outputs.scan-status || 'failed' }}"
@@ -282,5 +305,8 @@ jobs:
             fi
           elif [ "${BLOCKING:-0}" -gt 0 ] || [ "${SECRET_BLOCKING:-0}" -gt 0 ]; then
             echo "::error::Security finding(s) at or above blocking-severity=${BLOCKING_SEVERITY} detected."
+            exit 1
+          elif [ "${TOTAL:-0}" -gt 0 ] || [ "${SECRET_TOTAL:-0}" -gt 0 ]; then
+            echo "::error::Security finding(s) detected below blocking-severity=${BLOCKING_SEVERITY}; this policy job is allowed to fail without failing the workflow."
             exit 1
           fi
