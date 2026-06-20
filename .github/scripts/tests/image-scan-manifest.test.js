@@ -11,6 +11,7 @@ async function runPullScript(imageRefs, inspectByRef) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'image-pull-'));
   const outputs = {};
   const failures = [];
+  const warnings = [];
   const pulls = [];
 
   await pullImages({
@@ -22,6 +23,7 @@ async function runPullScript(imageRefs, inspectByRef) {
       setOutput: (key, value) => { outputs[key] = value; },
       setFailed: message => { failures.push(message); },
       info: () => {},
+      warning: message => { warnings.push(message); },
     },
     execFileSyncImpl(command, args) {
       assert.strictEqual(command, 'docker');
@@ -38,7 +40,7 @@ async function runPullScript(imageRefs, inspectByRef) {
     },
   });
 
-  return { outputs, failures, pulls };
+  return { outputs, failures, pulls, warnings };
 }
 
 async function runManifestScript({ stage, vulnLines = [], secretLines = [], vulnRawLines = null, secretRawLines = null, setup = null }) {
@@ -137,6 +139,64 @@ async function runManifestScript({ stage, vulnLines = [], secretLines = [], vuln
       'europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/prod/worker:1.2.3\tlinux/arm64\tsha256:arm64',
     ],
   );
+
+  const mixedArtifacts = await runPullScript(
+    [
+      'europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/prod/api:1.2.3',
+      'europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/prod/training-platform-assessment:1.2.3',
+    ],
+    {
+      'europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/prod/api:1.2.3': {
+        manifest: { digest: 'sha256:resolved' },
+        image: { os: 'linux', architecture: 'amd64' },
+      },
+      'europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/prod/training-platform-assessment:1.2.3': {
+        manifest: {
+          digest: 'sha256:chart',
+          mediaType: 'application/vnd.oci.image.manifest.v1+json',
+          config: { mediaType: 'application/vnd.cncf.helm.config.v1+json' },
+        },
+      },
+    },
+  );
+  assert.deepStrictEqual(mixedArtifacts.failures, []);
+  assert.deepStrictEqual(mixedArtifacts.warnings, [
+    'Skipping europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/prod/training-platform-assessment:1.2.3; it is an OCI artifact, not a container image.',
+  ]);
+  assert.deepStrictEqual(
+    fs.readFileSync(mixedArtifacts.outputs['list-path'], 'utf8').trim(),
+    'europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/prod/api:1.2.3\tlinux/amd64\tsha256:resolved',
+  );
+
+  const allArtifacts = await runPullScript(
+    ['europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/prod/training-platform-assessment:1.2.3'],
+    {
+      'europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/prod/training-platform-assessment:1.2.3': {
+        artifactType: 'application/vnd.cncf.helm.chart.content.v1.tar+gzip',
+        manifest: { digest: 'sha256:chart' },
+      },
+    },
+  );
+  assert.deepStrictEqual(allArtifacts.failures, [
+    'No container images found to scan after excluding non-image OCI artifacts.',
+  ]);
+  assert.deepStrictEqual(allArtifacts.warnings, [
+    'Skipping europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/prod/training-platform-assessment:1.2.3; it is an OCI artifact, not a container image.',
+  ]);
+  assert.strictEqual(fs.readFileSync(allArtifacts.outputs['list-path'], 'utf8'), '');
+
+  const malformedImage = await runPullScript(
+    ['europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/prod/api:1.2.3'],
+    {
+      'europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/prod/api:1.2.3': {
+        manifest: { digest: 'sha256:resolved' },
+      },
+    },
+  );
+  assert.deepStrictEqual(malformedImage.failures, [
+    'Could not resolve platform/digest for europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/prod/api:1.2.3.',
+  ]);
+  assert.deepStrictEqual(malformedImage.warnings, []);
 
   const multi = await runManifestScript({
     stage: 'extended-test',
