@@ -132,7 +132,7 @@ async function scanImages({
   env = process.env,
   fsImpl = fs,
   pathImpl = path,
-  execFileSyncImpl = execFileSync,
+  spawnSyncImpl = spawnSync,
 } = {}) {
   const reportsDir = pathImpl.join(env.RUNNER_TEMP, 'trivy');
   const reportList = pathImpl.join(reportsDir, 'reports.txt');
@@ -161,7 +161,18 @@ async function scanImages({
       target,
     ];
     core.info(`Scanning ${ref} (${plat}) @ ${digest}`);
-    execFileSyncImpl('trivy', args, { stdio: 'inherit' });
+    const proc = spawnSyncImpl('trivy', args, { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
+    if (proc.stdout) process.stdout.write(proc.stdout);
+    if (proc.stderr) process.stderr.write(proc.stderr);
+    if (proc.status !== 0) {
+      const output = `${proc.stdout || ''}\n${proc.stderr || ''}\n${proc.error?.message || ''}`;
+      if (output.includes('empty export - not implemented')) {
+        core.warning?.(`Trivy could not export ${ref} (${plat}); treating empty image as zero vulnerability findings.`);
+        fsImpl.writeFileSync(out, JSON.stringify({ Results: [] }) + '\n');
+      } else {
+        throw new Error(`trivy exited with ${proc.status}: ${proc.stderr || proc.error?.message || '(no stderr)'}`);
+      }
+    }
     fsImpl.appendFileSync(reportList, `${ref}\t${plat}\t${digest}\t${out}\n`);
   }
 }
