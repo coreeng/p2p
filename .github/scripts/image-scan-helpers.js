@@ -80,6 +80,7 @@ async function pullImages({
   const listPath = pathImpl.join(env.RUNNER_TEMP, 'pulled-images.txt');
   fsImpl.writeFileSync(listPath, '');
   core.setOutput('list-path', listPath);
+  let pulledCount = 0;
   for (const ref of refs) {
     // One inspect per ref: `{{json .}}` exposes `.manifest.manifests[]` for OCI indexes / Docker manifest
     // lists, and `.manifest.digest` + `.image.{os,architecture,variant}` for single-manifest images.
@@ -100,9 +101,17 @@ async function pullImages({
                     (m.platform.variant ? `/${m.platform.variant}` : ''),
           digest: m.digest,
         }));
+      if (entries.length === 0 && isNonImageOciArtifact(info)) {
+        core.warning?.(`Skipping ${ref}; it is an OCI artifact, not a container image.`);
+        continue;
+      }
     } else {
       const img = info.image;
       if (!img || !img.os || !img.architecture || !info.manifest?.digest) {
+        if (isNonImageOciArtifact(info)) {
+          core.warning?.(`Skipping ${ref}; it is an OCI artifact, not a container image.`);
+          continue;
+        }
         core.setFailed(`Could not resolve platform/digest for ${ref}.`);
         return;
       }
@@ -119,8 +128,34 @@ async function pullImages({
       core.info(`Pulling ${ref} (${platform}) @ ${digest}`);
       execFileSyncImpl('docker', ['pull', '--platform', platform, ref], { stdio: 'inherit' });
       fsImpl.appendFileSync(listPath, `${ref}\t${platform}\t${digest}\n`);
+      pulledCount += 1;
     }
   }
+  if (pulledCount === 0) {
+    core.setFailed('No container images found to scan after excluding non-image OCI artifacts.');
+  }
+}
+
+function isNonImageOciArtifact(info) {
+  const mediaTypes = [];
+  const addMediaType = value => {
+    if (typeof value === 'string' && value) mediaTypes.push(value);
+  };
+
+  addMediaType(info.mediaType);
+  addMediaType(info.artifactType);
+  addMediaType(info.manifest?.mediaType);
+  addMediaType(info.manifest?.artifactType);
+  addMediaType(info.manifest?.config?.mediaType);
+  if (Array.isArray(info.manifest?.manifests)) {
+    for (const manifest of info.manifest.manifests) {
+      addMediaType(manifest.mediaType);
+      addMediaType(manifest.artifactType);
+      addMediaType(manifest.config?.mediaType);
+    }
+  }
+
+  return mediaTypes.some(type => !type.includes('image'));
 }
 
 function sanitizeReportName(value) {
