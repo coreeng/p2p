@@ -1,6 +1,6 @@
 # p2p-workflow-image-scan
 
-> Scans every image resolved by the repository's P2P image targets for known vulnerabilities (Trivy) and embedded secrets (TruffleHog). Produces a workflow summary, optionally posts a sticky PR comment on `pull_request` events, and uploads an `image-scan-reports-<stage>-<github_env>` artifact. A separate policy job fails on active vulnerability or secret findings; the configured blocking severity controls whether that policy failure fails the workflow.
+> Scans every scannable container image resolved by the repository's P2P image targets for known vulnerabilities (Trivy) and embedded secrets (TruffleHog). Produces a workflow summary, optionally posts a sticky PR comment on `pull_request` events, and uploads an `image-scan-reports-<stage>-<github_env>` artifact. A separate policy job fails on active vulnerability or secret findings; the configured blocking severity controls whether that policy failure fails the workflow.
 
 ## Usage
 
@@ -47,7 +47,7 @@ Results are also surfaced via:
 - The workflow summary (`$GITHUB_STEP_SUMMARY`).
 - Policy step named `Output security risk: <risk>; scan: <status>` for dashboard extraction.
 - A sticky PR comment with `header: image-scan-findings-<stage>-<github_env>` on `pull_request` events when `dry-run: false` and the caller grants `pull-requests: write`. When `github_env` is empty, the header uses `local`.
-- The `image-scan-reports-<stage>-<github_env>` artifact, retained for 30 days. When `github_env` is empty, the artifact name uses `local`. Contains root `manifest.json`, `image-security-findings.json`, `trivy/` (one Trivy JSON per image x platform), and `trufflehog-image/` (one redacted TruffleHog JSON-lines file per image x platform).
+- The `image-scan-reports-<stage>-<github_env>` artifact, retained for 30 days. When `github_env` is empty, the artifact name uses `local`. Contains root `manifest.json`, `image-security-findings.json`, `trivy/` (one Trivy JSON per scanned image x platform), and `trufflehog-image/` (one redacted TruffleHog JSON-lines file per scanned image x platform).
 
 If the repository root contains `.p2p-security-ignore.yaml`, image vulnerability and image secret findings that match a valid, unexpired ignore entry are omitted from active finding tables in the workflow summary and sticky PR comment. Ignored findings stay visible in `image-security-findings.json` with their ignore reason and expiry metadata when present. They are excluded from active totals, active blocking counts, and image policy failures.
 
@@ -67,13 +67,15 @@ The job runs under `environment: ${{ inputs.github_env }}` and authenticates to 
 
 ## Image resolution
 
-If `image-names` is set, the workflow splits it on commas or whitespace and scans exactly those standard P2P image names. If it is empty, the workflow runs `make p2p-images` in `working-directory` after checking out `checkout-version`; that target must print standard P2P image names with no registry and no tag. Each image name is combined with the registry path for `pipeline-stage` and the `version` input to form the full reference:
+If `image-names` is set, the workflow splits it on commas or whitespace and treats exactly those standard P2P image names as scan candidates. If it is empty, the workflow runs `make p2p-images` in `working-directory` after checking out `checkout-version`; that target must print standard P2P image names with no registry and no tag. Each image name is combined with the registry path for `pipeline-stage` and the `version` input to form the full reference:
 
 ```
 <region>-docker.pkg.dev/<project>/tenant/<tenant>/<pipeline-stage>/<image>:<version>
 ```
 
-If neither `image-names` nor `p2p-images` produces scan targets, the job fails — there is nothing to scan.
+Before running Trivy or TruffleHog, the workflow inspects each resolved reference and platform-specific manifest. It excludes OCI artifacts that are known not to be container images, currently Helm chart artifacts, and excludes confirmed empty container images whose raw image manifest has a Docker/OCI image config and explicit `layers: []`. Skipped references are logged as warnings and do not produce Trivy reports, TruffleHog reports, or `manifest.json` entries. Scanner execution failures for remaining scan targets still fail the scan.
+
+If neither `image-names` nor `p2p-images` produces candidate names, the job fails. If candidate names are present but none resolve to scannable container images after exclusions, the job also fails because there is nothing to scan.
 
 ## Security ignore file
 
@@ -83,7 +85,7 @@ See [How to ignore security findings](../how-to/ignore-security-findings.md) for
 
 ## Artifact contract
 
-Each published `image-scan-reports-<stage>-<github_env>` artifact is complete dashboard image evidence. The root `manifest.json` is the supported artifact index; `reports.txt` files are runner-local implementation detail and are not published or supported for downstream parsing.
+Each published `image-scan-reports-<stage>-<github_env>` artifact is complete dashboard image evidence for the scannable container images that were actually scanned. The root `manifest.json` is the supported artifact index; `reports.txt` files are runner-local implementation detail and are not published or supported for downstream parsing. Candidate OCI references skipped as non-scannable are visible in job logs, not in the artifact.
 
 Manifest schema version 1:
 

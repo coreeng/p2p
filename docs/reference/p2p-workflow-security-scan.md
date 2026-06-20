@@ -58,7 +58,7 @@ None. Results are surfaced via:
 
 - Each child job's workflow summary (`$GITHUB_STEP_SUMMARY`).
 - On non-dry-run source scans where report generation completes, the `source-security-scan-findings` artifact from the source-security-scan job. It contains redacted TruffleHog output, raw Trivy filesystem output when available, and normalized merged JSON. Scheduled source scanning uses TruffleHog for reachable git history and Trivy for the current branch's checked-out source tree. Scanner warnings or incomplete scanner output still fail the scan-status policy job.
-- On successful non-dry-run image scans where a latest image tag is found, the `image-scan-reports-<stage>-<github_env>` artifact from each image-scan job. Each artifact contains root `manifest.json`, `trivy/` vulnerability JSON reports, and `trufflehog-image/` secret JSON-lines reports. `manifest.json` records the P2P stage (`fast-feedback`, `extended-test`, or `prod`) and is the supported artifact index.
+- On successful non-dry-run image scans where a latest image tag is found and at least one scannable container image is available, the `image-scan-reports-<stage>-<github_env>` artifact from each image-scan job. Each artifact contains root `manifest.json`, `trivy/` vulnerability JSON reports, and `trufflehog-image/` secret JSON-lines reports for scanned image/platform pairs. `manifest.json` records the P2P stage (`fast-feedback`, `extended-test`, or `prod`) and is the supported artifact index.
 
 ## Job Graph
 
@@ -75,7 +75,7 @@ Each matrix entry calls an internal stage workflow that first discovers the late
 
 ## Version discovery
 
-For each stage/environment matrix entry, the umbrella calls [`p2p-get-latest-image`](p2p-get-latest-image.md) with the anchor image to determine the highest semver-sorted tag in that stage's registry path. That version is passed to the image-scan workflow for the same GitHub environment. If no tag is found for that stage/environment, the image scan is skipped after logging the missing image. Because all images in a p2p release share the same version, scanning at the anchor's version covers the whole image set.
+For each stage/environment matrix entry, the umbrella calls [`p2p-get-latest-image`](p2p-get-latest-image.md) with the anchor image to determine the highest semver-sorted tag in that stage's registry path. That version is passed to the image-scan workflow for the same GitHub environment. If no tag is found for that stage/environment, the image scan is skipped after logging the missing image. Because all images in a p2p release share the same version, scanning at the anchor's version covers the whole configured image set; the image-scan workflow still filters each configured reference to the scannable container images before running scanners.
 
 ## See also
 
