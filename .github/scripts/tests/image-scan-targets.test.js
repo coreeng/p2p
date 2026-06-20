@@ -22,7 +22,6 @@ async function runScanFunction(scanFunction, options = {}) {
   const calls = [];
   const outputs = {};
   const failures = [];
-  const warnings = [];
   const common = {
     env: {
       RUNNER_TEMP: tmp,
@@ -34,23 +33,17 @@ async function runScanFunction(scanFunction, options = {}) {
       setOutput: (key, value) => { outputs[key] = value; },
       setFailed: message => { failures.push(message); },
       info: () => {},
-      warning: message => { warnings.push(message); },
+      warning: () => {},
     },
   };
 
   if (scanFunction === scanImages) {
     await scanFunction({
       ...common,
-      spawnSyncImpl(command, args) {
+      execFileSyncImpl(command, args) {
         calls.push({ command, args });
-        if (options.emptyImageExport && calls.length === 1) {
-          return {
-            status: 1,
-            stdout: '',
-            stderr: 'FATAL scan failed: unable to export the image: Error response from daemon: empty export - not implemented',
-          };
-        }
-        return { status: 0, stdout: '', stderr: '' };
+        if (options.trivyFailure && calls.length === 1) throw new Error('trivy failed');
+        return '';
       },
     });
   } else {
@@ -90,7 +83,7 @@ async function runScanFunction(scanFunction, options = {}) {
     });
   }
 
-  return { calls, outputs, failures, warnings };
+  return { calls, outputs, failures };
 }
 
 (async () => {
@@ -111,13 +104,10 @@ async function runScanFunction(scanFunction, options = {}) {
     ],
   );
 
-  const emptyImageRun = await runScanFunction(scanImages, { emptyImageExport: true });
-  assert.deepStrictEqual(emptyImageRun.failures, []);
-  assert.deepStrictEqual(emptyImageRun.warnings, [
-    'Trivy could not export europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/prod/api:1.2.3 (linux/amd64); treating empty image as zero vulnerability findings.',
-  ]);
-  const firstReportPath = fs.readFileSync(emptyImageRun.outputs['report-list'], 'utf8').trim().split('\n')[0].split('\t')[3];
-  assert.deepStrictEqual(JSON.parse(fs.readFileSync(firstReportPath, 'utf8')), { Results: [] });
+  await assert.rejects(
+    () => runScanFunction(scanImages, { trivyFailure: true }),
+    /trivy failed/,
+  );
 
   const secretRun = await runScanFunction(secretScanImages);
   assert.deepStrictEqual(secretRun.failures, []);

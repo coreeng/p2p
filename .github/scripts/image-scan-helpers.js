@@ -3,6 +3,14 @@ const path = require('path');
 const { execFileSync, spawnSync } = require('child_process');
 
 const VALID_STAGES = ['fast-feedback', 'extended-test', 'prod'];
+const NON_IMAGE_OCI_MEDIA_TYPES = new Set([
+  'application/vnd.cncf.helm.chart.content.v1.tar+gzip',
+  'application/vnd.cncf.helm.config.v1+json',
+]);
+const IMAGE_CONFIG_MEDIA_TYPES = new Set([
+  'application/vnd.docker.container.image.v1+json',
+  'application/vnd.oci.image.config.v1+json',
+]);
 
 function validateStage(stage, core) {
   if (!VALID_STAGES.includes(stage)) {
@@ -10,6 +18,14 @@ function validateStage(stage, core) {
     return false;
   }
   return true;
+}
+
+function parseJsonOutput(output) {
+  try {
+    return JSON.parse(output);
+  } catch {
+    return null;
+  }
 }
 
 function splitEntries(output) {
@@ -101,14 +117,14 @@ async function pullImages({
                     (m.platform.variant ? `/${m.platform.variant}` : ''),
           digest: m.digest,
         }));
-      if (entries.length === 0 && isNonImageOciArtifact(info)) {
+      if (entries.length === 0 && (isNonImageOciArtifact(info) || isRawNonImageOciArtifact(ref, execFileSyncImpl))) {
         core.warning?.(`Skipping ${ref}; it is an OCI artifact, not a container image.`);
         continue;
       }
     } else {
       const img = info.image;
       if (!img || !img.os || !img.architecture || !info.manifest?.digest) {
-        if (isNonImageOciArtifact(info)) {
+        if (isNonImageOciArtifact(info) || isRawNonImageOciArtifact(ref, execFileSyncImpl)) {
           core.warning?.(`Skipping ${ref}; it is an OCI artifact, not a container image.`);
           continue;
         }
@@ -125,6 +141,10 @@ async function pullImages({
       return;
     }
     for (const { platform, digest } of entries) {
+      if (isEmptyContainerImage(ref, digest, execFileSyncImpl)) {
+        core.warning?.(`Skipping ${ref} (${platform}) @ ${digest}; it is an empty container image.`);
+        continue;
+      }
       core.info(`Pulling ${ref} (${platform}) @ ${digest}`);
       execFileSyncImpl('docker', ['pull', '--platform', platform, ref], { stdio: 'inherit' });
       fsImpl.appendFileSync(listPath, `${ref}\t${platform}\t${digest}\n`);
@@ -132,8 +152,34 @@ async function pullImages({
     }
   }
   if (pulledCount === 0) {
-    core.setFailed('No container images found to scan after excluding non-image OCI artifacts.');
+    core.setFailed('No container images found to scan after excluding non-scannable OCI artifacts.');
   }
+}
+
+function inspectRawManifest(ref, execFileSyncImpl) {
+  const out = execFileSyncImpl('docker', ['buildx', 'imagetools', 'inspect', ref, '--raw'], { encoding: 'utf8' });
+  return parseJsonOutput(out);
+}
+
+function isRawNonImageOciArtifact(ref, execFileSyncImpl) {
+  let raw;
+  try {
+    raw = inspectRawManifest(ref, execFileSyncImpl);
+  } catch {
+    return false;
+  }
+  return raw ? isNonImageOciArtifact(raw) : false;
+}
+
+function isEmptyContainerImage(ref, digest, execFileSyncImpl) {
+  let raw;
+  try {
+    raw = inspectRawManifest(`${ref.split('@')[0]}@${digest}`, execFileSyncImpl);
+  } catch {
+    return false;
+  }
+  if (!raw || !IMAGE_CONFIG_MEDIA_TYPES.has(raw.config?.mediaType)) return false;
+  return Array.isArray(raw.layers) && raw.layers.length === 0;
 }
 
 function isNonImageOciArtifact(info) {
@@ -147,6 +193,7 @@ function isNonImageOciArtifact(info) {
   addMediaType(info.manifest?.mediaType);
   addMediaType(info.manifest?.artifactType);
   addMediaType(info.manifest?.config?.mediaType);
+  addMediaType(info.config?.mediaType);
   if (Array.isArray(info.manifest?.manifests)) {
     for (const manifest of info.manifest.manifests) {
       addMediaType(manifest.mediaType);
@@ -154,8 +201,18 @@ function isNonImageOciArtifact(info) {
       addMediaType(manifest.config?.mediaType);
     }
   }
+  if (Array.isArray(info.manifests)) {
+    for (const manifest of info.manifests) {
+      addMediaType(manifest.mediaType);
+      addMediaType(manifest.artifactType);
+      addMediaType(manifest.config?.mediaType);
+    }
+  }
+  if (Array.isArray(info.layers)) {
+    for (const layer of info.layers) addMediaType(layer.mediaType);
+  }
 
-  return mediaTypes.some(type => !type.includes('image'));
+  return mediaTypes.some(type => NON_IMAGE_OCI_MEDIA_TYPES.has(type));
 }
 
 function sanitizeReportName(value) {
@@ -167,7 +224,7 @@ async function scanImages({
   env = process.env,
   fsImpl = fs,
   pathImpl = path,
-  spawnSyncImpl = spawnSync,
+  execFileSyncImpl = execFileSync,
 } = {}) {
   const reportsDir = pathImpl.join(env.RUNNER_TEMP, 'trivy');
   const reportList = pathImpl.join(reportsDir, 'reports.txt');
@@ -196,18 +253,7 @@ async function scanImages({
       target,
     ];
     core.info(`Scanning ${ref} (${plat}) @ ${digest}`);
-    const proc = spawnSyncImpl('trivy', args, { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
-    if (proc.stdout) process.stdout.write(proc.stdout);
-    if (proc.stderr) process.stderr.write(proc.stderr);
-    if (proc.status !== 0) {
-      const output = `${proc.stdout || ''}\n${proc.stderr || ''}\n${proc.error?.message || ''}`;
-      if (output.includes('empty export - not implemented')) {
-        core.warning?.(`Trivy could not export ${ref} (${plat}); treating empty image as zero vulnerability findings.`);
-        fsImpl.writeFileSync(out, JSON.stringify({ Results: [] }) + '\n');
-      } else {
-        throw new Error(`trivy exited with ${proc.status}: ${proc.stderr || proc.error?.message || '(no stderr)'}`);
-      }
-    }
+    execFileSyncImpl('trivy', args, { stdio: 'inherit' });
     fsImpl.appendFileSync(reportList, `${ref}\t${plat}\t${digest}\t${out}\n`);
   }
 }

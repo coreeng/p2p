@@ -18,7 +18,7 @@ The first two cases are developer feedback. The last case is monitoring and audi
 
 P2P provides managed security scanning through reusable GitHub Actions workflows.
 
-Fast-feedback now runs source security scanning and image scanning automatically on pull requests and pushes. Source security scanning checks changed git history for committed secrets, and checks the current source tree for dependency vulnerabilities. Trivy source scanning is intentionally not limited to the configured `working-directory`, because dependency manifests and related modules can live outside the P2P make target directory. Image scanning checks the built P2P images for known vulnerabilities and embedded secrets.
+Fast-feedback now runs source security scanning and image scanning automatically on pull requests and pushes. Source security scanning checks changed git history for committed secrets, and checks the current source tree for dependency vulnerabilities. Trivy source scanning is intentionally not limited to the configured `working-directory`, because dependency manifests and related modules can live outside the P2P make target directory. Image scanning checks the built P2P container images for known vulnerabilities and embedded secrets.
 
 The workflows are visibility-first by default: findings are reported in workflow run summaries, artifacts, and PR comments where permissions allow, but they do not block unless the caller sets `security-scan-blocking-severity` to `low`, `medium`, `high`, or `critical`. Promotion waits for the scan jobs to complete, so scanner execution failures stop promotion. Security findings stop promotion only when they meet the configured blocking threshold.
 
