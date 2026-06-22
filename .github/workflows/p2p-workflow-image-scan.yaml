@@ -103,6 +103,13 @@ jobs:
           ref: ${{ job.workflow_sha }}
           path: .p2p-workflow-src
 
+      - name: Move P2P workflow sources outside app workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "$RUNNER_TEMP/p2p-workflow-src"
+          mv .p2p-workflow-src "$RUNNER_TEMP/p2p-workflow-src"
+
       - name: Authenticate to Google Cloud
         id: auth
         if: ${{ inputs.dry-run == false }}
@@ -143,7 +150,7 @@ jobs:
           PIPELINE_STAGE: ${{ inputs.pipeline-stage }}
           WORKING_DIR: ${{ inputs.working-directory }}
           IMAGE_NAMES: ${{ inputs.image-names }}
-          P2P_IMAGE_SCAN_HELPERS: ${{ github.workspace }}/.p2p-workflow-src/.github/scripts/image-scan-helpers.js
+          P2P_IMAGE_SCAN_HELPERS: ${{ runner.temp }}/p2p-workflow-src/.github/scripts/image-scan-helpers.js
         with:
           script: |
             const { resolveImages } = require(process.env.P2P_IMAGE_SCAN_HELPERS);
@@ -155,7 +162,7 @@ jobs:
         uses: actions/github-script@v9
         env:
           IMAGE_REFS: ${{ steps.resolve-images.outputs.image-refs }}
-          P2P_IMAGE_SCAN_HELPERS: ${{ github.workspace }}/.p2p-workflow-src/.github/scripts/image-scan-helpers.js
+          P2P_IMAGE_SCAN_HELPERS: ${{ runner.temp }}/p2p-workflow-src/.github/scripts/image-scan-helpers.js
         with:
           script: |
             const { pullImages } = require(process.env.P2P_IMAGE_SCAN_HELPERS);
@@ -183,7 +190,7 @@ jobs:
         env:
           PULLED_LIST: ${{ steps.pull-images.outputs.list-path }}
           IGNORE_UNFIXED: ${{ inputs.ignore-unfixed }}
-          P2P_IMAGE_SCAN_HELPERS: ${{ github.workspace }}/.p2p-workflow-src/.github/scripts/image-scan-helpers.js
+          P2P_IMAGE_SCAN_HELPERS: ${{ runner.temp }}/p2p-workflow-src/.github/scripts/image-scan-helpers.js
         with:
           script: |
             const { scanImages } = require(process.env.P2P_IMAGE_SCAN_HELPERS);
@@ -195,8 +202,8 @@ jobs:
         uses: actions/github-script@v9
         env:
           PULLED_LIST: ${{ steps.pull-images.outputs.list-path }}
-          P2P_SECURITY_IGNORE_HELPER: ${{ github.workspace }}/.p2p-workflow-src/.github/scripts/p2p-security-ignore.js
-          P2P_IMAGE_SCAN_HELPERS: ${{ github.workspace }}/.p2p-workflow-src/.github/scripts/image-scan-helpers.js
+          P2P_SECURITY_IGNORE_HELPER: ${{ runner.temp }}/p2p-workflow-src/.github/scripts/p2p-security-ignore.js
+          P2P_IMAGE_SCAN_HELPERS: ${{ runner.temp }}/p2p-workflow-src/.github/scripts/image-scan-helpers.js
         with:
           script: |
             const { secretScanImages } = require(process.env.P2P_IMAGE_SCAN_HELPERS);
@@ -212,7 +219,7 @@ jobs:
           SECRET_REPORT_LIST: ${{ steps.secret-scan.outputs.report-list }}
           REPORT_ROOT: ${{ steps.scan.outputs.reports-dir }}
           SECRET_REPORT_ROOT: ${{ steps.secret-scan.outputs.reports-dir }}
-          P2P_IMAGE_SCAN_HELPERS: ${{ github.workspace }}/.p2p-workflow-src/.github/scripts/image-scan-helpers.js
+          P2P_IMAGE_SCAN_HELPERS: ${{ runner.temp }}/p2p-workflow-src/.github/scripts/image-scan-helpers.js
         with:
           script: |
             const { buildManifest } = require(process.env.P2P_IMAGE_SCAN_HELPERS);
@@ -230,8 +237,8 @@ jobs:
           GITHUB_ENV_INPUT: ${{ inputs.github_env }}
           VERSION: ${{ inputs.version }}
           ARTIFACT_DIR: ${{ steps.manifest.outputs.artifact-dir }}
-          P2P_SECURITY_IGNORE_HELPER: ${{ github.workspace }}/.p2p-workflow-src/.github/scripts/p2p-security-ignore.js
-          P2P_IMAGE_SECURITY_REPORT: ${{ github.workspace }}/.p2p-workflow-src/.github/scripts/image-security-report.js
+          P2P_SECURITY_IGNORE_HELPER: ${{ runner.temp }}/p2p-workflow-src/.github/scripts/p2p-security-ignore.js
+          P2P_IMAGE_SECURITY_REPORT: ${{ runner.temp }}/p2p-workflow-src/.github/scripts/image-security-report.js
         with:
           script: |
             const { buildImageSecurityReport } = require(process.env.P2P_IMAGE_SECURITY_REPORT);
