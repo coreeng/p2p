@@ -120,6 +120,7 @@ const buildImageSecurityReport = async ({ core, env = process.env } = {}) => {
   const blockingSet = blockingSeveritySet(env.BLOCKING_SEVERITY, core);
   const reportedSeverities = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNKNOWN'];
   const list = env.REPORT_LIST;
+  const zeroScanTargets = env.SCAN_TARGET_COUNT === '0';
   const listExists = !!(list && fs.existsSync(list) && fs.statSync(list).size > 0);
   const runUrl = `${env.GITHUB_SERVER_URL}/${env.GITHUB_REPOSITORY}/actions/runs/${env.GITHUB_RUN_ID}`;
   const securityIgnore = loadSecurityIgnore(env.GITHUB_WORKSPACE);
@@ -344,7 +345,7 @@ const buildImageSecurityReport = async ({ core, env = process.env } = {}) => {
 
   const allSecretRows = secretSummaries.flatMap(group => group.rows);
   const reportKeysMatch = sameReportKeys(vulnerabilityReportKeys, secretReportKeys);
-  const scanStatus = listExists && secretListExists && reportKeysMatch ? 'ok' : 'failed';
+  const scanStatus = (listExists && secretListExists && reportKeysMatch) || zeroScanTargets ? 'ok' : 'failed';
   const scannerWarnings = [];
   if (scanStatus !== 'ok') {
     scannerWarnings.push('One or more image scanners did not produce complete results; findings may be incomplete.');
@@ -375,7 +376,14 @@ const buildImageSecurityReport = async ({ core, env = process.env } = {}) => {
     out.push('', '### Scanner output warnings', '', ...scannerWarnings.map(warning => `- ${warning}`));
   }
 
-  if (!listExists && !secretListExists) {
+  if (zeroScanTargets) {
+    out.push(
+      '',
+      `**Version:** ${code(env.VERSION)} · **Vulnerabilities:** 0 · **Secrets:** 0`,
+      '',
+      '_No scannable container image targets were found._',
+    );
+  } else if (!listExists && !secretListExists) {
     out.push('', '_Scan skipped (dry-run or upstream failure)._');
   } else if (scanStatus === 'ok' && total === 0 && secretTotal === 0 && ignoredImageVulnerabilities.length === 0 && ignoredImageSecrets.length === 0) {
     out.push(

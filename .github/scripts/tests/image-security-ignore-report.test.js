@@ -613,6 +613,36 @@ async function runPartialScannerReportLists() {
   });
 }
 
+async function runZeroScanTargetReport() {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'image-zero-targets-'));
+  const workspace = path.join(tmp, 'repo');
+  const trivyDir = path.join(tmp, 'trivy');
+  const secretDir = path.join(tmp, 'trufflehog-image');
+  fs.mkdirSync(workspace, { recursive: true });
+  fs.mkdirSync(trivyDir, { recursive: true });
+  fs.mkdirSync(secretDir, { recursive: true });
+  const reportList = path.join(trivyDir, 'reports.txt');
+  const secretList = path.join(secretDir, 'reports.txt');
+  fs.writeFileSync(reportList, '');
+  fs.writeFileSync(secretList, '');
+
+  return runReportModule({
+    RUNNER_TEMP: tmp,
+    GITHUB_WORKSPACE: workspace,
+    REPORT_LIST: reportList,
+    SECRET_REPORT_LIST: secretList,
+    SCAN_TARGET_COUNT: '0',
+    BLOCKING_SEVERITY: 'high',
+    PIPELINE_STAGE: 'prod',
+    GITHUB_ENV_INPUT: 'gcp-prod',
+    VERSION: '1.2.3',
+    P2P_SECURITY_IGNORE_HELPER: helperPath,
+    GITHUB_SERVER_URL: 'https://github.example',
+    GITHUB_REPOSITORY: 'org/repo',
+    GITHUB_RUN_ID: '42',
+  });
+}
+
 (async () => {
   const result = await runReport();
   assert.deepStrictEqual(result.failures, []);
@@ -770,6 +800,19 @@ async function runPartialScannerReportLists() {
   assert(partialLists.summary.includes('### Scanner output warnings'));
   assert(partialLists.summary.includes('Trivy and TruffleHog image report lists cover different images/platforms.'));
   assert(!partialLists.summary.includes('_No vulnerabilities or secrets found._'));
+
+  const zeroTargets = await runZeroScanTargetReport();
+  assert.deepStrictEqual(zeroTargets.failures, []);
+  assert.strictEqual(zeroTargets.outputs['scan-status'], 'ok');
+  assert.strictEqual(zeroTargets.outputs['security-risk'], 'ok');
+  assert.strictEqual(zeroTargets.outputs['total-count'], 0);
+  assert.strictEqual(zeroTargets.outputs['blocking-count'], 0);
+  assert.strictEqual(zeroTargets.outputs['secret-total-count'], 0);
+  assert.strictEqual(zeroTargets.outputs['secret-blocking-count'], 0);
+  assert.deepStrictEqual(zeroTargets.normalized.vulnerabilities, []);
+  assert.deepStrictEqual(zeroTargets.normalized.secrets, []);
+  assert(zeroTargets.summary.includes('_No scannable container image targets were found._'));
+  assert(!zeroTargets.summary.includes('### Scanner output warnings'));
 
   const unclassified = await runUnclassifiedImageReport();
   assert.deepStrictEqual(unclassified.failures, []);

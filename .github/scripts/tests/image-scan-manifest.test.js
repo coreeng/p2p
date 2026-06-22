@@ -48,7 +48,7 @@ async function runPullScript(imageRefs, inspectByRef) {
   return { outputs, failures, pulls, warnings };
 }
 
-async function runManifestScript({ stage, vulnLines = [], secretLines = [], vulnRawLines = null, secretRawLines = null, setup = null }) {
+async function runManifestScript({ stage, vulnLines = [], secretLines = [], vulnRawLines = null, secretRawLines = null, setup = null, scanTargetCount = null }) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'image-manifest-'));
   const trivyDir = path.join(tmp, 'trivy');
   const secretDir = path.join(tmp, 'trufflehog-image');
@@ -88,6 +88,7 @@ async function runManifestScript({ stage, vulnLines = [], secretLines = [], vuln
       SECRET_REPORT_LIST: secretList,
       REPORT_ROOT: trivyDir,
       SECRET_REPORT_ROOT: secretDir,
+      ...(scanTargetCount === null ? {} : { SCAN_TARGET_COUNT: scanTargetCount }),
     },
     core: {
       setOutput: (key, value) => { outputs[key] = value; },
@@ -107,6 +108,11 @@ async function runManifestScript({ stage, vulnLines = [], secretLines = [], vuln
 }
 
 (async () => {
+  const noResolvedRefs = await runPullScript([], {});
+  assert.deepStrictEqual(noResolvedRefs.failures, []);
+  assert.strictEqual(fs.readFileSync(noResolvedRefs.outputs['list-path'], 'utf8'), '');
+  assert.strictEqual(noResolvedRefs.outputs['scan-target-count'], '0');
+
   const singlePlatform = await runPullScript(
     ['europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/prod/api:1.2.3'],
     {
@@ -121,6 +127,7 @@ async function runManifestScript({ stage, vulnLines = [], secretLines = [], vuln
     fs.readFileSync(singlePlatform.outputs['list-path'], 'utf8').trim(),
     'europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/prod/api:1.2.3\tlinux/amd64\tsha256:resolved',
   );
+  assert.strictEqual(singlePlatform.outputs['scan-target-count'], '1');
 
   const multiPlatform = await runPullScript(
     ['europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/prod/worker:1.2.3'],
@@ -144,6 +151,7 @@ async function runManifestScript({ stage, vulnLines = [], secretLines = [], vuln
       'europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/prod/worker:1.2.3\tlinux/arm64\tsha256:arm64',
     ],
   );
+  assert.strictEqual(multiPlatform.outputs['scan-target-count'], '2');
 
   const mixedArtifacts = await runPullScript(
     [
@@ -234,13 +242,12 @@ async function runManifestScript({ stage, vulnLines = [], secretLines = [], vuln
       },
     },
   );
-  assert.deepStrictEqual(allArtifacts.failures, [
-    'No container images found to scan after excluding non-scannable OCI artifacts.',
-  ]);
+  assert.deepStrictEqual(allArtifacts.failures, []);
   assert.deepStrictEqual(allArtifacts.warnings, [
     'Skipping europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/prod/training-platform-assessment:1.2.3; it is an OCI artifact, not a container image.',
   ]);
   assert.strictEqual(fs.readFileSync(allArtifacts.outputs['list-path'], 'utf8'), '');
+  assert.strictEqual(allArtifacts.outputs['scan-target-count'], '0');
 
   const mixedEmptyImages = await runPullScript(
     [
@@ -273,6 +280,7 @@ async function runManifestScript({ stage, vulnLines = [], secretLines = [], vuln
     fs.readFileSync(mixedEmptyImages.outputs['list-path'], 'utf8').trim(),
     'europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/prod/api:1.2.3\tlinux/amd64\tsha256:resolved',
   );
+  assert.strictEqual(mixedEmptyImages.outputs['scan-target-count'], '1');
 
   const allEmptyImages = await runPullScript(
     ['europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/prod/empty:1.2.3'],
@@ -290,13 +298,12 @@ async function runManifestScript({ stage, vulnLines = [], secretLines = [], vuln
       },
     },
   );
-  assert.deepStrictEqual(allEmptyImages.failures, [
-    'No container images found to scan after excluding non-scannable OCI artifacts.',
-  ]);
+  assert.deepStrictEqual(allEmptyImages.failures, []);
   assert.deepStrictEqual(allEmptyImages.warnings, [
     'Skipping europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/prod/empty:1.2.3 (linux/amd64) @ sha256:empty; it is an empty container image.',
   ]);
   assert.strictEqual(fs.readFileSync(allEmptyImages.outputs['list-path'], 'utf8'), '');
+  assert.strictEqual(allEmptyImages.outputs['scan-target-count'], '0');
 
   const missingLayersIsNotEmpty = await runPullScript(
     ['europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/prod/api:1.2.3'],
@@ -444,6 +451,17 @@ async function runManifestScript({ stage, vulnLines = [], secretLines = [], vuln
       secretReport: 'trufflehog-image/empty-clean-secret.jsonl',
     },
   ]);
+
+  const noScanTargets = await runManifestScript({
+    stage: 'prod',
+    scanTargetCount: '0',
+  });
+  assert.deepStrictEqual(noScanTargets.failures, []);
+  assert.deepStrictEqual(noScanTargets.manifest, {
+    schemaVersion: 1,
+    stage: 'prod',
+    reports: [],
+  });
 
   const singleVuln = ['ghcr.io/coreeng/single:1.0.0', 'linux/amd64', 'sha256:single', 'single-vuln.json'];
   const singleSecret = ['ghcr.io/coreeng/single:1.0.0', 'linux/amd64', 'sha256:single', 'single-secret.jsonl'];

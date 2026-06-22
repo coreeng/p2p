@@ -73,9 +73,9 @@ If `image-names` is set, the workflow splits it on commas or whitespace and trea
 <region>-docker.pkg.dev/<project>/tenant/<tenant>/<pipeline-stage>/<image>:<version>
 ```
 
-Before running Trivy or TruffleHog, the workflow inspects each resolved reference and platform-specific manifest. It excludes OCI artifacts that are known not to be container images, currently Helm chart artifacts, and excludes confirmed empty container images whose raw image manifest has a Docker/OCI image config and explicit `layers: []`. Skipped references are logged as warnings and do not produce Trivy reports, TruffleHog reports, or `manifest.json` entries. Scanner execution failures for remaining scan targets still fail the scan.
+Before running Trivy or TruffleHog, the workflow inspects each resolved reference and platform-specific manifest. It excludes OCI artifacts that are known not to be container images, currently Helm chart artifacts, and excludes confirmed empty container images whose raw image manifest has a Docker/OCI image config and explicit `layers: []`. Skipped references are logged as warnings and do not produce Trivy reports, TruffleHog reports, or `manifest.json` entries. Apps do not have to publish OCI images or a scannable container image; if no image refs are resolved or no scannable image targets remain, the image scan completes successfully with zero findings. Scanner execution failures for remaining scan targets still fail the scan.
 
-If neither `image-names` nor `p2p-images` produces candidate names, the job fails. If candidate names are present but none resolve to scannable container images after exclusions, the job also fails because there is nothing to scan.
+If neither `image-names` nor `p2p-images` produces candidate names, or if all candidate references are excluded as non-scannable, the image scan completes successfully with zero findings.
 
 ## Security ignore file
 
