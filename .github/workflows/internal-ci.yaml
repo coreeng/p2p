@@ -96,6 +96,21 @@ jobs:
           node .github/scripts/tests/source-security-ignore-report.test.js
           node .github/scripts/tests/source-secret-redaction.test.js
 
+      - name: Test source security helpers stay outside app workspace
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+
+          workflow = Path('.github/workflows/p2p-workflow-source-security-scan.yaml').read_text()
+          assert 'path: .p2p-workflow-src' in workflow
+          assert 'Move P2P workflow sources outside app workspace' in workflow
+          assert 'mv .p2p-workflow-src "$RUNNER_TEMP/p2p-workflow-src"' in workflow
+          assert 'P2P_SECURITY_IGNORE_HELPER: $' + '{{ runner.temp }}/p2p-workflow-src/.github/scripts/p2p-security-ignore.js' in workflow
+          assert "process.env.RUNNER_TEMP, 'p2p-workflow-src'" in workflow
+          assert 'github.workspace' not in workflow
+          PY
+
   test_image_scan:
     needs: [test_version]
     strategy:
@@ -189,6 +204,12 @@ jobs:
           assert 'PIPELINE_STAGE: $' + '{{ inputs.pipeline-stage }}' in workflow
           assert 'header: image-scan-findings-$' + '{{ inputs.pipeline-stage }}-$' + '{{ inputs.github_env || ' in workflow
           assert 'name: image-scan-reports-$' + '{{ inputs.pipeline-stage }}-$' + '{{ inputs.github_env || ' in workflow
+          assert 'path: .p2p-workflow-src' in workflow
+          assert 'Move P2P workflow sources outside app workspace' in workflow
+          assert 'mv .p2p-workflow-src "$RUNNER_TEMP/p2p-workflow-src"' in workflow
+          assert 'P2P_IMAGE_SCAN_HELPERS: $' + '{{ runner.temp }}/p2p-workflow-src/.github/scripts/image-scan-helpers.js' in workflow
+          assert 'P2P_IMAGE_SECURITY_REPORT: $' + '{{ runner.temp }}/p2p-workflow-src/.github/scripts/image-security-report.js' in workflow
+          assert 'github.workspace' not in workflow
           assert 'json-file:' in workflow
           assert 'value: $' + '{{ jobs.image-scan.outputs.json-file }}' in workflow
           assert 'json-file: $' + '{{ steps.report.outputs.json-file }}' in workflow

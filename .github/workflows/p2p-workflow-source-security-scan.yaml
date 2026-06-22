@@ -120,6 +120,14 @@ jobs:
           ref: ${{ job.workflow_sha }}
           path: .p2p-workflow-src
 
+      - name: Move P2P workflow sources outside app workspace
+        if: ${{ always() && inputs.dry-run == false }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "$RUNNER_TEMP/p2p-workflow-src"
+          mv .p2p-workflow-src "$RUNNER_TEMP/p2p-workflow-src"
+
       - id: redact
         name: Build redacted secret findings
         if: ${{ always() && inputs.dry-run == false }}
@@ -131,7 +139,7 @@ jobs:
         run: |
           set -euo pipefail
           redacted="$RUNNER_TEMP/findings.ndjson"
-          node .p2p-workflow-src/.github/scripts/source-secret-redact.js "$FINDINGS" "$redacted"
+          node "$RUNNER_TEMP/p2p-workflow-src/.github/scripts/source-secret-redact.js" "$FINDINGS" "$redacted"
           echo "redacted_file=$redacted" >> "$GITHUB_OUTPUT"
 
       - name: Upload redacted secret findings
@@ -217,6 +225,13 @@ jobs:
           ref: ${{ job.workflow_sha }}
           path: .p2p-workflow-src
 
+      - name: Move P2P workflow sources outside app workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "$RUNNER_TEMP/p2p-workflow-src"
+          mv .p2p-workflow-src "$RUNNER_TEMP/p2p-workflow-src"
+
       - name: Download secret findings
         if: ${{ inputs.dry-run == false }}
         continue-on-error: true
@@ -244,11 +259,11 @@ jobs:
           ROOT: ${{ runner.temp }}/source-security
           SECRET_SCAN_RESULT: ${{ needs.secret-scan.result }}
           SCA_SCAN_RESULT: ${{ needs.sca-scan.result }}
-          P2P_SECURITY_IGNORE_HELPER: ${{ github.workspace }}/.p2p-workflow-src/.github/scripts/p2p-security-ignore.js
+          P2P_SECURITY_IGNORE_HELPER: ${{ runner.temp }}/p2p-workflow-src/.github/scripts/p2p-security-ignore.js
         with:
           script: |
             const path = require('path');
-            const reportModule = path.join(process.env.GITHUB_WORKSPACE, '.p2p-workflow-src', '.github', 'scripts', 'source-security-report.js');
+            const reportModule = path.join(process.env.RUNNER_TEMP, 'p2p-workflow-src', '.github', 'scripts', 'source-security-report.js');
             const { buildSourceSecurityReport } = require(reportModule);
             await buildSourceSecurityReport({ core });
 
