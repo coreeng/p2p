@@ -86,12 +86,10 @@ async function runCase(name, makeOutputs, envOverrides = {}) {
     'europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/fast-feedback/worker:1.2.3',
   );
 
-  const noTargets = await runCase('no targets fails cleanly', {});
-  assert.deepStrictEqual(
-    noTargets.failures,
-    ['Neither image-names nor p2p-images produced any image references; nothing to scan.'],
-  );
-  assert.strictEqual(noTargets.outputs['image-refs'], undefined);
+  const noTargets = await runCase('no targets is a no-op', {});
+  assert.deepStrictEqual(noTargets.failures, []);
+  assert.strictEqual(noTargets.outputs['image-refs'], '');
+  assert(noTargets.infos.includes('No image references resolved; image scan will complete as a no-op.'));
 
   const unknownStage = await runCase(
     'unknown stage fails cleanly',

@@ -77,7 +77,8 @@ async function resolveImages({
     refs = [];
   }
   if (refs.length === 0) {
-    core.setFailed('Neither image-names nor p2p-images produced any image references; nothing to scan.');
+    core.setOutput('image-refs', '');
+    core.info('No image references resolved; image scan will complete as a no-op.');
     return;
   }
   core.setOutput('image-refs', refs.join('\n'));
@@ -92,7 +93,7 @@ async function pullImages({
   pathImpl = path,
   execFileSyncImpl = execFileSync,
 } = {}) {
-  const refs = env.IMAGE_REFS.split('\n').filter(Boolean);
+  const refs = (env.IMAGE_REFS || '').split('\n').filter(Boolean);
   const listPath = pathImpl.join(env.RUNNER_TEMP, 'pulled-images.txt');
   fsImpl.writeFileSync(listPath, '');
   core.setOutput('list-path', listPath);
@@ -151,9 +152,7 @@ async function pullImages({
       pulledCount += 1;
     }
   }
-  if (pulledCount === 0) {
-    core.setFailed('No container images found to scan after excluding non-scannable OCI artifacts.');
-  }
+  core.setOutput('scan-target-count', String(pulledCount));
 }
 
 function inspectRawManifest(ref, execFileSyncImpl) {
@@ -499,7 +498,7 @@ async function buildManifest({
     }
   }
 
-  if (reports.length === 0) {
+  if (reports.length === 0 && env.SCAN_TARGET_COUNT !== '0') {
     core.setFailed('No scanned image reports found; cannot build manifest.json.');
     return;
   }

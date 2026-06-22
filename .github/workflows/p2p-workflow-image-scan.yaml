@@ -219,6 +219,7 @@ jobs:
           SECRET_REPORT_LIST: ${{ steps.secret-scan.outputs.report-list }}
           REPORT_ROOT: ${{ steps.scan.outputs.reports-dir }}
           SECRET_REPORT_ROOT: ${{ steps.secret-scan.outputs.reports-dir }}
+          SCAN_TARGET_COUNT: ${{ steps.pull-images.outputs.scan-target-count }}
           P2P_IMAGE_SCAN_HELPERS: ${{ runner.temp }}/p2p-workflow-src/.github/scripts/image-scan-helpers.js
         with:
           script: |
@@ -237,6 +238,7 @@ jobs:
           GITHUB_ENV_INPUT: ${{ inputs.github_env }}
           VERSION: ${{ inputs.version }}
           ARTIFACT_DIR: ${{ steps.manifest.outputs.artifact-dir }}
+          SCAN_TARGET_COUNT: ${{ steps.pull-images.outputs.scan-target-count }}
           P2P_SECURITY_IGNORE_HELPER: ${{ runner.temp }}/p2p-workflow-src/.github/scripts/p2p-security-ignore.js
           P2P_IMAGE_SECURITY_REPORT: ${{ runner.temp }}/p2p-workflow-src/.github/scripts/image-security-report.js
         with:
