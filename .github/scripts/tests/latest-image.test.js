@@ -37,6 +37,24 @@ assert.strictEqual(
   'ignores non-SemVer tags',
 );
 
+assert.strictEqual(
+  selectLatestTag(['01.2.3', '1.02.3', '1.2.03', '1.2.2']),
+  '1.2.2',
+  'ignores core versions with leading zeroes',
+);
+
+assert.strictEqual(
+  selectLatestTag(['1.2.3-01', '1.2.3-alpha..1', '1.2.3-', '1.2.2']),
+  '1.2.2',
+  'ignores malformed prerelease identifiers',
+);
+
+assert.strictEqual(
+  selectLatestTag(['1.2.3+001', '1.2.2']),
+  '1.2.3+001',
+  'accepts leading zeroes in build metadata identifiers',
+);
+
 const artifactRegistryJson = JSON.stringify([
   { tags: ['v0.0.5', '0.0.204-abc123'] },
   { tags: ['0.0.204'] },

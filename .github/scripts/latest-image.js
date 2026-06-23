@@ -1,6 +1,16 @@
+const NUMERIC_IDENTIFIER = '(?:0|[1-9]\\d*)';
+const NON_NUMERIC_IDENTIFIER = '(?:[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)';
+const PRERELEASE_IDENTIFIER = `(?:${NUMERIC_IDENTIFIER}|${NON_NUMERIC_IDENTIFIER})`;
+const BUILD_IDENTIFIER = '(?:[0-9A-Za-z-]+)';
+const SEMVER_TAG_PATTERN = new RegExp(
+  `^v?(${NUMERIC_IDENTIFIER})\\.(${NUMERIC_IDENTIFIER})\\.(${NUMERIC_IDENTIFIER})` +
+  `(?:-(${PRERELEASE_IDENTIFIER}(?:\\.${PRERELEASE_IDENTIFIER})*))?` +
+  `(?:\\+(${BUILD_IDENTIFIER}(?:\\.${BUILD_IDENTIFIER})*))?$`,
+);
+
 function parseSemverTag(tag) {
   const value = String(tag || '').trim();
-  const match = value.match(/^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+([0-9A-Za-z.-]+))?$/);
+  const match = value.match(SEMVER_TAG_PATTERN);
   if (!match) return null;
 
   return {
