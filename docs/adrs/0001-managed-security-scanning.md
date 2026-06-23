@@ -81,4 +81,4 @@ The platform owns scanner versions, default policy, report shape, and reusable w
 
 Scheduled scans can surface historical or dormant findings repeatedly until they are remediated or otherwise handled. This is intentional for monitoring, but it means scheduled results are reporting signals rather than default hard gates.
 
-Image scan PR comments are stage/environment scoped today, so a pull request can receive more than one image scan comment when multiple environments run. This keeps comments tied to the workflow jobs and artifacts that produced them.
+Security scan PR comments are scoped to the app when `app-name` is set. Image scan comments are additionally scoped by stage and environment, so multi-app pull requests and multi-environment runs update distinct sticky comments. When `app-name` is empty, comments retain their legacy unscoped source and stage/environment-scoped image headers.
