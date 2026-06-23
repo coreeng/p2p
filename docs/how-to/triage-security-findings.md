@@ -9,18 +9,15 @@ On pull requests, the scanners upsert sticky comments in the PR conversation ins
 | Source | Sticky comment header | Artifact |
 |---|---|---|
 | Source vulnerabilities | `security-source-scan-findings-<app-name>` | `security-source-scan-findings` |
-| Source restricted/forbidden licenses | `security-source-scan-findings-<app-name>` | `security-source-scan-findings` |
 | Git tree secrets | `security-source-scan-findings-<app-name>` | `security-source-scan-findings` |
 | Image vulnerabilities | `security-image-scan-findings-<app-name>-<stage>-<github_env>` | `security-image-scan-reports-<stage>-<github_env>` |
 | Image secrets | `security-image-scan-findings-<app-name>-<stage>-<github_env>` (same comment as image vulnerabilities for that app/stage/environment) | `security-image-scan-reports-<stage>-<github_env>` |
-
-Restricted and forbidden license findings are shown for triage only. The source scan reports only HIGH and CRITICAL license classifications. Trivy's license classification is not a legal decision and is not a P2P-wide organization policy; confirm the finding against your organization's open-source policy before taking enforcement action.
 
 PR comments are optional for backward compatibility with orchestrator workflows that existed before security scans posted comments. If the caller does not grant `pull-requests: write`, the workflows still write summaries and upload artifacts, but the sticky PR comment steps are non-fatal and cannot update the PR.
 
 P2P workflow templates pass `app-name` to security scans so each app updates its own source and image security comments.
 
-The source-security comment renders source vulnerabilities, restricted or forbidden licenses, and git-tree secrets under one header. Vulnerability rows include package, installed version, fixed version, CVE, and source where available. License rows identify the package and detected license. Git-tree secret rows show `Detector`, `Status`, `File`, `Line`, and `Commit`.
+The source-security comment renders source vulnerabilities and git-tree secrets under one header. Vulnerability rows include package, installed version, fixed version, CVE, and source where available. Git-tree secret rows show `Detector`, `Status`, `File`, `Line`, and `Commit`.
 
 The security-image-scan comment renders up to two tables under one header:
 
@@ -39,9 +36,9 @@ If the PR comment is truncated or you need raw data:
    - `security-source-scan-findings` for source-security output (contains redacted TruffleHog findings, raw Trivy filesystem output, and `source-security-findings.json`)
    - `security-image-scan-reports-<stage>-<github_env>` for security-image-scan output (contains `manifest.json`, `image-security-findings.json`, `trivy/`, and `trufflehog-image/`)
 
-The image artifact's root `manifest.json` is the supported index. It records the stage and points to artifact-relative raw Trivy JSON reports under `trivy/` and redacted TruffleHog JSON-lines reports under `trufflehog-image/`, both keyed by scanned image x platform. A configured OCI reference can be absent from `manifest.json` when the workflow skipped it as non-scannable, such as a Helm chart artifact or confirmed empty container image; check the security-image-scan job logs for skip warnings. A TruffleHog JSONL file can be empty when no image secrets were found. Dashboard evidence does not expose secret values; use the P2P redacted secret ID, detector, status, layer, and path metadata for triage. The `security-source-scan-findings` artifact contains raw Trivy filesystem output, redacted TruffleHog source findings, and `source-security-findings.json` for source vulnerabilities, source license findings, and git-tree secrets.
+The image artifact's root `manifest.json` is the supported index. It records the stage and points to artifact-relative raw Trivy JSON reports under `trivy/` and redacted TruffleHog JSON-lines reports under `trufflehog-image/`, both keyed by scanned image x platform. A configured OCI reference can be absent from `manifest.json` when the workflow skipped it as non-scannable, such as a Helm chart artifact or confirmed empty container image; check the security-image-scan job logs for skip warnings. A TruffleHog JSONL file can be empty when no image secrets were found. Dashboard evidence does not expose secret values; use the P2P redacted secret ID, detector, status, layer, and path metadata for triage. The `security-source-scan-findings` artifact contains raw Trivy filesystem output, redacted TruffleHog source findings, and `source-security-findings.json` for source vulnerabilities and git-tree secrets.
 
-`source-security-findings.json` uses top-level `vulnerabilities`, `licenses`, and `secrets` collections. `image-security-findings.json` uses top-level `vulnerabilities` and `secrets` collections. When an ignore file is present, both files also include `ignored.vulnerabilities` and `ignored.secrets`; ignored records include the matched reason and expiry metadata when present. This lets dashboard ingestion display ignored findings alongside active findings without treating them as active remediation or blocking policy counts.
+`source-security-findings.json` uses top-level `vulnerabilities` and `secrets` collections. `image-security-findings.json` uses top-level `vulnerabilities` and `secrets` collections. When an ignore file is present, both files also include `ignored.vulnerabilities` and `ignored.secrets`; ignored records include the matched reason and expiry metadata when present. This lets dashboard ingestion display ignored findings alongside active findings without treating them as active remediation or blocking policy counts.
 
 ## 3. Remediate first when the scan is correct
 
@@ -49,7 +46,6 @@ Preferred fixes:
 
 - For image findings, update the vulnerable package or base image so the next build produces a clean image.
 - For source vulnerability findings, update the affected dependency or lockfile entry so the vulnerable version is no longer present.
-- For restricted or forbidden license findings, confirm the package and license against your organization's open-source policy before changing dependencies or taking enforcement action.
 - For git-tree secret findings, remove the committed secret, rotate the credential, and replace it with a proper secret store or GitHub secret.
 - For embedded secrets, rotate the credential first, identify which Dockerfile step introduced it (the `Layer` column points to the layer digest — match it against `docker history <image>`), scrub or rebuild from a fresh base, and re-push the image. A secret that appears in both the *Source security scan* (git-tree secrets) and *Image scan* (Secrets in image) comments means the source is in the tracked tree — fix the git source first and the image side will resolve on the next build.
 

@@ -112,7 +112,7 @@ const sameReportKeys = (left, right) => (
 const buildImageSecurityReport = async ({ core, env = process.env } = {}) => {
   const securityIgnoreHelper = env.P2P_SECURITY_IGNORE_HELPER || path.join(__dirname, 'p2p-security-ignore.js');
   const {
-    loadSecurityIgnore,
+    loadImageSecurityIgnore,
     splitImageVulnerabilities,
     splitImageSecrets,
     p2pRedactedSecretId,
@@ -123,7 +123,7 @@ const buildImageSecurityReport = async ({ core, env = process.env } = {}) => {
   const zeroScanTargets = env.SCAN_TARGET_COUNT === '0';
   const listExists = !!(list && fs.existsSync(list) && fs.statSync(list).size > 0);
   const runUrl = `${env.GITHUB_SERVER_URL}/${env.GITHUB_REPOSITORY}/actions/runs/${env.GITHUB_RUN_ID}`;
-  const securityIgnore = loadSecurityIgnore(env.GITHUB_WORKSPACE);
+  const securityIgnore = loadImageSecurityIgnore(env.GITHUB_WORKSPACE, env.WORKING_DIR);
 
   const shortNameFromRef = ref => {
     const refWithoutDigest = String(ref || '').split('@')[0];

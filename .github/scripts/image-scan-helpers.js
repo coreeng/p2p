@@ -32,6 +32,31 @@ function splitEntries(output) {
   return String(output || '').trim().split(/[\s,]+/).filter(Boolean);
 }
 
+function isPathInsideOrEqual(candidate, base) {
+  const relative = path.relative(base, candidate);
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+}
+
+function resolveWorkingDirectory(env, core, fsImpl = fs) {
+  const workingDirectory = env.WORKING_DIR || '.';
+  if (!env.GITHUB_WORKSPACE) return workingDirectory;
+  const workspace = path.resolve(env.GITHUB_WORKSPACE);
+  const resolved = path.resolve(workspace, workingDirectory);
+  if (!isPathInsideOrEqual(resolved, workspace)) {
+    core.setFailed('working-directory must resolve inside GITHUB_WORKSPACE');
+    return null;
+  }
+  if (fsImpl.existsSync(resolved)) {
+    const realWorkspace = fsImpl.realpathSync(workspace);
+    const realResolved = fsImpl.realpathSync(resolved);
+    if (!isPathInsideOrEqual(realResolved, realWorkspace)) {
+      core.setFailed('working-directory must resolve inside GITHUB_WORKSPACE');
+      return null;
+    }
+  }
+  return resolved;
+}
+
 async function resolveImages({
   core,
   env = process.env,
@@ -39,18 +64,20 @@ async function resolveImages({
 } = {}) {
   const stage = env.PIPELINE_STAGE;
   if (!validateStage(stage, core)) return;
+  const workingDirectory = resolveWorkingDirectory(env, core);
+  if (!workingDirectory) return;
 
   function runMake(target) {
     return execFileSyncImpl('make', ['--no-print-directory', target], {
       encoding: 'utf8',
-      cwd: env.WORKING_DIR,
+      cwd: workingDirectory,
     });
   }
 
   function makeTargetExists(target) {
     try {
       execFileSyncImpl('make', ['--no-print-directory', '-q', target], {
-        cwd: env.WORKING_DIR,
+        cwd: workingDirectory,
         stdio: 'ignore',
       });
       return true;

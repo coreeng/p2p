@@ -124,7 +124,7 @@ const maxSecurityRisk = (vulnerabilities, secrets) => {
 const buildSourceSecurityReport = async ({ core, env = process.env } = {}) => {
 const securityIgnoreHelper = env.P2P_SECURITY_IGNORE_HELPER || path.join(__dirname, 'p2p-security-ignore.js');
 const {
-  loadSecurityIgnore,
+  loadSourceSecurityIgnores,
   splitSourceVulnerabilities,
   splitSourceSecrets,
 } = require(securityIgnoreHelper);
@@ -152,7 +152,7 @@ if (!dryRun) {
 const reportSeveritySet = severitySet('LOW,MEDIUM,HIGH,CRITICAL,UNKNOWN');
 const blockingSet = blockingSeveritySet(env.BLOCKING_SEVERITY, core);
 const reportedSeverities = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNKNOWN'];
-const securityIgnore = loadSecurityIgnore(env.GITHUB_WORKSPACE);
+const securityIgnore = loadSourceSecurityIgnores(env.GITHUB_WORKSPACE);
 const trivy = !dryRun && env.SCA_SCAN_RESULT === 'success'
   ? readRequiredJson(trivyPath, 'Trivy source report')
   : readJson(trivyPath, { Results: [] });

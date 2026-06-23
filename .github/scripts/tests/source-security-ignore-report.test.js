@@ -643,6 +643,196 @@ async function runReportWithInvalidIgnoreFile(ignoreFile) {
   await buildSourceSecurityReport({ core: sandbox.core, env: sandbox.process.env });
 }
 
+async function runDirectoryScopedIgnoreReport() {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'source-directory-ignore-'));
+  const root = path.join(tmp, 'source-security');
+  const workspace = path.join(tmp, 'repo');
+  fs.mkdirSync(path.join(root, 'trivy'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'trufflehog'), { recursive: true });
+  fs.mkdirSync(path.join(workspace, 'services', 'api'), { recursive: true });
+  fs.mkdirSync(path.join(workspace, 'services', 'web'), { recursive: true });
+  fs.writeFileSync(path.join(workspace, '.p2p-security-ignore.yaml'), [
+    'version: 1',
+    'source:',
+    '  vulnerabilities:',
+    '    - id: CVE-ROOT-PATH',
+    '      reason: Root path-scoped risk.',
+    '      paths:',
+    '        - services/web/package-lock.json',
+    '  secrets:',
+    '    - id: root-secret',
+    '      reason: Root source secret.',
+    '',
+  ].join('\n'));
+  fs.writeFileSync(path.join(workspace, 'services', 'api', '.p2p-security-ignore.yaml'), [
+    'version: 1',
+    'source:',
+    '  vulnerabilities:',
+    '    - id: CVE-LOCAL-PATH',
+    '      reason: API-local dependency risk.',
+    '      paths:',
+    '        - package-lock.json',
+    '  secrets:',
+    '    - id: local-secret',
+    '      reason: API-local source secret.',
+    '      path: fixtures/token.txt',
+    '',
+  ].join('\n'));
+  fs.writeFileSync(path.join(root, 'trivy', 'trivy-fs.json'), JSON.stringify({
+    Results: [
+      {
+        Target: 'services/api/package-lock.json',
+        Vulnerabilities: [
+          { VulnerabilityID: 'CVE-LOCAL-PATH', PkgName: 'api-lib', Severity: 'CRITICAL', PrimaryURL: 'https://example.test/CVE-LOCAL-PATH' },
+          { VulnerabilityID: 'CVE-ROOT-PATH', PkgName: 'root-lib', Severity: 'HIGH', PrimaryURL: 'https://example.test/CVE-ROOT-PATH' },
+        ],
+      },
+      {
+        Target: 'services/web/package-lock.json',
+        Vulnerabilities: [
+          { VulnerabilityID: 'CVE-LOCAL-PATH', PkgName: 'web-lib', Severity: 'HIGH', PrimaryURL: 'https://example.test/CVE-LOCAL-PATH' },
+          { VulnerabilityID: 'CVE-ROOT-PATH', PkgName: 'root-lib', Severity: 'HIGH', PrimaryURL: 'https://example.test/CVE-ROOT-PATH' },
+        ],
+      },
+    ],
+  }));
+  fs.writeFileSync(path.join(root, 'trufflehog', 'findings.ndjson'), [
+    JSON.stringify({ id: 'local-secret', detector: 'Github', status: 'verified', file: 'services/api/fixtures/token.txt', line: 1, commit: 'abcdef1234567890', url: 'https://example.test/blob/abcdef/services/api/fixtures/token.txt#L1' }),
+    JSON.stringify({ id: 'local-secret', detector: 'Github', status: 'verified', file: 'services/web/fixtures/token.txt', line: 1, commit: 'abcdef1234567890', url: 'https://example.test/blob/abcdef/services/web/fixtures/token.txt#L1' }),
+    JSON.stringify({ id: 'root-secret', detector: 'Github', status: 'verified', file: 'services/web/root.env', line: 1, commit: 'abcdef1234567890', url: 'https://example.test/blob/abcdef/services/web/root.env#L1' }),
+  ].join('\n') + '\n');
+
+  const outputs = {};
+  const failures = [];
+  await buildSourceSecurityReport({
+    env: {
+      ROOT: root,
+      GITHUB_WORKSPACE: workspace,
+      DRY_RUN: 'false',
+      BLOCKING_SEVERITY: 'high',
+      SCOPE: 'changes',
+      BASE: 'base-sha',
+      SECRET_SCAN_RESULT: 'success',
+      SCA_SCAN_RESULT: 'success',
+      P2P_SECURITY_IGNORE_HELPER: helperPath,
+      GITHUB_SERVER_URL: 'https://github.example',
+      GITHUB_REPOSITORY: 'org/repo',
+      GITHUB_RUN_ID: '42',
+    },
+    core: {
+      setOutput: (key, value) => { outputs[key] = value; },
+      setFailed: (message) => { failures.push(message); },
+      info: () => {},
+      warning: () => {},
+      summary: {
+        addRaw() {
+          return this;
+        },
+        write() {
+          return Promise.resolve();
+        },
+      },
+    },
+  });
+  return {
+    outputs,
+    failures,
+    normalized: JSON.parse(fs.readFileSync(outputs['json-file'], 'utf8')),
+  };
+}
+
+async function runReportWithNestedInvalidIgnoreFile(ignoreFile, dryRun = false) {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'source-nested-invalid-ignore-'));
+  const root = path.join(tmp, 'source-security');
+  const workspace = path.join(tmp, 'repo');
+  fs.mkdirSync(path.join(root, 'trivy'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'trufflehog'), { recursive: true });
+  fs.mkdirSync(path.join(workspace, 'services', 'api'), { recursive: true });
+  fs.writeFileSync(path.join(workspace, 'services', 'api', '.p2p-security-ignore.yaml'), ignoreFile);
+  fs.writeFileSync(path.join(root, 'trivy', 'trivy-fs.json'), JSON.stringify({ Results: [] }));
+  fs.writeFileSync(path.join(root, 'trufflehog', 'findings.ndjson'), '');
+
+  await buildSourceSecurityReport({
+    env: {
+      ROOT: root,
+      GITHUB_WORKSPACE: workspace,
+      DRY_RUN: dryRun ? 'true' : 'false',
+      BLOCKING_SEVERITY: 'high',
+      SCOPE: 'changes',
+      BASE: 'base-sha',
+      SECRET_SCAN_RESULT: 'success',
+      SCA_SCAN_RESULT: 'success',
+      P2P_SECURITY_IGNORE_HELPER: helperPath,
+      GITHUB_SERVER_URL: 'https://github.example',
+      GITHUB_REPOSITORY: 'org/repo',
+      GITHUB_RUN_ID: '42',
+    },
+    core: {
+      setOutput: () => {},
+      setFailed: () => {},
+      info: () => {},
+      warning: () => {},
+      summary: {
+        addRaw() {
+          return this;
+        },
+        write() {
+          return Promise.resolve();
+        },
+      },
+    },
+  });
+}
+
+async function runReportWithNestedSymlinkEscapeIgnoreFile(ignoreFile) {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'source-nested-symlink-ignore-'));
+  const root = path.join(tmp, 'source-security');
+  const workspace = path.join(tmp, 'repo');
+  const api = path.join(workspace, 'services', 'api');
+  const outside = path.join(tmp, 'outside');
+  fs.mkdirSync(path.join(root, 'trivy'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'trufflehog'), { recursive: true });
+  fs.mkdirSync(api, { recursive: true });
+  fs.mkdirSync(outside, { recursive: true });
+  fs.writeFileSync(path.join(outside, 'package-lock.json'), '{}');
+  fs.writeFileSync(path.join(outside, 'token.txt'), 'not-a-real-token');
+  fs.symlinkSync(outside, path.join(api, 'link'), 'dir');
+  fs.writeFileSync(path.join(api, '.p2p-security-ignore.yaml'), ignoreFile);
+  fs.writeFileSync(path.join(root, 'trivy', 'trivy-fs.json'), JSON.stringify({ Results: [] }));
+  fs.writeFileSync(path.join(root, 'trufflehog', 'findings.ndjson'), '');
+
+  await buildSourceSecurityReport({
+    env: {
+      ROOT: root,
+      GITHUB_WORKSPACE: workspace,
+      DRY_RUN: 'false',
+      BLOCKING_SEVERITY: 'high',
+      SCOPE: 'changes',
+      BASE: 'base-sha',
+      SECRET_SCAN_RESULT: 'success',
+      SCA_SCAN_RESULT: 'success',
+      P2P_SECURITY_IGNORE_HELPER: helperPath,
+      GITHUB_SERVER_URL: 'https://github.example',
+      GITHUB_REPOSITORY: 'org/repo',
+      GITHUB_RUN_ID: '42',
+    },
+    core: {
+      setOutput: () => {},
+      setFailed: () => {},
+      info: () => {},
+      warning: () => {},
+      summary: {
+        addRaw() {
+          return this;
+        },
+        write() {
+          return Promise.resolve();
+        },
+      },
+    },
+  });
+}
+
 async function runReportWithCorruptTruffleHogOutput() {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'source-corrupt-secret-'));
   const root = path.join(tmp, 'source-security');
@@ -878,6 +1068,67 @@ async function runReportWithMissingTruffleHogOutput() {
     'secret-path-mismatch',
   ]);
 
+  const directoryScoped = await runDirectoryScopedIgnoreReport();
+  assert.deepStrictEqual(directoryScoped.failures, []);
+  assert.strictEqual(directoryScoped.outputs['vulnerability-total'], 2);
+  assert.strictEqual(directoryScoped.outputs['vulnerability-blocking'], 2);
+  assert.strictEqual(directoryScoped.outputs['secret-total'], 1);
+  assert.strictEqual(directoryScoped.outputs['secret-blocking'], 1);
+  assert.deepStrictEqual(directoryScoped.normalized.ignored.vulnerabilities.map(v => ({
+    id: v.id,
+    source: v.source,
+    reason: v.ignore.reason,
+  })).sort((a, b) => a.source.localeCompare(b.source) || a.id.localeCompare(b.id)), [
+    {
+      id: 'CVE-LOCAL-PATH',
+      source: 'services/api/package-lock.json',
+      reason: 'API-local dependency risk.',
+    },
+    {
+      id: 'CVE-ROOT-PATH',
+      source: 'services/web/package-lock.json',
+      reason: 'Root path-scoped risk.',
+    },
+  ]);
+  assert.deepStrictEqual(directoryScoped.normalized.vulnerabilities.map(v => ({
+    id: v.id,
+    source: v.source,
+  })).sort((a, b) => a.source.localeCompare(b.source) || a.id.localeCompare(b.id)), [
+    {
+      id: 'CVE-ROOT-PATH',
+      source: 'services/api/package-lock.json',
+    },
+    {
+      id: 'CVE-LOCAL-PATH',
+      source: 'services/web/package-lock.json',
+    },
+  ]);
+  assert.deepStrictEqual(directoryScoped.normalized.ignored.secrets.map(s => ({
+    id: s.id,
+    file: s.file,
+    reason: s.ignore.reason,
+  })).sort((a, b) => a.file.localeCompare(b.file)), [
+    {
+      id: 'local-secret',
+      file: 'services/api/fixtures/token.txt',
+      reason: 'API-local source secret.',
+    },
+    {
+      id: 'root-secret',
+      file: 'services/web/root.env',
+      reason: 'Root source secret.',
+    },
+  ]);
+  assert.deepStrictEqual(directoryScoped.normalized.secrets.map(s => ({
+    id: s.id,
+    file: s.file,
+  })), [
+    {
+      id: 'local-secret',
+      file: 'services/web/fixtures/token.txt',
+    },
+  ]);
+
   const offModeVerifiedSecret = await runOffModeVerifiedSecretReport();
   assert.deepStrictEqual(offModeVerifiedSecret.failures, []);
   assert.strictEqual(offModeVerifiedSecret.outputs['security-risk'], 'critical');
@@ -912,6 +1163,37 @@ async function runReportWithMissingTruffleHogOutput() {
       error => error.message.includes(expected),
       name,
     );
+  }
+  for (const [name, ignoreFile, expected] of [
+    ['nested malformed YAML', 'version: 1\nsource:\n  vulnerabilities:\n    - id: CVE-1\n      reason: [unterminated\n', 'Invalid .p2p-security-ignore.yaml'],
+    ['nested schema invalid', 'version: 1\nsource:\n  secrets:\n    - id: nested-secret\n', 'source.secrets[0].reason must be a non-empty string'],
+    ['nested vulnerability path escape', 'version: 1\nsource:\n  vulnerabilities:\n    - id: CVE-1\n      reason: escape\n      paths:\n        - ../package-lock.json\n', 'source.vulnerabilities[0].paths[0] must not resolve outside the ignore file directory'],
+    ['nested secret path escape', 'version: 1\nsource:\n  secrets:\n    - id: nested-secret\n      reason: escape\n      path: ../secrets.env\n', 'source.secrets[0].path must not resolve outside the ignore file directory'],
+  ]) {
+    await assert.rejects(
+      () => runReportWithNestedInvalidIgnoreFile(ignoreFile),
+      error => error.message.includes(expected),
+      name,
+    );
+  }
+  await assert.rejects(
+    () => runReportWithNestedInvalidIgnoreFile('version: 1\nsource:\n  vulnerabilities:\n    - id: CVE-DRY\n', true),
+    error => error.message.includes('source.vulnerabilities[0].reason must be a non-empty string'),
+    'dry-run validates discovered nested ignore files',
+  );
+  for (const [name, ignoreFile, expected] of [
+    ['nested vulnerability symlink path escape', 'version: 1\nsource:\n  vulnerabilities:\n    - id: CVE-SYMLINK\n      reason: symlink escape\n      paths:\n        - link/package-lock.json\n', 'source.vulnerabilities[0].paths[0] must not resolve outside the ignore file directory'],
+    ['nested secret symlink path escape', 'version: 1\nsource:\n  secrets:\n    - id: symlink-secret\n      reason: symlink escape\n      path: link/token.txt\n', 'source.secrets[0].path must not resolve outside the ignore file directory'],
+  ]) {
+    try {
+      await assert.rejects(
+        () => runReportWithNestedSymlinkEscapeIgnoreFile(ignoreFile),
+        error => error.message.includes(expected),
+        name,
+      );
+    } catch (error) {
+      if (error.code !== 'EPERM' && error.code !== 'EACCES') throw error;
+    }
   }
   await assert.rejects(
     () => runReportWithCorruptTruffleHogOutput(),

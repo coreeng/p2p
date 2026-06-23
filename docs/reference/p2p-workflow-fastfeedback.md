@@ -85,8 +85,10 @@ security-image-scan           (needs: build)
 security-source-scan  (independent of build; runs in parallel)
                       Calls p2p-workflow-source-security-scan with secret-scan-scope: changes.
                       Checks out the same checkout-version ref as build/test jobs.
-                      Reports source vulnerabilities, restricted/forbidden licenses,
-                      and git-tree secrets. Blocks only on vulnerabilities at or above
+                      Scans source repository-wide; working-directory does not narrow
+                      TruffleHog source secret scanning or Trivy source SCA.
+                      Reports source vulnerabilities and git-tree secrets.
+                      Blocks only on vulnerabilities at or above
                       security-scan-blocking-severity or verified secrets when the
                       threshold is not off.
 

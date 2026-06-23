@@ -1,4 +1,7 @@
 const assert = require('assert');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const { resolveImages } = require('../image-scan-helpers');
 
 async function runCase(name, makeOutputs, envOverrides = {}) {
@@ -16,6 +19,7 @@ async function runCase(name, makeOutputs, envOverrides = {}) {
       TENANT_NAME: 'tenant-a',
       VERSION: '1.2.3',
       WORKING_DIR: '/repo',
+      GITHUB_WORKSPACE: '/repo',
       ...envOverrides,
     },
     core: {
@@ -102,6 +106,40 @@ async function runCase(name, makeOutputs, envOverrides = {}) {
   );
   assert.strictEqual(unknownStage.outputs['image-refs'], undefined);
   assert.deepStrictEqual(unknownStage.calls, [], 'unknown stage fails before make');
+
+  const escapedWorkingDirectory = await runCase(
+    'working-directory escape fails before image resolution',
+    { 'p2p-images': 'api\n' },
+    { WORKING_DIR: '../outside', IMAGE_NAMES: 'api' },
+  );
+  assert.deepStrictEqual(
+    escapedWorkingDirectory.failures,
+    ['working-directory must resolve inside GITHUB_WORKSPACE'],
+  );
+  assert.strictEqual(escapedWorkingDirectory.outputs['image-refs'], undefined);
+  assert.deepStrictEqual(escapedWorkingDirectory.calls, [], 'working-directory escape fails before make');
+
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'image-ref-working-dir-'));
+  const workspace = path.join(tmp, 'repo');
+  const outside = path.join(tmp, 'outside');
+  fs.mkdirSync(workspace, { recursive: true });
+  fs.mkdirSync(outside, { recursive: true });
+  try {
+    fs.symlinkSync(outside, path.join(workspace, 'link'), 'dir');
+    const symlinkWorkingDirectory = await runCase(
+      'working-directory symlink escape fails before image resolution',
+      { 'p2p-images': 'api\n' },
+      { GITHUB_WORKSPACE: workspace, WORKING_DIR: 'link', IMAGE_NAMES: 'api' },
+    );
+    assert.deepStrictEqual(
+      symlinkWorkingDirectory.failures,
+      ['working-directory must resolve inside GITHUB_WORKSPACE'],
+    );
+    assert.strictEqual(symlinkWorkingDirectory.outputs['image-refs'], undefined);
+    assert.deepStrictEqual(symlinkWorkingDirectory.calls, [], 'working-directory symlink escape fails before make');
+  } catch (error) {
+    if (error.code !== 'EPERM' && error.code !== 'EACCES') throw error;
+  }
 
   console.log('image ref resolver fixtures passed');
 })().catch(error => {

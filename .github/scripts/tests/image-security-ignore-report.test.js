@@ -255,6 +255,201 @@ async function runOffModeAllIgnoredReport() {
   });
 }
 
+async function runWorkingDirectoryImageIgnoreReport() {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'image-working-directory-ignore-'));
+  const workspace = path.join(tmp, 'repo');
+  const trivyDir = path.join(tmp, 'trivy');
+  const secretDir = path.join(tmp, 'trufflehog-image');
+  fs.mkdirSync(path.join(workspace, 'services', 'api'), { recursive: true });
+  fs.mkdirSync(path.join(workspace, 'services', 'other'), { recursive: true });
+  fs.mkdirSync(trivyDir, { recursive: true });
+  fs.mkdirSync(secretDir, { recursive: true });
+  fs.writeFileSync(path.join(workspace, '.p2p-security-ignore.yaml'), [
+    'version: 1',
+    'images:',
+    '  - name: api',
+    '    vulnerabilities:',
+    '      - id: CVE-ROOT-IMAGE',
+    '        reason: Root image risk.',
+    '',
+  ].join('\n'));
+  fs.writeFileSync(path.join(workspace, 'services', 'api', '.p2p-security-ignore.yaml'), [
+    'version: 1',
+    'images:',
+    '  - name: api',
+    '    vulnerabilities:',
+    '      - id: CVE-SELECTED-IMAGE',
+    '        reason: Selected working-directory image risk.',
+    '    secrets:',
+    `      - id: ${secretId('selected-image-secret-value')}`,
+    '        reason: Selected working-directory image secret.',
+    '',
+  ].join('\n'));
+  fs.writeFileSync(path.join(workspace, 'services', 'other', '.p2p-security-ignore.yaml'), [
+    'version: 1',
+    'images:',
+    '  - name: api',
+    '    vulnerabilities:',
+    '      - id: CVE-UNSELECTED-IMAGE',
+    '        reason: Unselected image risk.',
+    '',
+  ].join('\n'));
+
+  const vulnReport = path.join(trivyDir, 'api-vuln.json');
+  fs.writeFileSync(vulnReport, JSON.stringify({
+    Results: [
+      {
+        Target: 'api-image (debian)',
+        Vulnerabilities: [
+          { VulnerabilityID: 'CVE-ROOT-IMAGE', PkgName: 'root-lib', Severity: 'HIGH', PrimaryURL: 'https://example.test/CVE-ROOT-IMAGE' },
+          { VulnerabilityID: 'CVE-SELECTED-IMAGE', PkgName: 'selected-lib', Severity: 'HIGH', PrimaryURL: 'https://example.test/CVE-SELECTED-IMAGE' },
+          { VulnerabilityID: 'CVE-UNSELECTED-IMAGE', PkgName: 'unselected-lib', Severity: 'HIGH', PrimaryURL: 'https://example.test/CVE-UNSELECTED-IMAGE' },
+        ],
+      },
+    ],
+  }));
+  const reportList = path.join(trivyDir, 'reports.txt');
+  fs.writeFileSync(reportList, [
+    `europe-west2-docker.pkg.dev/project/tenant/prod/prod/api:1.2.3\tlinux/amd64\tsha256:api\t${vulnReport}`,
+    '',
+  ].join('\n'));
+
+  const secretReport = path.join(secretDir, 'api-secret.jsonl');
+  fs.writeFileSync(secretReport, [
+    JSON.stringify({
+      DetectorName: 'Github',
+      Verified: true,
+      Raw: 'selected-image-secret-value',
+      SourceMetadata: { Data: { Docker: { layer: 'sha256:layer1', file: '/app/selected.env' } } },
+    }),
+  ].join('\n') + '\n');
+  const secretList = path.join(secretDir, 'reports.txt');
+  fs.writeFileSync(secretList, [
+    `europe-west2-docker.pkg.dev/project/tenant/prod/prod/api:1.2.3\tlinux/amd64\tsha256:api\t${secretReport}`,
+    '',
+  ].join('\n'));
+
+  return runReportModule({
+    RUNNER_TEMP: tmp,
+    GITHUB_WORKSPACE: workspace,
+    WORKING_DIR: 'services/api',
+    REPORT_LIST: reportList,
+    SECRET_REPORT_LIST: secretList,
+    BLOCKING_SEVERITY: 'high',
+    PIPELINE_STAGE: 'prod',
+    GITHUB_ENV_INPUT: '',
+    VERSION: '1.2.3',
+    REGION: 'europe-west2',
+    PROJECT_ID: 'project',
+    TENANT_NAME: 'prod',
+    P2P_SECURITY_IGNORE_HELPER: helperPath,
+    GITHUB_SERVER_URL: 'https://github.example',
+    GITHUB_REPOSITORY: 'org/repo',
+    GITHUB_RUN_ID: '42',
+  });
+}
+
+async function runEscapingWorkingDirectoryImageReport() {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'image-working-directory-escape-'));
+  const workspace = path.join(tmp, 'repo');
+  const outside = path.join(tmp, 'outside');
+  fs.mkdirSync(workspace, { recursive: true });
+  fs.mkdirSync(outside, { recursive: true });
+  fs.writeFileSync(path.join(outside, '.p2p-security-ignore.yaml'), [
+    'version: 1',
+    'images:',
+    '  - name: api',
+    '    vulnerabilities:',
+    '      - id: CVE-OUTSIDE-IMAGE',
+    '        reason: Outside repo ignore must not be loaded.',
+    '',
+  ].join('\n'));
+
+  await buildImageSecurityReport({
+    env: {
+      RUNNER_TEMP: tmp,
+      GITHUB_WORKSPACE: workspace,
+      WORKING_DIR: '../outside',
+      BLOCKING_SEVERITY: 'high',
+      PIPELINE_STAGE: 'prod',
+      GITHUB_ENV_INPUT: '',
+      VERSION: '1.2.3',
+      REGION: 'europe-west2',
+      PROJECT_ID: 'project',
+      TENANT_NAME: 'prod',
+      P2P_SECURITY_IGNORE_HELPER: helperPath,
+      GITHUB_SERVER_URL: 'https://github.example',
+      GITHUB_REPOSITORY: 'org/repo',
+      GITHUB_RUN_ID: '42',
+    },
+    core: {
+      setOutput: () => {},
+      setFailed: () => {},
+      info: () => {},
+      warning: () => {},
+      summary: {
+        addRaw() {
+          return this;
+        },
+        write() {
+          return Promise.resolve();
+        },
+      },
+    },
+  });
+}
+
+async function runSymlinkEscapingWorkingDirectoryImageReport() {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'image-working-directory-symlink-'));
+  const workspace = path.join(tmp, 'repo');
+  const outside = path.join(tmp, 'outside');
+  fs.mkdirSync(workspace, { recursive: true });
+  fs.mkdirSync(outside, { recursive: true });
+  fs.symlinkSync(outside, path.join(workspace, 'link'), 'dir');
+  fs.writeFileSync(path.join(outside, '.p2p-security-ignore.yaml'), [
+    'version: 1',
+    'images:',
+    '  - name: api',
+    '    vulnerabilities:',
+    '      - id: CVE-OUTSIDE-IMAGE',
+    '        reason: Outside repo ignore must not be loaded.',
+    '',
+  ].join('\n'));
+
+  await buildImageSecurityReport({
+    env: {
+      RUNNER_TEMP: tmp,
+      GITHUB_WORKSPACE: workspace,
+      WORKING_DIR: 'link',
+      BLOCKING_SEVERITY: 'high',
+      PIPELINE_STAGE: 'prod',
+      GITHUB_ENV_INPUT: '',
+      VERSION: '1.2.3',
+      REGION: 'europe-west2',
+      PROJECT_ID: 'project',
+      TENANT_NAME: 'prod',
+      P2P_SECURITY_IGNORE_HELPER: helperPath,
+      GITHUB_SERVER_URL: 'https://github.example',
+      GITHUB_REPOSITORY: 'org/repo',
+      GITHUB_RUN_ID: '42',
+    },
+    core: {
+      setOutput: () => {},
+      setFailed: () => {},
+      info: () => {},
+      warning: () => {},
+      summary: {
+        addRaw() {
+          return this;
+        },
+        write() {
+          return Promise.resolve();
+        },
+      },
+    },
+  });
+}
+
 async function runUnclassifiedImageReport() {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'image-unclassified-'));
   const workspace = path.join(tmp, 'repo');
@@ -877,6 +1072,52 @@ async function runZeroScanTargetReport() {
   assert(!offMode.summary.includes('### Ignored image findings'));
   assert(!offMode.summary.includes('Accepted off-mode image vulnerability.'));
   assert(!offMode.summary.includes('Accepted off-mode image secret.'));
+
+  const workingDirectoryIgnores = await runWorkingDirectoryImageIgnoreReport();
+  assert.deepStrictEqual(workingDirectoryIgnores.failures, []);
+  assert.strictEqual(workingDirectoryIgnores.outputs['total-count'], 1);
+  assert.strictEqual(workingDirectoryIgnores.outputs['blocking-count'], 1);
+  assert.strictEqual(workingDirectoryIgnores.outputs['secret-total-count'], 0);
+  assert.strictEqual(workingDirectoryIgnores.outputs['secret-blocking-count'], 0);
+  assert.deepStrictEqual(workingDirectoryIgnores.normalized.vulnerabilities.map(v => v.id), ['CVE-UNSELECTED-IMAGE']);
+  assert.deepStrictEqual(workingDirectoryIgnores.normalized.ignored.vulnerabilities.map(v => ({
+    id: v.id,
+    reason: v.ignore.reason,
+  })).sort((a, b) => a.id.localeCompare(b.id)), [
+    {
+      id: 'CVE-ROOT-IMAGE',
+      reason: 'Root image risk.',
+    },
+    {
+      id: 'CVE-SELECTED-IMAGE',
+      reason: 'Selected working-directory image risk.',
+    },
+  ]);
+  assert.deepStrictEqual(workingDirectoryIgnores.normalized.ignored.secrets.map(s => ({
+    id: s.id,
+    reason: s.ignore.reason,
+    blocking: s.isBlocking,
+  })), [
+    {
+      id: secretId('selected-image-secret-value'),
+      reason: 'Selected working-directory image secret.',
+      blocking: false,
+    },
+  ]);
+  await assert.rejects(
+    () => runEscapingWorkingDirectoryImageReport(),
+    error => error.message.includes('working-directory must resolve inside GITHUB_WORKSPACE'),
+    'image working-directory must not load ignore files outside the repository',
+  );
+  try {
+    await assert.rejects(
+      () => runSymlinkEscapingWorkingDirectoryImageReport(),
+      error => error.message.includes('working-directory must resolve inside GITHUB_WORKSPACE'),
+      'image working-directory must not follow symlinks outside the repository',
+    );
+  } catch (error) {
+    if (error.code !== 'EPERM' && error.code !== 'EACCES') throw error;
+  }
   const imageStatusSteps = readStatusStepNames(path.resolve(__dirname, '../../workflows/p2p-workflow-image-scan.yaml'));
   assert.deepStrictEqual(imageStatusSteps, [
     '      - name: "Output security risk: ${{ needs.security-image-scan.outputs.security-risk || \'unknown\' }}; scan: ${{ needs.security-image-scan.outputs.scan-status || \'failed\' }}"',

@@ -18,13 +18,13 @@ The first two cases are developer feedback. The last case is monitoring and audi
 
 P2P provides managed security scanning through reusable GitHub Actions workflows.
 
-Fast-feedback now runs source security scanning and image scanning automatically on pull requests and pushes. Source security scanning checks changed git history for committed secrets, and checks the current source tree for dependency vulnerabilities. Trivy source scanning is intentionally not limited to the configured `working-directory`, because dependency manifests and related modules can live outside the P2P make target directory. Image scanning checks the built P2P container images for known vulnerabilities and embedded secrets.
+Fast-feedback now runs source security scanning and image scanning automatically on pull requests and pushes. Source security scanning is repository-wide, not folder-scoped: TruffleHog checks the changed git history for committed secrets, and Trivy source dependency vulnerability scanning/SCA checks the current source tree. Neither source scanner is limited to the configured `working-directory`; that input affects make target execution, image build context, and image ignore-file selection, not source scanner scope. Image scanning checks the built P2P container images for known vulnerabilities and embedded secrets.
 
 The workflows are visibility-first by default: findings are reported in workflow run summaries, artifacts, and PR comments where permissions allow, but they do not block unless the caller sets `security-scan-blocking-severity` to `low`, `medium`, `high`, or `critical`. Promotion waits for the scan jobs to complete, so scanner execution failures stop promotion. Security findings stop promotion only when they meet the configured blocking threshold.
 
 P2P also provides a scheduled umbrella workflow, `p2p-workflow-security-scan`, for repositories that want periodic monitoring. A repository enables it with a small cron wrapper. Each scheduled run scans:
 
-- the repository source history for secrets, and the current branch source tree for dependency vulnerabilities and license signals;
+- the repository source history for secrets, and the current branch source tree for dependency vulnerabilities/SCA;
 - the latest fast-feedback images;
 - the latest extended-test images;
 - the latest production images.
@@ -60,7 +60,9 @@ jobs:
 
 Teams read results in the GitHub Actions workflow run summary and artifacts. The source scan writes source vulnerability and secret results to the workflow run summary on every non-dry-run scan. On pull requests, source scan comments are posted when the workflow has `pull-requests: write`; image scan comments are also posted when that permission is granted through the caller chain. If the permission is omitted, image scanning still runs and uploads artifacts, but PR comment posting is non-fatal.
 
-Application repositories may add a P2P-owned `.p2p-security-ignore.yaml` file at the repository root to record accepted source and image security findings. Valid, unexpired ignore entries remove matching findings from active report tables, active totals, blocking counts, and policy failures while keeping ignored records in normalized JSON artifacts for dashboard ingestion. Malformed ignore files, unsupported schema versions, invalid shapes, or invalid expiry dates fail report generation instead of silently weakening policy.
+Scheduled source security scanning is also repository-wide, not folder-scoped: TruffleHog scans reachable git history for secrets, and Trivy source dependency vulnerability scanning/SCA scans the current branch source tree. As in fast-feedback, `working-directory` does not limit source scanner scope.
+
+Application repositories may add P2P-owned `.p2p-security-ignore.yaml` files to record accepted security findings. Source report generation discovers every `.p2p-security-ignore.yaml` in the repository; each file's source entries apply only to findings under that file's directory, so the repository-root file applies to the whole repository. Image report generation reads the repository-root ignore file plus the ignore file in the selected `working-directory`. Valid, unexpired ignore entries remove matching findings from active report tables, active totals, blocking counts, and policy failures while keeping ignored records in normalized JSON artifacts for dashboard ingestion. Malformed ignore files, unsupported schema versions, invalid shapes, or invalid expiry dates fail report generation instead of silently weakening policy.
 
 ## Scanner choices
 

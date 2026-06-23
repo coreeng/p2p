@@ -59,7 +59,7 @@ jobs:
 None. Results are surfaced via:
 
 - Each child job's workflow summary (`$GITHUB_STEP_SUMMARY`).
-- On non-dry-run source scans where report generation completes, the `security-source-scan-findings` artifact from the security-source-scan job. It contains redacted TruffleHog output, raw Trivy filesystem output when available, and normalized merged JSON. Scheduled source scanning uses TruffleHog for reachable git history and Trivy for the current branch's checked-out source tree. Scanner warnings or incomplete scanner output still fail the `security-source-scan-status-policy` job.
+- On non-dry-run source scans where report generation completes, the `security-source-scan-findings` artifact from the security-source-scan job. It contains redacted TruffleHog output, raw Trivy filesystem output when available, and normalized merged JSON. Scheduled source scanning is repository-wide: TruffleHog scans reachable git history and Trivy source dependency vulnerability scanning/SCA scans the current branch's checked-out source tree. Scanner warnings or incomplete scanner output still fail the `security-source-scan-status-policy` job.
 - On successful non-dry-run image scans where a latest image tag is found and at least one scannable container image is available, the `security-image-scan-reports-<stage>-<github_env>` artifact from each security-image-scan job. Each artifact contains root `manifest.json`, `trivy/` vulnerability JSON reports, and `trufflehog-image/` secret JSON-lines reports for scanned image/platform pairs. `manifest.json` records the P2P stage (`fast-feedback`, `extended-test`, or `prod`) and is the supported artifact index.
 
 ## Job Graph
@@ -73,7 +73,7 @@ security-resolve-anchor-image
 security-source-scan                                   (independent; runs in parallel)
 ```
 
-Each matrix entry calls an internal stage workflow that first discovers the latest version for that stage/environment and then scans that exact version. The security-source-scan job runs in parallel with the per-stage matrices. For source scans, `secret-scan-scope: full-history` applies to TruffleHog git scanning; Trivy scans only the current checked-out branch tree. The `security-scan-blocking-severity` input is passed to every child scan. Its default `off` keeps scheduled scans report-only; setting it to `low`, `medium`, `high`, or `critical` makes findings at or above that severity fail the umbrella workflow, while below-threshold findings fail only the child policy job.
+Each matrix entry calls an internal stage workflow that first discovers the latest version for that stage/environment and then scans that exact version. The security-source-scan job runs in parallel with the per-stage matrices. For source scans, `secret-scan-scope: full-history` applies to repository-wide TruffleHog git scanning; Trivy scans the current checked-out branch tree and is not limited to `working-directory`. The `security-scan-blocking-severity` input is passed to every child scan. Its default `off` keeps scheduled scans report-only; setting it to `low`, `medium`, `high`, or `critical` makes findings at or above that severity fail the umbrella workflow, while below-threshold findings fail only the child policy job.
 
 ## Version discovery
 

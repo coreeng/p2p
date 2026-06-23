@@ -243,6 +243,7 @@ jobs:
           VERSION: ${{ inputs.version }}
           ARTIFACT_DIR: ${{ steps.manifest.outputs.artifact-dir }}
           SCAN_TARGET_COUNT: ${{ steps.pull-images.outputs.scan-target-count }}
+          WORKING_DIR: ${{ inputs.working-directory }}
           P2P_SECURITY_IGNORE_HELPER: ${{ runner.temp }}/p2p-workflow-src/.github/scripts/p2p-security-ignore.js
           P2P_IMAGE_SECURITY_REPORT: ${{ runner.temp }}/p2p-workflow-src/.github/scripts/image-security-report.js
         with:
