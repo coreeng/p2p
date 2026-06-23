@@ -45,13 +45,14 @@ jobs:
 | `version` | The highest semver-sorted image tag found in the registry, `0.0.0` when `dry-run` is `true`, or empty when no tags are found. |
 | `found` | `true` when a tag was found, or when `dry-run` is `true`; `false` when the registry query succeeds but no tags are available. |
 
-## Semver sorting logic
+## SemVer sorting logic
 
-The workflow calls `gcloud artifacts docker images list` for `<registry>/<registry-path>/<image-name>`, retrieves all tags, and sorts them using a `jq` expression that:
+The workflow calls `gcloud artifacts docker images list` for `<registry>/<registry-path>/<image-name>`, retrieves all tags, and sorts them using the shared latest-image resolver. The resolver:
 
-1. Extracts the version core (e.g. `1.2.3`) and pre-release identifier (e.g. `alpha.1`) from each tag.
-2. Sorts first by name prefix, then by numeric version core components, then by whether a pre-release suffix is present (release versions rank above pre-release), then by the pre-release components.
-3. Reverses the sort and returns the first (highest) entry.
+1. Parses SemVer tags with an optional leading `v`, such as `1.2.3`, `v1.2.3`, and `1.2.3-alpha.1`.
+2. Compares tags by the normalized SemVer value, ignoring build metadata for precedence.
+3. Ranks release versions above pre-release versions for the same version core.
+4. Returns the original selected tag, preserving whether the registry tag used a leading `v`.
 
 ## See also
 

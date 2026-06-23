@@ -85,6 +85,20 @@ jobs:
           token_format: access_token
           access_token_lifetime: 3600s
 
+      - name: Checkout P2P workflow sources
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .p2p-workflow-src
+
+      - name: Move P2P workflow sources outside app workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "$RUNNER_TEMP/p2p-workflow-src"
+          mv .p2p-workflow-src "$RUNNER_TEMP/p2p-workflow-src"
+
       - name: Get latest image
         id: get-latest-image
         env:
@@ -92,26 +106,7 @@ jobs:
         run: |
             set -o pipefail
             if [ "$DRY_RUN" == false ]; then
-              if ! version=$(gcloud artifacts docker images list "${REGISTRY}/${REGISTRY_PATH}/${IMAGE_NAME}" --include-tags --sort-by=~buildTime --format=json 2>/dev/null | jq -r '.[].tags[]' | jq -Rrn '[inputs] | sort_by(
-                # extract name and version
-                match("[0-9]+[0-9.]*";"").offset as $version_index
-                | .[:$version_index] as $name
-                | .[$version_index:]
-                # ignore build
-                | split("+")[0]
-                # extract version core and pre-release as arrays of numbers and strings
-                | split("-")
-                | (.[0] | split(".") | map(tonumber? // .)) as $version_core
-                | (.[1:] | join("-") | split(".") | map(tonumber? // .)) as $pre_release
-                # sort by name
-                | $name,
-                # sort by version core
-                $version_core,
-                # pre-release versions have a lower precedence than the associated normal version
-                ($pre_release | length)==0,
-                # sort by pre-release
-                $pre_release
-              ) | reverse | .[0]'); then
+              if ! version=$(gcloud artifacts docker images list "${REGISTRY}/${REGISTRY_PATH}/${IMAGE_NAME}" --include-tags --sort-by=~buildTime --format=json 2>/dev/null | node "$RUNNER_TEMP/p2p-workflow-src/.github/scripts/latest-image.js"); then
                 echo "exiting"
                 exit 1
               fi
