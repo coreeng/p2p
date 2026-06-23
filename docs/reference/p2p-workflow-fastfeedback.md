@@ -73,16 +73,16 @@ build
     └── integration-test  (needs: functional-test, nft-test)
                           Skipped when skip-fastfeedback-integration-on-prs=true
                           AND ref is not main-branch AND ref_type is not tag.
-        └── promote       (needs: integration-test, image-scan, source-security-scan)
+        └── promote       (needs: integration-test, security-image-scan, security-source-scan)
                           Runs only on main-branch or tag pushes.
 
-image-scan           (needs: build)
+security-image-scan           (needs: build)
                      Calls p2p-workflow-image-scan against the built images.
                      Checks out the same checkout-version ref for image target resolution.
                      Blocks the workflow on findings at or above
                      security-scan-blocking-severity (default: off).
 
-source-security-scan  (independent of build; runs in parallel)
+security-source-scan  (independent of build; runs in parallel)
                       Calls p2p-workflow-source-security-scan with secret-scan-scope: changes.
                       Checks out the same checkout-version ref as build/test jobs.
                       Reports source vulnerabilities, restricted/forbidden licenses,
@@ -93,7 +93,7 @@ source-security-scan  (independent of build; runs in parallel)
 notify-failure       (needs: all jobs; runs on main-branch when any job fails)
 ```
 
-All jobs use a matrix derived from `source`. The `promote` job uses a matrix derived from `destination`. The `source-security-scan` job is not part of the matrix; it runs once per workflow. Security PR comments are scoped to `app-name`.
+All jobs use a matrix derived from `source`. The `promote` job uses a matrix derived from `destination`. The `security-source-scan` job is not part of the matrix; it runs once per workflow. Security PR comments are scoped to `app-name`.
 
 ## See also
 

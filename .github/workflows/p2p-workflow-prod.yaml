@@ -55,7 +55,7 @@ on:
         default: false
       security-scan-blocking-severity:
         description: |
-          Minimum severity that blocks the workflow for image-scan findings:
+          Minimum severity that blocks the workflow for security-image-scan findings:
           off, low, medium, high, or critical.
         required: false
         type: string
@@ -79,7 +79,7 @@ jobs:
             exit 1
           fi
 
-  image-scan:
+  security-image-scan:
     needs: [validate-version]
     if: success() && github.ref == inputs.main-branch
     uses: ./.github/workflows/p2p-workflow-image-scan.yaml
@@ -108,7 +108,7 @@ jobs:
 
   prod-deploy:
     name: prod-deploy
-    needs: [image-scan]
+    needs: [security-image-scan]
     if: success() && github.ref == inputs.main-branch
     uses: ./.github/workflows/p2p-execute-command.yaml
     secrets:
@@ -133,7 +133,7 @@ jobs:
       skip-subnamespaces-create: ${{ inputs.skip-subnamespaces-create }}
 
   notify-failure:
-    needs: [validate-version, image-scan, prod-deploy]
+    needs: [validate-version, security-image-scan, prod-deploy]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     if: always() && github.ref == inputs.main-branch && contains(needs.*.result, 'failure')

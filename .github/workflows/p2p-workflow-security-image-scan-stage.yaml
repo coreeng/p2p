@@ -52,14 +52,14 @@ on:
         default: ''
       security-scan-blocking-severity:
         description: |
-          Minimum severity that blocks the workflow for image-scan findings:
+          Minimum severity that blocks the workflow for security-image-scan findings:
           off, low, medium, high, or critical.
         required: false
         type: string
         default: 'off'
 
 jobs:
-  discover-version:
+  security-discover-version:
     uses: ./.github/workflows/p2p-get-latest-image.yaml
     permissions:
       contents: read
@@ -75,9 +75,9 @@ jobs:
       github_env: ${{ inputs.github_env }}
       working-directory: ${{ inputs.working-directory }}
 
-  image-scan:
-    needs: [discover-version]
-    if: needs.discover-version.outputs.found == 'true'
+  security-image-scan:
+    needs: [security-discover-version]
+    if: needs.security-discover-version.outputs.found == 'true'
     uses: ./.github/workflows/p2p-workflow-image-scan.yaml
     permissions:
       contents: read
@@ -92,7 +92,7 @@ jobs:
       github_env: ${{ inputs.github_env }}
       tenant-name: ${{ inputs.tenant-name }}
       app-name: ${{ inputs.app-name }}
-      version: ${{ needs.discover-version.outputs.version }}
+      version: ${{ needs.security-discover-version.outputs.version }}
       region: ${{ inputs.region }}
       working-directory: ${{ inputs.working-directory }}
       image-names: ${{ inputs.image-names }}

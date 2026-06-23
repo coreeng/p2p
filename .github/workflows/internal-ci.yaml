@@ -107,7 +107,7 @@ jobs:
           assert 'Move P2P workflow sources outside app workspace' in workflow
           assert 'mv .p2p-workflow-src "$RUNNER_TEMP/p2p-workflow-src"' in workflow
           assert 'tenant-name:' in workflow
-          assert 'header: source-security-scan-findings-$' + '{{ inputs.app-name || inputs.tenant-name || vars.TENANT_NAME }}' in workflow
+          assert 'header: security-source-scan-findings-$' + '{{ inputs.app-name || inputs.tenant-name || vars.TENANT_NAME }}' in workflow
           assert 'P2P_SECURITY_IGNORE_HELPER: $' + '{{ runner.temp }}/p2p-workflow-src/.github/scripts/p2p-security-ignore.js' in workflow
           assert "process.env.RUNNER_TEMP, 'p2p-workflow-src'" in workflow
           assert 'github.workspace' not in workflow
@@ -210,11 +210,11 @@ jobs:
           assert 'name: get-latest-image ($' + '{{ inputs.registry-path }}, $' + '{{ inputs.github_env }})' in latest_workflow
 
           workflow = Path('.github/workflows/p2p-workflow-image-scan.yaml').read_text()
-          assert "name: image-scan ($" + "{{ inputs.github_env != '' && format('{0}, {1}', inputs.pipeline-stage, inputs.github_env) || inputs.pipeline-stage }})" in workflow
-          assert 'name: ' + "'image-scan ($" + '{{ inputs.github_env }})' not in workflow
+          assert "name: security-image-scan ($" + "{{ inputs.github_env != '' && format('{0}, {1}', inputs.pipeline-stage, inputs.github_env) || inputs.pipeline-stage }})" in workflow
+          assert 'name: ' + "'security-image-scan ($" + '{{ inputs.github_env }})' not in workflow
           assert 'PIPELINE_STAGE: $' + '{{ inputs.pipeline-stage }}' in workflow
-          assert 'header: image-scan-findings-$' + '{{ inputs.app-name || inputs.tenant-name || vars.TENANT_NAME }}-$' + '{{ inputs.pipeline-stage }}-$' + '{{ inputs.github_env || ' in workflow
-          assert 'name: image-scan-reports-$' + '{{ inputs.pipeline-stage }}-$' + '{{ inputs.github_env || ' in workflow
+          assert 'header: security-image-scan-findings-$' + '{{ inputs.app-name || inputs.tenant-name || vars.TENANT_NAME }}-$' + '{{ inputs.pipeline-stage }}-$' + '{{ inputs.github_env || ' in workflow
+          assert 'name: security-image-scan-reports-$' + '{{ inputs.pipeline-stage }}-$' + '{{ inputs.github_env || ' in workflow
           assert 'path: .p2p-workflow-src' in workflow
           assert 'Move P2P workflow sources outside app workspace' in workflow
           assert 'mv .p2p-workflow-src "$RUNNER_TEMP/p2p-workflow-src"' in workflow
@@ -222,7 +222,7 @@ jobs:
           assert 'P2P_IMAGE_SECURITY_REPORT: $' + '{{ runner.temp }}/p2p-workflow-src/.github/scripts/image-security-report.js' in workflow
           assert 'github.workspace' not in workflow
           assert 'json-file:' in workflow
-          assert 'value: $' + '{{ jobs.image-scan.outputs.json-file }}' in workflow
+          assert 'value: $' + '{{ jobs.security-image-scan.outputs.json-file }}' in workflow
           assert 'json-file: $' + '{{ steps.report.outputs.json-file }}' in workflow
 
           report_module = Path('.github/scripts/image-security-report.js').read_text()
@@ -244,7 +244,7 @@ jobs:
           upload_block = []
           in_upload = False
           for line in workflow.read_text().splitlines():
-              if line.startswith('      - name: Upload image-scan reports'):
+              if line.startswith('      - name: Upload security-image-scan reports'):
                   in_upload = True
               elif in_upload and line.startswith('      - name: '):
                   break
@@ -255,10 +255,10 @@ jobs:
           upload_text = '\n'.join(upload_block)
           for forbidden in ('always()', 'reports-dir', 'reports.txt', 'if-no-files-found: ignore'):
               if forbidden in upload_text:
-                  raise SystemExit(f'Upload image-scan reports must not contain {forbidden}')
+                  raise SystemExit(f'Upload security-image-scan reports must not contain {forbidden}')
           for required in ('steps.manifest.outputs.artifact-dir', 'if-no-files-found: error'):
               if required not in upload_text:
-                  raise SystemExit(f'Upload image-scan reports is missing {required}')
+                  raise SystemExit(f'Upload security-image-scan reports is missing {required}')
           PY
 
           node .github/scripts/tests/image-scan-manifest.test.js
