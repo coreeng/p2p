@@ -8,6 +8,10 @@ on:
         required: false
         type: string
         default: ''
+      tenant-name:
+        required: false
+        type: string
+        default: ''
       blocking-severity:
         required: false
         type: string
@@ -276,7 +280,7 @@ jobs:
         continue-on-error: true
         uses: marocchino/sticky-pull-request-comment@v3
         with:
-          header: source-security-scan-findings${{ inputs.app-name != '' && format('-{0}', inputs.app-name) || '' }}
+          header: source-security-scan-findings-${{ inputs.app-name || inputs.tenant-name || vars.TENANT_NAME }}
           path: ${{ steps.report.outputs.report-file }}
           recreate: true
 

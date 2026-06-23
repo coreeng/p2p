@@ -105,6 +105,7 @@ jobs:
     with:
       secret-scan-scope: changes
       app-name: ${{ inputs.app-name }}
+      tenant-name: ${{ inputs.tenant-name }}
       blocking-severity: ${{ inputs.security-scan-blocking-severity }}
       dry-run: ${{ inputs.dry-run }}
       checkout-version: ${{ inputs.checkout-version }}
