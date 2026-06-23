@@ -14,11 +14,11 @@ Internal workflow called by [`p2p-workflow-fastfeedback`](p2p-workflow-fastfeedb
 | `version` | string | Yes | — | Image tag to scan. Used with each standard P2P image name to build the stage Artifact Registry reference. |
 | `github_env` | string | No | `''` | GitHub Environment used for environment-scoped variables and GCP auth. Required in practice — image pulls go through Workload Identity Federation bound to this environment. |
 | `tenant-name` | string | No | `''` | Tenant identifier. Falls back to `vars.TENANT_NAME` when empty. |
-| `app-name` | string | No | `''` | Application name used to scope sticky PR comments in multi-app repositories. Primary P2P workflow templates pass this through. When omitted by direct callers, comment scope falls back to `tenant-name`, then `vars.TENANT_NAME`. |
+| `app-name` | string | No | `''` | Application name used to scope sticky PR comments in multi-app repositories. It does not select security ignore files. Primary P2P workflow templates pass this through. When omitted by direct callers, comment scope falls back to `tenant-name`, then `vars.TENANT_NAME`. |
 | `region` | string | No | `europe-west2` | GCP region for the Artifact Registry. Overridden by `vars.REGION` when set on the environment. |
 | `working-directory` | string | No | `.` | Directory from which `make p2p-images` is executed when `image-names` is empty. |
 | `image-names` | string | No | `''` | Newline-, comma-, or whitespace-separated list of standard P2P image names to scan. When set, this list is used instead of `make p2p-images`. |
-| `dry-run` | boolean | No | `false` | When `true`, still checks out the repo and resolves image names from `image-names` or `make p2p-images`, then skips GCP auth, registry login, image pulls, scanner installs, scans, sticky PR comment, artifact upload, and policy step. The `Build report` step still runs and produces a "Scan skipped" summary. Dry-run still parses `.p2p-security-ignore.yaml`, so a malformed ignore file can fail report generation. |
+| `dry-run` | boolean | No | `false` | When `true`, still checks out the repo and resolves image names from `image-names` or `make p2p-images`, then skips GCP auth, registry login, image pulls, scanner installs, scans, sticky PR comment, artifact upload, and policy step. The `Build report` step still runs and produces a "Scan skipped" summary. Dry-run still parses the repository-root and selected `working-directory` `.p2p-security-ignore.yaml` files, so a malformed selected ignore file can fail report generation. |
 | `checkout-version` | string | No | `''` | Git ref to check out before resolving image names. Ignored when `dry-run` is `true`; the workflow checks out the default ref. |
 | `blocking-severity` | string | No | `off` | Minimum finding severity that blocks the workflow: `off`, `low`, `medium`, `high`, or `critical`. When blocking is enabled, verified image secrets are treated as `critical`. The `security-image-policy` job fails on active vulnerability or secret findings, but the workflow continues when findings are below the blocking threshold. |
 | `ignore-unfixed` | boolean | No | `true` | When `true`, passes `--ignore-unfixed` to Trivy — only vulnerabilities with a fixed version are reported. |
@@ -50,7 +50,7 @@ Results are also surfaced via:
 - A sticky PR comment with `header: security-image-scan-findings-<app-name>-<stage>-<github_env>` on `pull_request` events when `dry-run: false` and the caller grants `pull-requests: write`. When `github_env` is empty, the header uses `local`.
 - The `security-image-scan-reports-<stage>-<github_env>` artifact, retained for 30 days. When `github_env` is empty, the artifact name uses `local`. Contains root `manifest.json`, `image-security-findings.json`, `trivy/` (one Trivy JSON per scanned image x platform), and `trufflehog-image/` (one redacted TruffleHog JSON-lines file per scanned image x platform).
 
-If the repository root contains `.p2p-security-ignore.yaml`, image vulnerability and image secret findings that match a valid, unexpired ignore entry are omitted from active finding tables in the workflow summary and sticky PR comment. Ignored findings stay visible in `image-security-findings.json` with their ignore reason and expiry metadata when present. They are excluded from active totals, active blocking counts, and image policy failures.
+Image report generation reads the repository-root `.p2p-security-ignore.yaml` and, when `working-directory` is non-root, the `.p2p-security-ignore.yaml` file in that selected directory. It does not discover ignore files from other directories. Image vulnerability and image secret findings that match a valid, unexpired ignore entry in those files are omitted from active finding tables in the workflow summary and sticky PR comment. Ignored findings stay visible in `image-security-findings.json` with their ignore reason and expiry metadata when present. They are excluded from active totals, active blocking counts, and image policy failures.
 
 `image-security-findings.json` uses top-level `vulnerabilities` and `secrets` collections. When an ignore file is present, it also includes `ignored.vulnerabilities` and `ignored.secrets`.
 
@@ -80,7 +80,7 @@ If neither `image-names` nor `p2p-images` produces candidate names, or if all ca
 
 ## Security ignore file
 
-The security-image-scan workflow reads one P2P-owned ignore file from the repository root: `.p2p-security-ignore.yaml`. If the file is absent, scans behave normally. If it is present but malformed, uses an unsupported schema version, omits required fields, has invalid shapes, or contains invalid expiry dates, the scan/report job fails.
+The security-image-scan workflow reads P2P-owned ignore files from the repository root and the selected `working-directory`: `.p2p-security-ignore.yaml`. If both files are absent, scans behave normally. If either selected file is malformed, uses an unsupported schema version, omits required fields, has invalid shapes, or contains invalid expiry dates, the scan/report job fails. Image entries still require `images[].name`.
 
 See [How to ignore security findings](../how-to/ignore-security-findings.md) for the v1 schema, matching rules, and secret ID guidance.
 

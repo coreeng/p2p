@@ -16,6 +16,17 @@ const assertString = (value, label) => {
   if (typeof value !== 'string' || value.trim() === '') throw new Error(`${label} must be a non-empty string`);
 };
 
+const toPosixPath = value => String(value || '').split(path.sep).join('/');
+const normalizeRelativePath = value => {
+  const normalized = toPosixPath(path.normalize(String(value || ''))).replace(/^\.\//, '');
+  return normalized === '.' ? '' : normalized;
+};
+
+const isPathInsideOrEqual = (candidate, base) => {
+  const relative = path.relative(base, candidate);
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+};
+
 const assertExpiry = (value, label) => {
   if (value === undefined) return;
   assertString(value, label);
@@ -34,7 +45,17 @@ const validateIgnoreEntryBase = (entry, label, allowed) => {
   assertExpiry(entry.expires, `${label}.expires`);
 };
 
-const validateSecurityIgnore = parsed => {
+const sourcePathFilter = (value, label, options) => {
+  assertString(value, label);
+  if (!options.sourcePathBase || !options.sourcePathRoot) return value;
+  const resolved = path.resolve(options.sourcePathBase, value);
+  if (!isPathInsideOrEqual(resolved, options.sourcePathBase)) {
+    throw new Error(`${label} must not resolve outside the ignore file directory`);
+  }
+  return normalizeRelativePath(path.relative(options.sourcePathRoot, resolved));
+};
+
+const validateSecurityIgnore = (parsed, options = {}) => {
   if (!isPlainObject(parsed)) throw new Error('ignore file must be a YAML object');
   assertKeys(parsed, ['version', 'source', 'images'], 'ignore file');
   if (parsed.version !== 1) throw new Error('ignore file version must be 1');
@@ -75,28 +96,34 @@ const validateSecurityIgnore = parsed => {
   const secrets = source.secrets === undefined ? [] : source.secrets;
   if (!Array.isArray(vulnerabilities)) throw new Error('source.vulnerabilities must be a list');
   if (!Array.isArray(secrets)) throw new Error('source.secrets must be a list');
+  const normalizedVulnerabilities = [];
   for (const [index, entry] of vulnerabilities.entries()) {
     const label = `source.vulnerabilities[${index}]`;
     validateIgnoreEntryBase(entry, label, ['id', 'reason', 'package', 'paths', 'expires']);
     if (entry.package !== undefined) assertString(entry.package, `${label}.package`);
+    let normalizedPaths;
     if (entry.paths !== undefined) {
       if (!Array.isArray(entry.paths)) throw new Error(`${label}.paths must be a list`);
-      for (const [pathIndex, item] of entry.paths.entries()) assertString(item, `${label}.paths[${pathIndex}]`);
+      normalizedPaths = entry.paths.map((item, pathIndex) => sourcePathFilter(item, `${label}.paths[${pathIndex}]`, options));
     }
+    normalizedVulnerabilities.push({
+      ...entry,
+      ...(normalizedPaths === undefined ? {} : { paths: normalizedPaths }),
+    });
   }
+  const normalizedSecrets = [];
   for (const [index, entry] of secrets.entries()) {
     const label = `source.secrets[${index}]`;
     validateIgnoreEntryBase(entry, label, ['id', 'reason', 'path', 'expires']);
-    if (entry.path !== undefined) assertString(entry.path, `${label}.path`);
+    normalizedSecrets.push({
+      ...entry,
+      ...(entry.path === undefined ? {} : { path: sourcePathFilter(entry.path, `${label}.path`, options) }),
+    });
   }
-  return { images: normalizedImages, source: { vulnerabilities, secrets } };
+  return { images: normalizedImages, source: { vulnerabilities: normalizedVulnerabilities, secrets: normalizedSecrets } };
 };
 
-const loadSecurityIgnore = workspace => {
-  const ignorePath = path.join(workspace || '', '.p2p-security-ignore.yaml');
-  if (!workspace || !fs.existsSync(ignorePath)) {
-    return { present: false, images: [], source: { vulnerabilities: [], secrets: [] } };
-  }
+const parseSecurityIgnoreFile = (ignorePath, options = {}) => {
   let parsed;
   try {
     parsed = JSON.parse(execFileSync(
@@ -108,10 +135,82 @@ const loadSecurityIgnore = workspace => {
     throw new Error(`Invalid .p2p-security-ignore.yaml: ${error.stderr || error.message}`);
   }
   try {
-    return { present: true, ...validateSecurityIgnore(parsed) };
+    return validateSecurityIgnore(parsed, options);
   } catch (error) {
     throw new Error(`Invalid .p2p-security-ignore.yaml: ${error.message}`);
   }
+};
+
+const emptySecurityIgnore = () => ({ present: false, images: [], source: { vulnerabilities: [], secrets: [] } });
+
+const loadSecurityIgnore = workspace => {
+  const ignorePath = path.join(workspace || '', '.p2p-security-ignore.yaml');
+  if (!workspace || !fs.existsSync(ignorePath)) {
+    return emptySecurityIgnore();
+  }
+  return { present: true, ...parseSecurityIgnoreFile(ignorePath) };
+};
+
+const mergeSecurityIgnores = ignores => ({
+  present: ignores.some(ignore => ignore.present),
+  images: ignores.flatMap(ignore => ignore.images),
+  source: {
+    vulnerabilities: ignores.flatMap(ignore => ignore.source.vulnerabilities),
+    secrets: ignores.flatMap(ignore => ignore.source.secrets),
+  },
+});
+
+const loadImageSecurityIgnore = (workspace, workingDirectory = '') => {
+  const rootIgnore = loadSecurityIgnore(workspace);
+  const selectedDirectory = path.resolve(workspace || '', workingDirectory || '.');
+  if (!workspace || selectedDirectory === path.resolve(workspace)) return rootIgnore;
+
+  const selectedIgnorePath = path.join(selectedDirectory, '.p2p-security-ignore.yaml');
+  if (!fs.existsSync(selectedIgnorePath)) return rootIgnore;
+
+  return mergeSecurityIgnores([
+    rootIgnore,
+    { present: true, ...parseSecurityIgnoreFile(selectedIgnorePath) },
+  ]);
+};
+
+const discoverSourceIgnoreFiles = workspace => {
+  if (!workspace || !fs.existsSync(workspace)) return [];
+  const ignoreFiles = [];
+  const visit = directory => {
+    for (const dirent of fs.readdirSync(directory, { withFileTypes: true })) {
+      const fullPath = path.join(directory, dirent.name);
+      if (dirent.isDirectory()) {
+        if (dirent.name !== '.git') visit(fullPath);
+      } else if (dirent.isFile() && dirent.name === '.p2p-security-ignore.yaml') {
+        ignoreFiles.push(fullPath);
+      }
+    }
+  };
+  visit(workspace);
+  return ignoreFiles.sort((a, b) => a.localeCompare(b));
+};
+
+const loadSourceSecurityIgnores = workspace => {
+  const files = discoverSourceIgnoreFiles(workspace);
+  if (files.length === 0) {
+    return { present: false, sourceIgnores: [] };
+  }
+
+  return {
+    present: true,
+    sourceIgnores: files.map(file => {
+      const directory = path.dirname(file);
+      const parsed = parseSecurityIgnoreFile(file, {
+        sourcePathRoot: workspace,
+        sourcePathBase: directory,
+      });
+      return {
+        directory: normalizeRelativePath(path.relative(workspace, directory)),
+        source: parsed.source,
+      };
+    }),
+  };
 };
 
 const activeIgnore = entry => entry.expires === undefined || entry.expires >= todayIso();
@@ -121,39 +220,68 @@ const p2pRedactedSecretId = value => {
   return `p2psec_${fingerprint}`;
 };
 
-const findSourceVulnerabilityIgnore = (finding, ignore) => ignore.source.vulnerabilities.find(entry => (
-  activeIgnore(entry)
-  && entry.id === finding.id
-  && (entry.package === undefined || entry.package === finding.package)
-  && (entry.paths === undefined || entry.paths.includes(finding.source))
-));
+const sourceScopes = ignore => {
+  if (Array.isArray(ignore.sourceIgnores)) return ignore.sourceIgnores;
+  return [{ directory: '', source: ignore.source }];
+};
 
-const findSourceSecretIgnore = (finding, ignore) => ignore.source.secrets.find(entry => (
-  activeIgnore(entry)
-  && entry.id === finding.id
-  && (entry.path === undefined || entry.path === finding.file)
-));
+const sourceFindingPath = finding => normalizeRelativePath(finding.source || finding.file || '');
 
-const findImage = (ignore, imageName) => ignore.images.find(image => image.name === imageName);
+const sourceFindingInScope = (finding, scopedIgnore) => {
+  if (!scopedIgnore.directory) return true;
+  const findingPath = sourceFindingPath(finding);
+  return findingPath === scopedIgnore.directory || findingPath.startsWith(`${scopedIgnore.directory}/`);
+};
+
+const findSourceVulnerabilityIgnore = (finding, ignore) => {
+  for (const scopedIgnore of sourceScopes(ignore)) {
+    if (!sourceFindingInScope(finding, scopedIgnore)) continue;
+    const matched = scopedIgnore.source.vulnerabilities.find(entry => (
+      activeIgnore(entry)
+      && entry.id === finding.id
+      && (entry.package === undefined || entry.package === finding.package)
+      && (entry.paths === undefined || entry.paths.includes(sourceFindingPath(finding)))
+    ));
+    if (matched) return matched;
+  }
+  return undefined;
+};
+
+const findSourceSecretIgnore = (finding, ignore) => {
+  for (const scopedIgnore of sourceScopes(ignore)) {
+    if (!sourceFindingInScope(finding, scopedIgnore)) continue;
+    const matched = scopedIgnore.source.secrets.find(entry => (
+      activeIgnore(entry)
+      && entry.id === finding.id
+      && (entry.path === undefined || entry.path === sourceFindingPath(finding))
+    ));
+    if (matched) return matched;
+  }
+  return undefined;
+};
 
 const findImageVulnerabilityIgnore = (finding, ignore, imageName) => {
-  const image = findImage(ignore, imageName);
-  if (!image) return undefined;
-  return image.vulnerabilities.find(entry => (
-    activeIgnore(entry)
-    && entry.id === finding.id
-    && (entry.package === undefined || entry.package === finding.package)
-  ));
+  for (const image of ignore.images.filter(item => item.name === imageName)) {
+    const matched = image.vulnerabilities.find(entry => (
+      activeIgnore(entry)
+      && entry.id === finding.id
+      && (entry.package === undefined || entry.package === finding.package)
+    ));
+    if (matched) return matched;
+  }
+  return undefined;
 };
 
 const findImageSecretIgnore = (finding, ignore, imageName) => {
-  const image = findImage(ignore, imageName);
-  if (!image) return undefined;
-  return image.secrets.find(entry => (
-    activeIgnore(entry)
-    && entry.id === finding.id
-    && (entry.path === undefined || entry.path === finding.path)
-  ));
+  for (const image of ignore.images.filter(item => item.name === imageName)) {
+    const matched = image.secrets.find(entry => (
+      activeIgnore(entry)
+      && entry.id === finding.id
+      && (entry.path === undefined || entry.path === finding.path)
+    ));
+    if (matched) return matched;
+  }
+  return undefined;
 };
 
 const ignoreMetadata = entry => ({
@@ -193,6 +321,8 @@ const splitImageSecrets = (findings, ignore, imageName) => (
 
 module.exports = {
   loadSecurityIgnore,
+  loadImageSecurityIgnore,
+  loadSourceSecurityIgnores,
   splitSourceVulnerabilities,
   splitSourceSecrets,
   splitImageVulnerabilities,
