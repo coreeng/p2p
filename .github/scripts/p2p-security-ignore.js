@@ -27,6 +27,24 @@ const isPathInsideOrEqual = (candidate, base) => {
   return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
 };
 
+const nearestExistingPath = value => {
+  let current = value;
+  while (!fs.existsSync(current)) {
+    const parent = path.dirname(current);
+    if (parent === current) return null;
+    current = parent;
+  }
+  return current;
+};
+
+const assertRealPathInsideOrEqual = (candidate, base, message) => {
+  const existingCandidate = nearestExistingPath(candidate);
+  if (!existingCandidate) return;
+  const realBase = fs.realpathSync(base);
+  const realCandidate = fs.realpathSync(existingCandidate);
+  if (!isPathInsideOrEqual(realCandidate, realBase)) throw new Error(message);
+};
+
 const assertExpiry = (value, label) => {
   if (value === undefined) return;
   assertString(value, label);
@@ -49,9 +67,11 @@ const sourcePathFilter = (value, label, options) => {
   assertString(value, label);
   if (!options.sourcePathBase || !options.sourcePathRoot) return value;
   const resolved = path.resolve(options.sourcePathBase, value);
+  const escapeMessage = `${label} must not resolve outside the ignore file directory`;
   if (!isPathInsideOrEqual(resolved, options.sourcePathBase)) {
-    throw new Error(`${label} must not resolve outside the ignore file directory`);
+    throw new Error(escapeMessage);
   }
+  assertRealPathInsideOrEqual(resolved, options.sourcePathBase, escapeMessage);
   return normalizeRelativePath(path.relative(options.sourcePathRoot, resolved));
 };
 
@@ -168,13 +188,11 @@ const loadImageSecurityIgnore = (workspace, workingDirectory = '') => {
   if (!isPathInsideOrEqual(selectedDirectory, rootDirectory)) {
     throw new Error('working-directory must resolve inside GITHUB_WORKSPACE');
   }
-  if (fs.existsSync(selectedDirectory)) {
-    const realRootDirectory = fs.realpathSync(rootDirectory);
-    const realSelectedDirectory = fs.realpathSync(selectedDirectory);
-    if (!isPathInsideOrEqual(realSelectedDirectory, realRootDirectory)) {
-      throw new Error('working-directory must resolve inside GITHUB_WORKSPACE');
-    }
-  }
+  assertRealPathInsideOrEqual(
+    selectedDirectory,
+    rootDirectory,
+    'working-directory must resolve inside GITHUB_WORKSPACE',
+  );
   if (selectedDirectory === rootDirectory) return rootIgnore;
 
   const selectedIgnorePath = path.join(selectedDirectory, '.p2p-security-ignore.yaml');

@@ -784,6 +784,55 @@ async function runReportWithNestedInvalidIgnoreFile(ignoreFile, dryRun = false) 
   });
 }
 
+async function runReportWithNestedSymlinkEscapeIgnoreFile(ignoreFile) {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'source-nested-symlink-ignore-'));
+  const root = path.join(tmp, 'source-security');
+  const workspace = path.join(tmp, 'repo');
+  const api = path.join(workspace, 'services', 'api');
+  const outside = path.join(tmp, 'outside');
+  fs.mkdirSync(path.join(root, 'trivy'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'trufflehog'), { recursive: true });
+  fs.mkdirSync(api, { recursive: true });
+  fs.mkdirSync(outside, { recursive: true });
+  fs.writeFileSync(path.join(outside, 'package-lock.json'), '{}');
+  fs.writeFileSync(path.join(outside, 'token.txt'), 'not-a-real-token');
+  fs.symlinkSync(outside, path.join(api, 'link'), 'dir');
+  fs.writeFileSync(path.join(api, '.p2p-security-ignore.yaml'), ignoreFile);
+  fs.writeFileSync(path.join(root, 'trivy', 'trivy-fs.json'), JSON.stringify({ Results: [] }));
+  fs.writeFileSync(path.join(root, 'trufflehog', 'findings.ndjson'), '');
+
+  await buildSourceSecurityReport({
+    env: {
+      ROOT: root,
+      GITHUB_WORKSPACE: workspace,
+      DRY_RUN: 'false',
+      BLOCKING_SEVERITY: 'high',
+      SCOPE: 'changes',
+      BASE: 'base-sha',
+      SECRET_SCAN_RESULT: 'success',
+      SCA_SCAN_RESULT: 'success',
+      P2P_SECURITY_IGNORE_HELPER: helperPath,
+      GITHUB_SERVER_URL: 'https://github.example',
+      GITHUB_REPOSITORY: 'org/repo',
+      GITHUB_RUN_ID: '42',
+    },
+    core: {
+      setOutput: () => {},
+      setFailed: () => {},
+      info: () => {},
+      warning: () => {},
+      summary: {
+        addRaw() {
+          return this;
+        },
+        write() {
+          return Promise.resolve();
+        },
+      },
+    },
+  });
+}
+
 async function runReportWithCorruptTruffleHogOutput() {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'source-corrupt-secret-'));
   const root = path.join(tmp, 'source-security');
@@ -1132,6 +1181,20 @@ async function runReportWithMissingTruffleHogOutput() {
     error => error.message.includes('source.vulnerabilities[0].reason must be a non-empty string'),
     'dry-run validates discovered nested ignore files',
   );
+  for (const [name, ignoreFile, expected] of [
+    ['nested vulnerability symlink path escape', 'version: 1\nsource:\n  vulnerabilities:\n    - id: CVE-SYMLINK\n      reason: symlink escape\n      paths:\n        - link/package-lock.json\n', 'source.vulnerabilities[0].paths[0] must not resolve outside the ignore file directory'],
+    ['nested secret symlink path escape', 'version: 1\nsource:\n  secrets:\n    - id: symlink-secret\n      reason: symlink escape\n      path: link/token.txt\n', 'source.secrets[0].path must not resolve outside the ignore file directory'],
+  ]) {
+    try {
+      await assert.rejects(
+        () => runReportWithNestedSymlinkEscapeIgnoreFile(ignoreFile),
+        error => error.message.includes(expected),
+        name,
+      );
+    } catch (error) {
+      if (error.code !== 'EPERM' && error.code !== 'EACCES') throw error;
+    }
+  }
   await assert.rejects(
     () => runReportWithCorruptTruffleHogOutput(),
     error => error.message.includes('Failed to process TruffleHog source report'),
