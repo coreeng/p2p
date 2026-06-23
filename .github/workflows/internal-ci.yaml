@@ -140,6 +140,10 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
+      - name: Test latest image tag resolver
+        run: |
+          node .github/scripts/tests/latest-image.test.js
+
       - name: Test image reference resolver
         run: |
           node .github/scripts/tests/image-ref-resolution.test.js
