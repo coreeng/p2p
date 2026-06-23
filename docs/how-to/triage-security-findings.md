@@ -8,11 +8,11 @@ On pull requests, the scanners upsert sticky comments in the PR conversation ins
 
 | Source | Sticky comment header | Artifact |
 |---|---|---|
-| Source vulnerabilities | `source-security-scan-findings-<app-name>` | `source-security-scan-findings` |
-| Source restricted/forbidden licenses | `source-security-scan-findings-<app-name>` | `source-security-scan-findings` |
-| Git tree secrets | `source-security-scan-findings-<app-name>` | `source-security-scan-findings` |
-| Image vulnerabilities | `image-scan-findings-<app-name>-<stage>-<github_env>` | `image-scan-reports-<stage>-<github_env>` |
-| Image secrets | `image-scan-findings-<app-name>-<stage>-<github_env>` (same comment as image vulnerabilities for that app/stage/environment) | `image-scan-reports-<stage>-<github_env>` |
+| Source vulnerabilities | `security-source-scan-findings-<app-name>` | `security-source-scan-findings` |
+| Source restricted/forbidden licenses | `security-source-scan-findings-<app-name>` | `security-source-scan-findings` |
+| Git tree secrets | `security-source-scan-findings-<app-name>` | `security-source-scan-findings` |
+| Image vulnerabilities | `security-image-scan-findings-<app-name>-<stage>-<github_env>` | `security-image-scan-reports-<stage>-<github_env>` |
+| Image secrets | `security-image-scan-findings-<app-name>-<stage>-<github_env>` (same comment as image vulnerabilities for that app/stage/environment) | `security-image-scan-reports-<stage>-<github_env>` |
 
 Restricted and forbidden license findings are shown for triage only. The source scan reports only HIGH and CRITICAL license classifications. Trivy's license classification is not a legal decision and is not a P2P-wide organization policy; confirm the finding against your organization's open-source policy before taking enforcement action.
 
@@ -22,7 +22,7 @@ P2P workflow templates pass `app-name` to security scans so each app updates its
 
 The source-security comment renders source vulnerabilities, restricted or forbidden licenses, and git-tree secrets under one header. Vulnerability rows include package, installed version, fixed version, CVE, and source where available. License rows identify the package and detected license. Git-tree secret rows show `Detector`, `Status`, `File`, `Line`, and `Commit`.
 
-The image-scan comment renders up to two tables under one header:
+The security-image-scan comment renders up to two tables under one header:
 
 - **Vulnerabilities**: a per-image summary table plus a `<details>` block per image with `Severity`, `Package`, `Installed`, `Fixed`, `CVE`, and `Source` columns. Sorted by severity, then package, then CVE; truncated to 100 rows.
 - **Secrets in image**: `Detector`, `Status`, `ID`, `Layer`, `Path`. `Status` is `verified`, `unknown`, or `unverified`; when blocking is enabled, `verified` rows are treated as `critical`. Use the `ID` value when adding an image secret ignore entry. Truncated independently at 100 rows.
@@ -36,10 +36,10 @@ If the PR comment is truncated or you need raw data:
 1. Open the workflow run from the PR checks or the Actions tab.
 2. In the run summary, open the **Artifacts** section.
 3. Download:
-   - `source-security-scan-findings` for source-security output (contains redacted TruffleHog findings, raw Trivy filesystem output, and `source-security-findings.json`)
-   - `image-scan-reports-<stage>-<github_env>` for image-scan output (contains `manifest.json`, `image-security-findings.json`, `trivy/`, and `trufflehog-image/`)
+   - `security-source-scan-findings` for source-security output (contains redacted TruffleHog findings, raw Trivy filesystem output, and `source-security-findings.json`)
+   - `security-image-scan-reports-<stage>-<github_env>` for security-image-scan output (contains `manifest.json`, `image-security-findings.json`, `trivy/`, and `trufflehog-image/`)
 
-The image artifact's root `manifest.json` is the supported index. It records the stage and points to artifact-relative raw Trivy JSON reports under `trivy/` and redacted TruffleHog JSON-lines reports under `trufflehog-image/`, both keyed by scanned image x platform. A configured OCI reference can be absent from `manifest.json` when the workflow skipped it as non-scannable, such as a Helm chart artifact or confirmed empty container image; check the image-scan job logs for skip warnings. A TruffleHog JSONL file can be empty when no image secrets were found. Dashboard evidence does not expose secret values; use the P2P redacted secret ID, detector, status, layer, and path metadata for triage. The source-security artifact contains raw Trivy filesystem output, redacted TruffleHog source findings, and `source-security-findings.json` for source vulnerabilities, source license findings, and git-tree secrets.
+The image artifact's root `manifest.json` is the supported index. It records the stage and points to artifact-relative raw Trivy JSON reports under `trivy/` and redacted TruffleHog JSON-lines reports under `trufflehog-image/`, both keyed by scanned image x platform. A configured OCI reference can be absent from `manifest.json` when the workflow skipped it as non-scannable, such as a Helm chart artifact or confirmed empty container image; check the security-image-scan job logs for skip warnings. A TruffleHog JSONL file can be empty when no image secrets were found. Dashboard evidence does not expose secret values; use the P2P redacted secret ID, detector, status, layer, and path metadata for triage. The `security-source-scan-findings` artifact contains raw Trivy filesystem output, redacted TruffleHog source findings, and `source-security-findings.json` for source vulnerabilities, source license findings, and git-tree secrets.
 
 `source-security-findings.json` uses top-level `vulnerabilities`, `licenses`, and `secrets` collections. `image-security-findings.json` uses top-level `vulnerabilities` and `secrets` collections. When an ignore file is present, both files also include `ignored.vulnerabilities` and `ignored.secrets`; ignored records include the matched reason and expiry metadata when present. This lets dashboard ingestion display ignored findings alongside active findings without treating them as active remediation or blocking policy counts.
 

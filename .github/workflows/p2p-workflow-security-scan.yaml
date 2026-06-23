@@ -22,7 +22,7 @@ on:
         description: |
           Newline- or comma-separated list of image names. The first entry is
           used as the version-lookup anchor for each stage, and the full list
-          is passed to image-scan. If empty, image-scan falls back to repository
+          is passed to security-image-scan. If empty, security-image-scan falls back to repository
           discovery.
         required: false
         type: string
@@ -45,8 +45,8 @@ on:
         default: ''
       security-scan-blocking-severity:
         description: |
-          Minimum severity that blocks the workflow for source-security-scan
-          and image-scan findings: off, low, medium, high, or critical.
+          Minimum severity that blocks the workflow for security-source-scan
+          and security-image-scan findings: off, low, medium, high, or critical.
         required: false
         type: string
         default: 'off'
@@ -56,7 +56,7 @@ on:
         default: 30
 
 jobs:
-  source-security-scan:
+  security-source-scan:
     uses: ./.github/workflows/p2p-workflow-source-security-scan.yaml
     with:
       secret-scan-scope: full-history
@@ -70,8 +70,8 @@ jobs:
   # Resolve a single anchor image used to look up the latest version per
   # stage. All p2p images in a release share the same version, so any image
   # works.
-  resolve-anchor-image:
-    name: resolve-anchor-image
+  security-resolve-anchor-image:
+    name: security-resolve-anchor-image
     runs-on: ubuntu-24.04
     outputs:
       image-name: ${{ steps.pick.outputs.image-name }}
@@ -100,8 +100,8 @@ jobs:
           echo "image-name=$anchor" >> "$GITHUB_OUTPUT"
           echo "Anchor image for version discovery: $anchor"
 
-  image-scan-fast-feedback:
-    needs: [resolve-anchor-image]
+  security-image-scan-fast-feedback:
+    needs: [security-resolve-anchor-image]
     uses: ./.github/workflows/p2p-workflow-security-image-scan-stage.yaml
     permissions:
       contents: read
@@ -119,7 +119,7 @@ jobs:
       pipeline-stage: fast-feedback
       tenant-name: ${{ inputs.tenant-name }}
       app-name: ${{ inputs.app-name }}
-      image-name: ${{ needs.resolve-anchor-image.outputs.image-name }}
+      image-name: ${{ needs.security-resolve-anchor-image.outputs.image-name }}
       image-names: ${{ inputs.image-names }}
       region: ${{ inputs.region }}
       github_env: ${{ matrix.deploy_env }}
@@ -128,8 +128,8 @@ jobs:
       checkout-version: ${{ inputs.checkout-version }}
       security-scan-blocking-severity: ${{ inputs.security-scan-blocking-severity }}
 
-  image-scan-extended-test:
-    needs: [resolve-anchor-image]
+  security-image-scan-extended-test:
+    needs: [security-resolve-anchor-image]
     uses: ./.github/workflows/p2p-workflow-security-image-scan-stage.yaml
     permissions:
       contents: read
@@ -147,7 +147,7 @@ jobs:
       pipeline-stage: extended-test
       tenant-name: ${{ inputs.tenant-name }}
       app-name: ${{ inputs.app-name }}
-      image-name: ${{ needs.resolve-anchor-image.outputs.image-name }}
+      image-name: ${{ needs.security-resolve-anchor-image.outputs.image-name }}
       image-names: ${{ inputs.image-names }}
       region: ${{ inputs.region }}
       github_env: ${{ matrix.deploy_env }}
@@ -156,8 +156,8 @@ jobs:
       checkout-version: ${{ inputs.checkout-version }}
       security-scan-blocking-severity: ${{ inputs.security-scan-blocking-severity }}
 
-  image-scan-prod:
-    needs: [resolve-anchor-image]
+  security-image-scan-prod:
+    needs: [security-resolve-anchor-image]
     uses: ./.github/workflows/p2p-workflow-security-image-scan-stage.yaml
     permissions:
       contents: read
@@ -175,7 +175,7 @@ jobs:
       pipeline-stage: prod
       tenant-name: ${{ inputs.tenant-name }}
       app-name: ${{ inputs.app-name }}
-      image-name: ${{ needs.resolve-anchor-image.outputs.image-name }}
+      image-name: ${{ needs.security-resolve-anchor-image.outputs.image-name }}
       image-names: ${{ inputs.image-names }}
       region: ${{ inputs.region }}
       github_env: ${{ matrix.deploy_env }}

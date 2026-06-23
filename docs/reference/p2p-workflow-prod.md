@@ -49,7 +49,7 @@ This workflow runs image scanning before deployment. The image scan authenticate
 | `app-name` | `string` | No | `''` | Application name. Must equal the tenant name (each application has its own application tenant). Also scopes image security sticky PR comments so multi-app repositories do not overwrite comments between apps. |
 | `tenant-name` | `string` | No | `''` | Tenant name passed to the make target. |
 | `skip-subnamespaces-create` | `boolean` | No | `false` | Skips creating subnamespaces before running the make target. |
-| `security-scan-blocking-severity` | `string` | No | `off` | Minimum image-scan finding severity that blocks the workflow: `off`, `low`, `medium`, `high`, or `critical`. Verified image secrets are treated as `critical`. The policy job fails on active findings, but the workflow continues when findings are below the blocking threshold. |
+| `security-scan-blocking-severity` | `string` | No | `off` | Minimum security-image-scan finding severity that blocks the workflow: `off`, `low`, `medium`, `high`, or `critical`. Verified image secrets are treated as `critical`. The policy job fails on active findings, but the workflow continues when findings are below the blocking threshold. |
 
 ## Secrets
 
@@ -71,17 +71,17 @@ This workflow defines no outputs.
 validate-version
                 Fails early when version is empty.
 
-└── image-scan  Calls p2p-workflow-image-scan against the prod-registry images.
+└── security-image-scan  Calls p2p-workflow-image-scan against the prod-registry images.
                 Only runs on main-branch.
                 checkout-version = version-prefix + version.
                 Blocks the workflow on findings at or above
                 security-scan-blocking-severity (default: off).
-└── prod-deploy (needs: image-scan)
+└── prod-deploy (needs: security-image-scan)
                 Runs p2p-prod make target.
-                Only runs on main-branch after image-scan succeeds.
+                Only runs on main-branch after security-image-scan succeeds.
                 checkout-version = version-prefix + version.
 
-notify-failure  (needs: validate-version, image-scan, prod-deploy; runs on main-branch when any job fails)
+notify-failure  (needs: validate-version, security-image-scan, prod-deploy; runs on main-branch when any job fails)
 notify-success  (needs: prod-deploy; runs on main-branch when prod-deploy succeeds and dry-run=false)
 ```
 

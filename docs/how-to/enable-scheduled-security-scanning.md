@@ -79,8 +79,8 @@ The first explicit image name is used to find the latest deployed version in eac
 Each run emits:
 
 - workflow summaries for source security and each image scan;
-- on non-dry-run source scans where report generation completes, `source-security-scan-findings`, retained for 30 days;
-- on successful non-dry-run image scans where a latest image tag is found, `image-scan-reports-<stage>-<github_env>` for each scanned stage/environment, retained for 30 days.
+- on non-dry-run source scans where report generation completes, `security-source-scan-findings`, retained for 30 days;
+- on successful non-dry-run image scans where a latest image tag is found, `security-image-scan-reports-<stage>-<github_env>` for each scanned stage/environment, retained for 30 days.
 
 The source artifact contains redacted TruffleHog output, raw Trivy filesystem output, and normalized merged JSON. Each image artifact contains a root `manifest.json`, Trivy vulnerability JSON reports, and TruffleHog image JSON-lines reports.
 

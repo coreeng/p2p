@@ -1,6 +1,6 @@
 # p2p-workflow-image-scan
 
-> Scans every scannable container image resolved by the repository's P2P image targets for known vulnerabilities (Trivy) and embedded secrets (TruffleHog). Produces a workflow summary, optionally posts a sticky PR comment on `pull_request` events, and uploads an `image-scan-reports-<stage>-<github_env>` artifact. A separate policy job fails on active vulnerability or secret findings; the configured blocking severity controls whether that policy failure fails the workflow.
+> Scans every scannable container image resolved by the repository's P2P image targets for known vulnerabilities (Trivy) and embedded secrets (TruffleHog). Produces a workflow summary, optionally posts a sticky PR comment on `pull_request` events, and uploads a `security-image-scan-reports-<stage>-<github_env>` artifact. The `security-image-policy` job fails on active vulnerability or secret findings; the configured blocking severity controls whether that policy failure fails the workflow.
 
 ## Usage
 
@@ -20,7 +20,7 @@ Internal workflow called by [`p2p-workflow-fastfeedback`](p2p-workflow-fastfeedb
 | `image-names` | string | No | `''` | Newline-, comma-, or whitespace-separated list of standard P2P image names to scan. When set, this list is used instead of `make p2p-images`. |
 | `dry-run` | boolean | No | `false` | When `true`, still checks out the repo and resolves image names from `image-names` or `make p2p-images`, then skips GCP auth, registry login, image pulls, scanner installs, scans, sticky PR comment, artifact upload, and policy step. The `Build report` step still runs and produces a "Scan skipped" summary. Dry-run still parses `.p2p-security-ignore.yaml`, so a malformed ignore file can fail report generation. |
 | `checkout-version` | string | No | `''` | Git ref to check out before resolving image names. Ignored when `dry-run` is `true`; the workflow checks out the default ref. |
-| `blocking-severity` | string | No | `off` | Minimum finding severity that blocks the workflow: `off`, `low`, `medium`, `high`, or `critical`. When blocking is enabled, verified image secrets are treated as `critical`. The policy job fails on active vulnerability or secret findings, but the workflow continues when findings are below the blocking threshold. |
+| `blocking-severity` | string | No | `off` | Minimum finding severity that blocks the workflow: `off`, `low`, `medium`, `high`, or `critical`. When blocking is enabled, verified image secrets are treated as `critical`. The `security-image-policy` job fails on active vulnerability or secret findings, but the workflow continues when findings are below the blocking threshold. |
 | `ignore-unfixed` | boolean | No | `true` | When `true`, passes `--ignore-unfixed` to Trivy — only vulnerabilities with a fixed version are reported. |
 | `timeout-minutes` | number | No | `20` | Job timeout. |
 
@@ -39,7 +39,7 @@ Tenant-provided registry login runs only when `container_registry_user`, `contai
 
 | Name | Description |
 |------|-------------|
-| `json-file` | Path to `image-security-findings.json` on the runner, normally under `runner.temp` or the image-scan artifact directory. |
+| `json-file` | Path to `image-security-findings.json` on the runner, normally under `runner.temp` or the security-image-scan artifact directory. |
 | `security-risk` | Maximum active image vulnerability/secret risk after ignore rules: `critical`, `unclassified`, `high`, `medium`, `low`, `ok`, or `unknown`. |
 | `scan-status` | `ok` when scanner results were extracted successfully, otherwise `failed`. |
 
@@ -47,8 +47,8 @@ Results are also surfaced via:
 
 - The workflow summary (`$GITHUB_STEP_SUMMARY`).
 - Policy step named `Output security risk: <risk>; scan: <status>` for dashboard extraction.
-- A sticky PR comment with `header: image-scan-findings-<app-name>-<stage>-<github_env>` on `pull_request` events when `dry-run: false` and the caller grants `pull-requests: write`. When `github_env` is empty, the header uses `local`.
-- The `image-scan-reports-<stage>-<github_env>` artifact, retained for 30 days. When `github_env` is empty, the artifact name uses `local`. Contains root `manifest.json`, `image-security-findings.json`, `trivy/` (one Trivy JSON per scanned image x platform), and `trufflehog-image/` (one redacted TruffleHog JSON-lines file per scanned image x platform).
+- A sticky PR comment with `header: security-image-scan-findings-<app-name>-<stage>-<github_env>` on `pull_request` events when `dry-run: false` and the caller grants `pull-requests: write`. When `github_env` is empty, the header uses `local`.
+- The `security-image-scan-reports-<stage>-<github_env>` artifact, retained for 30 days. When `github_env` is empty, the artifact name uses `local`. Contains root `manifest.json`, `image-security-findings.json`, `trivy/` (one Trivy JSON per scanned image x platform), and `trufflehog-image/` (one redacted TruffleHog JSON-lines file per scanned image x platform).
 
 If the repository root contains `.p2p-security-ignore.yaml`, image vulnerability and image secret findings that match a valid, unexpired ignore entry are omitted from active finding tables in the workflow summary and sticky PR comment. Ignored findings stay visible in `image-security-findings.json` with their ignore reason and expiry metadata when present. They are excluded from active totals, active blocking counts, and image policy failures.
 
@@ -80,13 +80,13 @@ If neither `image-names` nor `p2p-images` produces candidate names, or if all ca
 
 ## Security ignore file
 
-The image scan workflow reads one P2P-owned ignore file from the repository root: `.p2p-security-ignore.yaml`. If the file is absent, scans behave normally. If it is present but malformed, uses an unsupported schema version, omits required fields, has invalid shapes, or contains invalid expiry dates, the scan/report job fails.
+The security-image-scan workflow reads one P2P-owned ignore file from the repository root: `.p2p-security-ignore.yaml`. If the file is absent, scans behave normally. If it is present but malformed, uses an unsupported schema version, omits required fields, has invalid shapes, or contains invalid expiry dates, the scan/report job fails.
 
 See [How to ignore security findings](../how-to/ignore-security-findings.md) for the v1 schema, matching rules, and secret ID guidance.
 
 ## Artifact contract
 
-Each published `image-scan-reports-<stage>-<github_env>` artifact is complete dashboard image evidence for the scannable container images that were actually scanned. The root `manifest.json` is the supported artifact index; `reports.txt` files are runner-local implementation detail and are not published or supported for downstream parsing. Candidate OCI references skipped as non-scannable are visible in job logs, not in the artifact.
+Each published `security-image-scan-reports-<stage>-<github_env>` artifact is complete dashboard image evidence for the scannable container images that were actually scanned. The root `manifest.json` is the supported artifact index; `reports.txt` files are runner-local implementation detail and are not published or supported for downstream parsing. Candidate OCI references skipped as non-scannable are visible in job logs, not in the artifact.
 
 Manifest schema version 1:
 
@@ -114,7 +114,7 @@ Manifest schema version 1:
 - `secretReport` is an artifact-relative path to a redacted TruffleHog JSON-lines report under `trufflehog-image/`; the file may be empty when TruffleHog finds no secrets.
 - Report paths must be relative to the artifact root, must not be absolute, must not contain parent-directory traversal, and must point to files in the same artifact.
 
-If scanning, report generation, or manifest validation is incomplete, the workflow does not upload a dashboard-matching `image-scan-reports-*` artifact. Use the failed job logs as the diagnostic surface.
+If scanning, report generation, or manifest validation is incomplete, the workflow does not upload a dashboard-matching `security-image-scan-reports-*` artifact. Use the failed job logs as the diagnostic surface.
 
 ## Report format
 

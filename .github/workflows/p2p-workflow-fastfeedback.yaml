@@ -67,8 +67,8 @@ on:
         default: ''
       security-scan-blocking-severity:
         description: |
-          Minimum severity that blocks the workflow for source-security-scan
-          and image-scan findings: off, low, medium, high, or critical.
+          Minimum severity that blocks the workflow for security-source-scan
+          and security-image-scan findings: off, low, medium, high, or critical.
         required: false
         type: string
         default: off
@@ -100,7 +100,7 @@ jobs:
       skip-subnamespaces-create: ${{ inputs.skip-subnamespaces-create }}
       artifacts: ${{ inputs.artifacts }}
 
-  source-security-scan:
+  security-source-scan:
     uses: ./.github/workflows/p2p-workflow-source-security-scan.yaml
     with:
       secret-scan-scope: changes
@@ -111,7 +111,7 @@ jobs:
       checkout-version: ${{ inputs.checkout-version }}
       timeout-minutes: 10
 
-  image-scan:
+  security-image-scan:
     needs: [build]
     uses: ./.github/workflows/p2p-workflow-image-scan.yaml
     secrets:
@@ -212,7 +212,7 @@ jobs:
 
   promote:
     name: promote
-    needs: [integration-test, image-scan, source-security-scan]
+    needs: [integration-test, security-image-scan, security-source-scan]
     if: success() && ( github.ref == inputs.main-branch || github.ref_type == 'tag' )
     secrets:
       env_vars: ${{ secrets.env_vars }}
@@ -233,7 +233,7 @@ jobs:
       working-directory: ${{ inputs.working-directory }}
 
   notify-failure:
-    needs: [build, source-security-scan, image-scan, functional-test, nft-test, integration-test, promote]
+    needs: [build, security-source-scan, security-image-scan, functional-test, nft-test, integration-test, promote]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     if: always() && github.ref == inputs.main-branch && contains(needs.*.result, 'failure')

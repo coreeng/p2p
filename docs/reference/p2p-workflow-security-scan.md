@@ -43,41 +43,41 @@ jobs:
 | `dry-run` | boolean | No | `false` | Passed through to child workflows; still resolves the anchor image from `image-names` or `make p2p-images`, then skips registry lookups and scans. |
 | `checkout-version` | string | No | `''` | Internal consistency input for child checkouts. Application wrappers should normally omit it. |
 | `security-scan-blocking-severity` | string | No | `off` | Minimum security finding severity that blocks the umbrella workflow: `off`, `low`, `medium`, `high`, or `critical`. When blocking is enabled, verified secrets are treated as `critical`. Child policy jobs fail on active findings, but the umbrella workflow continues when findings are below the blocking threshold. |
-| `timeout-minutes` | number | No | `30` | Timeout for the `source-security-scan` job. Image-scan jobs use their own default. |
+| `timeout-minutes` | number | No | `30` | Timeout for the `security-source-scan` job. security-image-scan jobs use their own default. |
 
 ## Secrets
 
 | Name | Required | Description |
 |------|----------|-------------|
-| `env_vars` | No | Forwarded to image discovery and image scan child workflows. |
-| `container_registry_user` | No | Forwarded to image-scan when private base images need authentication. |
-| `container_registry_pat` | No | Forwarded to image-scan. |
-| `container_registry_url` | No | Forwarded to image-scan. |
+| `env_vars` | No | Forwarded to image discovery and security-image-scan child workflows. |
+| `container_registry_user` | No | Forwarded to security-image-scan when private base images need authentication. |
+| `container_registry_pat` | No | Forwarded to security-image-scan. |
+| `container_registry_url` | No | Forwarded to security-image-scan. |
 
 ## Outputs
 
 None. Results are surfaced via:
 
 - Each child job's workflow summary (`$GITHUB_STEP_SUMMARY`).
-- On non-dry-run source scans where report generation completes, the `source-security-scan-findings` artifact from the source-security-scan job. It contains redacted TruffleHog output, raw Trivy filesystem output when available, and normalized merged JSON. Scheduled source scanning uses TruffleHog for reachable git history and Trivy for the current branch's checked-out source tree. Scanner warnings or incomplete scanner output still fail the scan-status policy job.
-- On successful non-dry-run image scans where a latest image tag is found and at least one scannable container image is available, the `image-scan-reports-<stage>-<github_env>` artifact from each image-scan job. Each artifact contains root `manifest.json`, `trivy/` vulnerability JSON reports, and `trufflehog-image/` secret JSON-lines reports for scanned image/platform pairs. `manifest.json` records the P2P stage (`fast-feedback`, `extended-test`, or `prod`) and is the supported artifact index.
+- On non-dry-run source scans where report generation completes, the `security-source-scan-findings` artifact from the security-source-scan job. It contains redacted TruffleHog output, raw Trivy filesystem output when available, and normalized merged JSON. Scheduled source scanning uses TruffleHog for reachable git history and Trivy for the current branch's checked-out source tree. Scanner warnings or incomplete scanner output still fail the `security-source-scan-status-policy` job.
+- On successful non-dry-run image scans where a latest image tag is found and at least one scannable container image is available, the `security-image-scan-reports-<stage>-<github_env>` artifact from each security-image-scan job. Each artifact contains root `manifest.json`, `trivy/` vulnerability JSON reports, and `trufflehog-image/` secret JSON-lines reports for scanned image/platform pairs. `manifest.json` records the P2P stage (`fast-feedback`, `extended-test`, or `prod`) and is the supported artifact index.
 
 ## Job Graph
 
 ```
-resolve-anchor-image
-├── image-scan-fast-feedback  (matrix: vars.FAST_FEEDBACK)
-├── image-scan-extended-test  (matrix: vars.EXTENDED_TEST)
-└── image-scan-prod           (matrix: vars.PROD)
+security-resolve-anchor-image
+├── security-image-scan-fast-feedback  (matrix: vars.FAST_FEEDBACK)
+├── security-image-scan-extended-test  (matrix: vars.EXTENDED_TEST)
+└── security-image-scan-prod           (matrix: vars.PROD)
 
-source-security-scan                                   (independent; runs in parallel)
+security-source-scan                                   (independent; runs in parallel)
 ```
 
-Each matrix entry calls an internal stage workflow that first discovers the latest version for that stage/environment and then scans that exact version. The source-security-scan job runs in parallel with the per-stage matrices. For source scans, `secret-scan-scope: full-history` applies to TruffleHog git scanning; Trivy scans only the current checked-out branch tree. The `security-scan-blocking-severity` input is passed to every child scan. Its default `off` keeps scheduled scans report-only; setting it to `low`, `medium`, `high`, or `critical` makes findings at or above that severity fail the umbrella workflow, while below-threshold findings fail only the child policy job.
+Each matrix entry calls an internal stage workflow that first discovers the latest version for that stage/environment and then scans that exact version. The security-source-scan job runs in parallel with the per-stage matrices. For source scans, `secret-scan-scope: full-history` applies to TruffleHog git scanning; Trivy scans only the current checked-out branch tree. The `security-scan-blocking-severity` input is passed to every child scan. Its default `off` keeps scheduled scans report-only; setting it to `low`, `medium`, `high`, or `critical` makes findings at or above that severity fail the umbrella workflow, while below-threshold findings fail only the child policy job.
 
 ## Version discovery
 
-For each stage/environment matrix entry, the umbrella calls [`p2p-get-latest-image`](p2p-get-latest-image.md) with the anchor image to determine the highest semver-sorted tag in that stage's registry path. That version is passed to the image-scan workflow for the same GitHub environment. If no tag is found for that stage/environment, the image scan is skipped after logging the missing image. Because all images in a p2p release share the same version, scanning at the anchor's version covers the whole configured image set; the image-scan workflow still filters each configured reference to the scannable container images before running scanners.
+For each stage/environment matrix entry, the umbrella calls [`p2p-get-latest-image`](p2p-get-latest-image.md) with the anchor image to determine the highest semver-sorted tag in that stage's registry path. That version is passed to the security-image-scan workflow for the same GitHub environment. If no tag is found for that stage/environment, the image scan is skipped after logging the missing image. Because all images in a p2p release share the same version, scanning at the anchor's version covers the whole configured image set; the security-image-scan workflow still filters each configured reference to the scannable container images before running scanners.
 
 ## See also
 

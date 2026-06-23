@@ -66,15 +66,15 @@ on:
         default: 20
     outputs:
       json-file:
-        value: ${{ jobs.image-scan.outputs.json-file }}
+        value: ${{ jobs.security-image-scan.outputs.json-file }}
       security-risk:
-        value: ${{ jobs.image-scan.outputs.security-risk }}
+        value: ${{ jobs.security-image-scan.outputs.security-risk }}
       scan-status:
-        value: ${{ jobs.image-scan.outputs.scan-status }}
+        value: ${{ jobs.security-image-scan.outputs.scan-status }}
 
 jobs:
-  image-scan:
-    name: image-scan (${{ inputs.github_env != '' && format('{0}, {1}', inputs.pipeline-stage, inputs.github_env) || inputs.pipeline-stage }})
+  security-image-scan:
+    name: security-image-scan (${{ inputs.github_env != '' && format('{0}, {1}', inputs.pipeline-stage, inputs.github_env) || inputs.pipeline-stage }})
     runs-on: ubuntu-24.04
     environment: ${{ inputs.github_env }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
@@ -200,7 +200,7 @@ jobs:
             const { scanImages } = require(process.env.P2P_IMAGE_SCAN_HELPERS);
             await scanImages({ core });
 
-      - id: secret-scan
+      - id: security-secret-scan
         name: Scan images for secrets
         if: ${{ inputs.dry-run == false }}
         uses: actions/github-script@v9
@@ -220,9 +220,9 @@ jobs:
         env:
           PIPELINE_STAGE: ${{ inputs.pipeline-stage }}
           REPORT_LIST: ${{ steps.scan.outputs.report-list }}
-          SECRET_REPORT_LIST: ${{ steps.secret-scan.outputs.report-list }}
+          SECRET_REPORT_LIST: ${{ steps.security-secret-scan.outputs.report-list }}
           REPORT_ROOT: ${{ steps.scan.outputs.reports-dir }}
-          SECRET_REPORT_ROOT: ${{ steps.secret-scan.outputs.reports-dir }}
+          SECRET_REPORT_ROOT: ${{ steps.security-secret-scan.outputs.reports-dir }}
           SCAN_TARGET_COUNT: ${{ steps.pull-images.outputs.scan-target-count }}
           P2P_IMAGE_SCAN_HELPERS: ${{ runner.temp }}/p2p-workflow-src/.github/scripts/image-scan-helpers.js
         with:
@@ -236,7 +236,7 @@ jobs:
         uses: actions/github-script@v9
         env:
           REPORT_LIST: ${{ steps.scan.outputs.report-list }}
-          SECRET_REPORT_LIST: ${{ steps.secret-scan.outputs.report-list }}
+          SECRET_REPORT_LIST: ${{ steps.security-secret-scan.outputs.report-list }}
           BLOCKING_SEVERITY: ${{ inputs.blocking-severity }}
           PIPELINE_STAGE: ${{ inputs.pipeline-stage }}
           GITHUB_ENV_INPUT: ${{ inputs.github_env }}
@@ -255,30 +255,30 @@ jobs:
         continue-on-error: true
         uses: marocchino/sticky-pull-request-comment@v3
         with:
-          header: image-scan-findings-${{ inputs.app-name || inputs.tenant-name || vars.TENANT_NAME }}-${{ inputs.pipeline-stage }}-${{ inputs.github_env || 'local' }}
+          header: security-image-scan-findings-${{ inputs.app-name || inputs.tenant-name || vars.TENANT_NAME }}-${{ inputs.pipeline-stage }}-${{ inputs.github_env || 'local' }}
           path: ${{ steps.report.outputs.comment-path }}
           recreate: true
 
-      - name: Upload image-scan reports
+      - name: Upload security-image-scan reports
         if: ${{ inputs.dry-run == false && steps.manifest.outputs.artifact-dir != '' }}
         uses: actions/upload-artifact@v7
         with:
-          name: image-scan-reports-${{ inputs.pipeline-stage }}-${{ inputs.github_env || 'local' }}
+          name: security-image-scan-reports-${{ inputs.pipeline-stage }}-${{ inputs.github_env || 'local' }}
           path: ${{ steps.manifest.outputs.artifact-dir }}
           if-no-files-found: error
           retention-days: 30
 
-  scan-status-policy:
-    name: image-scan-status-policy (${{ inputs.github_env != '' && format('{0}, {1}', inputs.pipeline-stage, inputs.github_env) || inputs.pipeline-stage }})
+  security-image-scan-status-policy:
+    name: security-image-scan-status-policy (${{ inputs.github_env != '' && format('{0}, {1}', inputs.pipeline-stage, inputs.github_env) || inputs.pipeline-stage }})
     runs-on: ubuntu-24.04
-    needs: [image-scan]
+    needs: [security-image-scan]
     if: ${{ always() && inputs.dry-run == false }}
     timeout-minutes: 1
     steps:
       - name: Enforce scanner execution status
         shell: bash
         env:
-          SCAN_STATUS: ${{ needs.image-scan.outputs.scan-status || 'failed' }}
+          SCAN_STATUS: ${{ needs.security-image-scan.outputs.scan-status || 'failed' }}
         run: |
           set -euo pipefail
           if [ "${SCAN_STATUS}" != "ok" ]; then
@@ -286,25 +286,25 @@ jobs:
             exit 1
           fi
 
-  policy:
-    name: image-scan-policy (${{ inputs.github_env != '' && format('{0}, {1}', inputs.pipeline-stage, inputs.github_env) || inputs.pipeline-stage }})
+  security-image-policy:
+    name: security-image-policy (${{ inputs.github_env != '' && format('{0}, {1}', inputs.pipeline-stage, inputs.github_env) || inputs.pipeline-stage }})
     runs-on: ubuntu-24.04
-    needs: [image-scan]
+    needs: [security-image-scan]
     if: ${{ always() && inputs.dry-run == false }}
-    continue-on-error: ${{ inputs.blocking-severity == 'off' || (needs.image-scan.outputs.blocking-count == '0' && needs.image-scan.outputs.secret-blocking-count == '0') }}
+    continue-on-error: ${{ inputs.blocking-severity == 'off' || (needs.security-image-scan.outputs.blocking-count == '0' && needs.security-image-scan.outputs.secret-blocking-count == '0') }}
     timeout-minutes: 1
     steps:
-      - name: "Output security risk: ${{ needs.image-scan.outputs.security-risk || 'unknown' }}; scan: ${{ needs.image-scan.outputs.scan-status || 'failed' }}"
+      - name: "Output security risk: ${{ needs.security-image-scan.outputs.security-risk || 'unknown' }}; scan: ${{ needs.security-image-scan.outputs.scan-status || 'failed' }}"
         run: ':'
 
       - name: Enforce policy
         shell: bash
         env:
           BLOCKING_SEVERITY: ${{ inputs.blocking-severity }}
-          BLOCKING: ${{ needs.image-scan.outputs.blocking-count }}
-          TOTAL: ${{ needs.image-scan.outputs.total-count }}
-          SECRET_BLOCKING: ${{ needs.image-scan.outputs.secret-blocking-count }}
-          SECRET_TOTAL: ${{ needs.image-scan.outputs.secret-total-count }}
+          BLOCKING: ${{ needs.security-image-scan.outputs.blocking-count }}
+          TOTAL: ${{ needs.security-image-scan.outputs.total-count }}
+          SECRET_BLOCKING: ${{ needs.security-image-scan.outputs.secret-blocking-count }}
+          SECRET_TOTAL: ${{ needs.security-image-scan.outputs.secret-total-count }}
         run: |
           set -euo pipefail
           case "${BLOCKING_SEVERITY}" in

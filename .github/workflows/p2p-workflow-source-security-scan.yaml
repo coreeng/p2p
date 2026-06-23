@@ -34,27 +34,27 @@ on:
         default: 30
     outputs:
       report-file:
-        value: ${{ jobs.report.outputs.report-file }}
+        value: ${{ jobs.security-source-report.outputs.report-file }}
       json-file:
-        value: ${{ jobs.report.outputs.json-file }}
+        value: ${{ jobs.security-source-report.outputs.json-file }}
       vulnerability-total:
-        value: ${{ jobs.report.outputs.vulnerability-total }}
+        value: ${{ jobs.security-source-report.outputs.vulnerability-total }}
       vulnerability-blocking:
-        value: ${{ jobs.report.outputs.vulnerability-blocking }}
+        value: ${{ jobs.security-source-report.outputs.vulnerability-blocking }}
       license-total:
-        value: ${{ jobs.report.outputs.license-total }}
+        value: ${{ jobs.security-source-report.outputs.license-total }}
       secret-total:
-        value: ${{ jobs.report.outputs.secret-total }}
+        value: ${{ jobs.security-source-report.outputs.secret-total }}
       secret-blocking:
-        value: ${{ jobs.report.outputs.secret-blocking }}
+        value: ${{ jobs.security-source-report.outputs.secret-blocking }}
       security-risk:
-        value: ${{ jobs.report.outputs.security-risk }}
+        value: ${{ jobs.security-source-report.outputs.security-risk }}
       scan-status:
-        value: ${{ jobs.report.outputs.scan-status }}
+        value: ${{ jobs.security-source-report.outputs.scan-status }}
 
 jobs:
-  secret-scan:
-    name: secret-scan
+  security-secret-scan:
+    name: security-secret-scan
     runs-on: ubuntu-24.04
     timeout-minutes: ${{ inputs.timeout-minutes }}
     outputs:
@@ -154,13 +154,13 @@ jobs:
         if: ${{ always() && inputs.dry-run == false }}
         uses: actions/upload-artifact@v7
         with:
-          name: source-security-internal-secret-findings
+          name: security-source-internal-secret-findings
           path: ${{ steps.redact.outputs.redacted_file }}
           if-no-files-found: warn
           retention-days: 1
 
-  sca-scan:
-    name: sca-scan
+  security-sca-scan:
+    name: security-sca-scan
     runs-on: ubuntu-24.04
     timeout-minutes: ${{ inputs.timeout-minutes }}
     steps:
@@ -200,15 +200,15 @@ jobs:
         if: ${{ always() && inputs.dry-run == false }}
         uses: actions/upload-artifact@v7
         with:
-          name: source-security-internal-trivy-findings
+          name: security-source-internal-trivy-findings
           path: ${{ steps.scan.outputs.trivy_file }}
           if-no-files-found: warn
           retention-days: 1
 
-  report:
-    name: source-security-report
+  security-source-report:
+    name: security-source-report
     runs-on: ubuntu-24.04
-    needs: [secret-scan, sca-scan]
+    needs: [security-secret-scan, security-sca-scan]
     if: always()
     outputs:
       report-file: ${{ steps.report.outputs.report-file }}
@@ -245,7 +245,7 @@ jobs:
         continue-on-error: true
         uses: actions/download-artifact@v8
         with:
-          name: source-security-internal-secret-findings
+          name: security-source-internal-secret-findings
           path: ${{ runner.temp }}/source-security/trufflehog
 
       - name: Download Trivy findings
@@ -253,7 +253,7 @@ jobs:
         continue-on-error: true
         uses: actions/download-artifact@v8
         with:
-          name: source-security-internal-trivy-findings
+          name: security-source-internal-trivy-findings
           path: ${{ runner.temp }}/source-security/trivy
 
       - id: report
@@ -261,12 +261,12 @@ jobs:
         uses: actions/github-script@v9
         env:
           SCOPE: ${{ inputs.secret-scan-scope }}
-          BASE: ${{ needs.secret-scan.outputs.base }}
+          BASE: ${{ needs.security-secret-scan.outputs.base }}
           BLOCKING_SEVERITY: ${{ inputs.blocking-severity }}
           DRY_RUN: ${{ inputs.dry-run }}
           ROOT: ${{ runner.temp }}/source-security
-          SECRET_SCAN_RESULT: ${{ needs.secret-scan.result }}
-          SCA_SCAN_RESULT: ${{ needs.sca-scan.result }}
+          SECRET_SCAN_RESULT: ${{ needs.security-secret-scan.result }}
+          SCA_SCAN_RESULT: ${{ needs.security-sca-scan.result }}
           P2P_SECURITY_IGNORE_HELPER: ${{ runner.temp }}/p2p-workflow-src/.github/scripts/p2p-security-ignore.js
         with:
           script: |
@@ -280,7 +280,7 @@ jobs:
         continue-on-error: true
         uses: marocchino/sticky-pull-request-comment@v3
         with:
-          header: source-security-scan-findings-${{ inputs.app-name || inputs.tenant-name || vars.TENANT_NAME }}
+          header: security-source-scan-findings-${{ inputs.app-name || inputs.tenant-name || vars.TENANT_NAME }}
           path: ${{ steps.report.outputs.report-file }}
           recreate: true
 
@@ -288,7 +288,7 @@ jobs:
         if: ${{ always() && inputs.dry-run == false }}
         uses: actions/upload-artifact@v7
         with:
-          name: source-security-scan-findings
+          name: security-source-scan-findings
           path: |
             ${{ runner.temp }}/source-security/trufflehog
             ${{ runner.temp }}/source-security/trivy
@@ -296,17 +296,17 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
-  scan-status-policy:
-    name: source-security-scan-status-policy
+  security-source-scan-status-policy:
+    name: security-source-scan-status-policy
     runs-on: ubuntu-24.04
-    needs: [report]
+    needs: [security-source-report]
     if: ${{ always() && inputs.dry-run == false }}
     timeout-minutes: 1
     steps:
       - name: Enforce scanner execution status
         shell: bash
         env:
-          SCAN_STATUS: ${{ needs.report.outputs.scan-status || 'failed' }}
+          SCAN_STATUS: ${{ needs.security-source-report.outputs.scan-status || 'failed' }}
         run: |
           set -euo pipefail
           if [ "${SCAN_STATUS}" != "ok" ]; then
@@ -314,26 +314,26 @@ jobs:
             exit 1
           fi
 
-  policy:
-    name: source-security-policy
+  security-source-policy:
+    name: security-source-policy
     runs-on: ubuntu-24.04
-    needs: [report]
+    needs: [security-source-report]
     if: ${{ always() && inputs.dry-run == false }}
-    continue-on-error: ${{ inputs.blocking-severity == 'off' || (needs.report.outputs.vulnerability-blocking == '0' && needs.report.outputs.secret-blocking == '0') }}
+    continue-on-error: ${{ inputs.blocking-severity == 'off' || (needs.security-source-report.outputs.vulnerability-blocking == '0' && needs.security-source-report.outputs.secret-blocking == '0') }}
     timeout-minutes: 1
     steps:
-      - name: "Output security risk: ${{ needs.report.outputs.security-risk || 'unknown' }}; scan: ${{ needs.report.outputs.scan-status || 'failed' }}"
+      - name: "Output security risk: ${{ needs.security-source-report.outputs.security-risk || 'unknown' }}; scan: ${{ needs.security-source-report.outputs.scan-status || 'failed' }}"
         run: ':'
 
       - name: Enforce scan policy
         shell: bash
         env:
           BLOCKING_SEVERITY: ${{ inputs.blocking-severity }}
-          VULN_TOTAL: ${{ needs.report.outputs.vulnerability-total }}
-          VULN_BLOCKING: ${{ needs.report.outputs.vulnerability-blocking }}
-          LICENSE_TOTAL: ${{ needs.report.outputs.license-total }}
-          SECRET_TOTAL: ${{ needs.report.outputs.secret-total }}
-          SECRET_BLOCKING: ${{ needs.report.outputs.secret-blocking }}
+          VULN_TOTAL: ${{ needs.security-source-report.outputs.vulnerability-total }}
+          VULN_BLOCKING: ${{ needs.security-source-report.outputs.vulnerability-blocking }}
+          LICENSE_TOTAL: ${{ needs.security-source-report.outputs.license-total }}
+          SECRET_TOTAL: ${{ needs.security-source-report.outputs.secret-total }}
+          SECRET_BLOCKING: ${{ needs.security-source-report.outputs.secret-blocking }}
         run: |
           set -euo pipefail
           case "${BLOCKING_SEVERITY}" in
