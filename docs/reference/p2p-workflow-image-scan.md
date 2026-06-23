@@ -14,11 +14,11 @@ Internal workflow called by [`p2p-workflow-fastfeedback`](p2p-workflow-fastfeedb
 | `version` | string | Yes | — | Image tag to scan. Used with each standard P2P image name to build the stage Artifact Registry reference. |
 | `github_env` | string | No | `''` | GitHub Environment used for environment-scoped variables and GCP auth. Required in practice — image pulls go through Workload Identity Federation bound to this environment. |
 | `tenant-name` | string | No | `''` | Tenant identifier. Falls back to `vars.TENANT_NAME` when empty. |
-| `app-name` | string | No | `''` | Application name used to scope sticky PR comments in multi-app repositories. Primary P2P workflow templates pass this through. When omitted by direct callers, comment scope falls back to `tenant-name`, then `vars.TENANT_NAME`. |
+| `app-name` | string | No | `''` | Application name used to scope sticky PR comments in multi-Application repositories. Primary P2P workflow templates pass this through. When omitted by direct callers, comment scope falls back to `tenant-name`, then `vars.TENANT_NAME`. |
 | `region` | string | No | `europe-west2` | GCP region for the Artifact Registry. Overridden by `vars.REGION` when set on the environment. |
-| `working-directory` | string | No | `.` | Directory from which `make p2p-images` is executed when `image-names` is empty. |
+| `working-directory` | string | No | `.` | Directory from which `make p2p-images` is executed when `image-names` is empty. Also selects the Application Security Ignore file at `<working-directory>/.p2p-security-ignore.yaml` when present. |
 | `image-names` | string | No | `''` | Newline-, comma-, or whitespace-separated list of standard P2P image names to scan. When set, this list is used instead of `make p2p-images`. |
-| `dry-run` | boolean | No | `false` | When `true`, still checks out the repo and resolves image names from `image-names` or `make p2p-images`, then skips GCP auth, registry login, image pulls, scanner installs, scans, sticky PR comment, artifact upload, and policy step. The `Build report` step still runs and produces a "Scan skipped" summary. Dry-run still parses `.p2p-security-ignore.yaml`, so a malformed ignore file can fail report generation. |
+| `dry-run` | boolean | No | `false` | When `true`, still checks out the repo and resolves image names from `image-names` or `make p2p-images`, then skips GCP auth, registry login, image pulls, scanner installs, scans, sticky PR comment, artifact upload, and policy step. The `Build report` step still runs and produces a "Scan skipped" summary. Dry-run still validates Repository Security Ignore and Application Security Ignore files, so a malformed ignore file can fail report generation. |
 | `checkout-version` | string | No | `''` | Git ref to check out before resolving image names. Ignored when `dry-run` is `true`; the workflow checks out the default ref. |
 | `blocking-severity` | string | No | `off` | Minimum finding severity that blocks the workflow: `off`, `low`, `medium`, `high`, or `critical`. When blocking is enabled, verified image secrets are treated as `critical`. The `security-image-policy` job fails on active vulnerability or secret findings, but the workflow continues when findings are below the blocking threshold. |
 | `ignore-unfixed` | boolean | No | `true` | When `true`, passes `--ignore-unfixed` to Trivy — only vulnerabilities with a fixed version are reported. |
@@ -50,9 +50,9 @@ Results are also surfaced via:
 - A sticky PR comment with `header: security-image-scan-findings-<app-name>-<stage>-<github_env>` on `pull_request` events when `dry-run: false` and the caller grants `pull-requests: write`. When `github_env` is empty, the header uses `local`.
 - The `security-image-scan-reports-<stage>-<github_env>` artifact, retained for 30 days. When `github_env` is empty, the artifact name uses `local`. Contains root `manifest.json`, `image-security-findings.json`, `trivy/` (one Trivy JSON per scanned image x platform), and `trufflehog-image/` (one redacted TruffleHog JSON-lines file per scanned image x platform).
 
-If the repository root contains `.p2p-security-ignore.yaml`, image vulnerability and image secret findings that match a valid, unexpired ignore entry are omitted from active finding tables in the workflow summary and sticky PR comment. Ignored findings stay visible in `image-security-findings.json` with their ignore reason and expiry metadata when present. They are excluded from active totals, active blocking counts, and image policy failures.
+If image vulnerability or image secret findings match a valid, unexpired Repository Security Ignore or current Application Security Ignore entry, they are omitted from active finding tables in the workflow summary and sticky PR comment. Those surfaces do not expose ignore reasons. Ignored findings stay visible in `image-security-findings.json` under `ignored.vulnerabilities` and `ignored.secrets`. They are excluded from active totals, active blocking counts, and image policy failures.
 
-`image-security-findings.json` uses top-level `vulnerabilities` and `secrets` collections. When an ignore file is present, it also includes `ignored.vulnerabilities` and `ignored.secrets`.
+`image-security-findings.json` uses top-level `vulnerabilities` and `secrets` collections. It always includes top-level `ignoreFiles`, using `[]` when no ignore files are loaded. Ignored findings include `matchedIgnores`; each match records `scope`, `path`, `reason`, and optional `expires`.
 
 ## Permissions
 
@@ -74,13 +74,15 @@ If `image-names` is set, the workflow splits it on commas or whitespace and trea
 <region>-docker.pkg.dev/<project>/tenant/<tenant>/<pipeline-stage>/<image>:<version>
 ```
 
-Before running Trivy or TruffleHog, the workflow inspects each resolved reference and platform-specific manifest. It excludes OCI artifacts that are known not to be container images, currently Helm chart artifacts, and excludes confirmed empty container images whose raw image manifest has a Docker/OCI image config and explicit `layers: []`. Skipped references are logged as warnings and do not produce Trivy reports, TruffleHog reports, or `manifest.json` entries. Apps do not have to publish OCI images or a scannable container image; if no image refs are resolved or no scannable image targets remain, the image scan completes successfully with zero findings. Scanner execution failures for remaining scan targets still fail the scan.
+Before running Trivy or TruffleHog, the workflow inspects each resolved reference and platform-specific manifest. It excludes OCI artifacts that are known not to be container images, currently Helm chart artifacts, and excludes confirmed empty container images whose raw image manifest has a Docker/OCI image config and explicit `layers: []`. Skipped references are logged as warnings and do not produce Trivy reports, TruffleHog reports, or `manifest.json` entries. Applications do not have to publish OCI images or a scannable container image; if no image refs are resolved or no scannable image targets remain, the image scan completes successfully with zero findings. Scanner execution failures for remaining scan targets still fail the scan.
 
 If neither `image-names` nor `p2p-images` produces candidate names, or if all candidate references are excluded as non-scannable, the image scan completes successfully with zero findings.
 
 ## Security ignore file
 
-The security-image-scan workflow reads one P2P-owned ignore file from the repository root: `.p2p-security-ignore.yaml`. If the file is absent, scans behave normally. If it is present but malformed, uses an unsupported schema version, omits required fields, has invalid shapes, or contains invalid expiry dates, the scan/report job fails.
+The security-image-scan workflow reads the Repository Security Ignore from `.p2p-security-ignore.yaml` at the repository root when present. When `working-directory` is non-root, it also reads the Application Security Ignore from `<working-directory>/.p2p-security-ignore.yaml` when present. Ignore matching is additive: a finding is ignored when it matches any valid, unexpired entry from either file. Image entries still require `images[].name`, and that value must match the scanned standard P2P image name. It is not inferred from registry references, tags, stages, GitHub environments, or `app-name`.
+
+If a loaded file is malformed, uses an unsupported schema version, omits required fields, has invalid shapes, or contains invalid expiry dates, the scan/report job fails, including during dry-run.
 
 See [How to ignore security findings](../how-to/ignore-security-findings.md) for the v1 schema, matching rules, and secret ID guidance.
 

@@ -28,6 +28,10 @@ on:
         required: false
         type: string
         default: ''
+      working-directory:
+        required: false
+        type: string
+        default: '.'
       timeout-minutes:
         required: false
         type: number
@@ -265,6 +269,7 @@ jobs:
           BLOCKING_SEVERITY: ${{ inputs.blocking-severity }}
           DRY_RUN: ${{ inputs.dry-run }}
           ROOT: ${{ runner.temp }}/source-security
+          WORKING_DIRECTORY: ${{ inputs.working-directory }}
           SECRET_SCAN_RESULT: ${{ needs.security-secret-scan.result }}
           SCA_SCAN_RESULT: ${{ needs.security-sca-scan.result }}
           P2P_SECURITY_IGNORE_HELPER: ${{ runner.temp }}/p2p-workflow-src/.github/scripts/p2p-security-ignore.js

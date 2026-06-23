@@ -65,6 +65,7 @@ jobs:
       blocking-severity: ${{ inputs.security-scan-blocking-severity }}
       dry-run: ${{ inputs.dry-run }}
       checkout-version: ${{ inputs.checkout-version }}
+      working-directory: ${{ inputs.working-directory }}
       timeout-minutes: ${{ inputs.timeout-minutes }}
 
   # Resolve a single anchor image used to look up the latest version per

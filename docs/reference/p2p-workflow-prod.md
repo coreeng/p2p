@@ -45,8 +45,8 @@ This workflow runs image scanning before deployment. The image scan authenticate
 | `main-branch` | `string` | No | `refs/heads/main` | Full ref of the main branch, used to gate the deploy job and Slack alerts. |
 | `region` | `string` | No | `europe-west2` | Cloud region used by the `p2p-prod` make target. |
 | `source` | `string` | No | `${{ vars.PROD }}` | JSON matrix of deploy environments for the prod stage. |
-| `working-directory` | `string` | No | `.` | Repository path from which the make target is executed. |
-| `app-name` | `string` | No | `''` | Application name. Must equal the tenant name (each application has its own application tenant). Also scopes image security sticky PR comments so multi-app repositories do not overwrite comments between apps. |
+| `working-directory` | `string` | No | `.` | Repository path from which the make target is executed. Also selects the Application Security Ignore file for image security scans when non-root. |
+| `app-name` | `string` | No | `''` | Application name. Must equal the tenant name (each Application has its own Application tenant). Also scopes image security sticky PR comments so multi-Application repositories do not overwrite comments between Applications. It does not select security ignore files. |
 | `tenant-name` | `string` | No | `''` | Tenant name passed to the make target. |
 | `skip-subnamespaces-create` | `boolean` | No | `false` | Skips creating subnamespaces before running the make target. |
 | `security-scan-blocking-severity` | `string` | No | `off` | Minimum security-image-scan finding severity that blocks the workflow: `off`, `low`, `medium`, `high`, or `critical`. Verified image secrets are treated as `critical`. The policy job fails on active findings, but the workflow continues when findings are below the blocking threshold. |
@@ -85,7 +85,7 @@ notify-failure  (needs: validate-version, security-image-scan, prod-deploy; runs
 notify-success  (needs: prod-deploy; runs on main-branch when prod-deploy succeeds and dry-run=false)
 ```
 
-`notify-failure` and `notify-success` are independent of each other and run after `prod-deploy` completes. Unlike other orchestrator workflows, this workflow sends a Slack notification on successful deployment as well as on failure.
+`notify-failure` and `notify-success` are independent of each other and run after `prod-deploy` completes. Unlike other orchestrator workflows, this workflow sends a Slack notification on successful deployment as well as on failure. Security PR comments are scoped to `app-name`; security ignore file selection is scoped by `working-directory`.
 
 ## See also
 

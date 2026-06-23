@@ -37,8 +37,8 @@ This workflow runs image scanning before promotion. The image scan authenticates
 | `region` | `string` | No | `europe-west2` | Cloud region used by all make targets. |
 | `source` | `string` | No | `${{ vars.EXTENDED_TEST }}` | JSON matrix of deploy environments for the extended-test stage. |
 | `destination` | `string` | No | `${{ vars.PROD }}` | JSON matrix of deploy environments to promote to after tests pass. |
-| `working-directory` | `string` | No | `.` | Repository path from which make targets are executed. |
-| `app-name` | `string` | No | `''` | Application name. Must equal the tenant name (each application has its own application tenant). Also scopes image security sticky PR comments so multi-app repositories do not overwrite comments between apps. |
+| `working-directory` | `string` | No | `.` | Repository path from which make targets are executed. Also selects the Application Security Ignore file for image security scans when non-root. |
+| `app-name` | `string` | No | `''` | Application name. Must equal the tenant name (each Application has its own Application tenant). Also scopes image security sticky PR comments so multi-Application repositories do not overwrite comments between Applications. It does not select security ignore files. |
 | `tenant-name` | `string` | No | `''` | Tenant name passed to all make targets. |
 | `skip-subnamespaces-create` | `boolean` | No | `false` | Skips creating subnamespaces before running make targets. |
 | `artifacts` | `string` | No | `''` | YAML-formatted map of make target names to artifact paths. Paths matching each active command are uploaded after that command runs. |
@@ -79,7 +79,7 @@ security-image-scan    (independent of run-tests; runs in parallel)
 notify-failure  (needs: run-tests, security-image-scan, promote; runs on main-branch when any job fails)
 ```
 
-All jobs use a matrix derived from `source`. The `promote` job uses a matrix derived from `destination`.
+All jobs use a matrix derived from `source`. The `promote` job uses a matrix derived from `destination`. Security PR comments are scoped to `app-name`; security ignore file selection is scoped by `working-directory`.
 
 ## See also
 

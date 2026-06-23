@@ -241,6 +241,7 @@ jobs:
           PIPELINE_STAGE: ${{ inputs.pipeline-stage }}
           GITHUB_ENV_INPUT: ${{ inputs.github_env }}
           VERSION: ${{ inputs.version }}
+          WORKING_DIRECTORY: ${{ inputs.working-directory }}
           ARTIFACT_DIR: ${{ steps.manifest.outputs.artifact-dir }}
           SCAN_TARGET_COUNT: ${{ steps.pull-images.outputs.scan-target-count }}
           P2P_SECURITY_IGNORE_HELPER: ${{ runner.temp }}/p2p-workflow-src/.github/scripts/p2p-security-ignore.js

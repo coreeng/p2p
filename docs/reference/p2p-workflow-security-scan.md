@@ -36,11 +36,11 @@ jobs:
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `tenant-name` | string | No | `''` | Tenant identifier passed through to child workflows. Falls back to `vars.TENANT_NAME` when empty. |
-| `app-name` | string | No | `''` | Application name passed through to child security scans so sticky PR comments are scoped per app in multi-app repositories. Scheduled wrappers should set this to the application tenant name. |
+| `app-name` | string | No | `''` | Application name passed through to child security scans so sticky PR comments are scoped per Application in multi-Application repositories. Scheduled wrappers should set this to the application tenant name. It does not select security ignore files. |
 | `image-names` | string | No | `''` | Newline-, comma-, or whitespace-separated list of standard P2P image names. The first entry is the version-lookup anchor for each stage, and the full list is passed to each image scan. If empty, image scans fall back to `make p2p-images` in `working-directory`. |
-| `working-directory` | string | No | `.` | Working directory for `make p2p-images` when `image-names` is empty. |
+| `working-directory` | string | No | `.` | Repository-relative Application directory. It is used for `make p2p-images` when `image-names` is empty and selects the Application Security Ignore file for scheduled source and image scans. |
 | `region` | string | No | `europe-west2` | GCP region; overridden by `vars.REGION`. |
-| `dry-run` | boolean | No | `false` | Passed through to child workflows; still resolves the anchor image from `image-names` or `make p2p-images`, then skips registry lookups and scans. |
+| `dry-run` | boolean | No | `false` | Passed through to child workflows; still resolves the anchor image from `image-names` or `make p2p-images`, then skips registry lookups and scans. Child report generation still validates loaded Repository Security Ignore and Application Security Ignore files. |
 | `checkout-version` | string | No | `''` | Internal consistency input for child checkouts. Application wrappers should normally omit it. |
 | `security-scan-blocking-severity` | string | No | `off` | Minimum security finding severity that blocks the umbrella workflow: `off`, `low`, `medium`, `high`, or `critical`. When blocking is enabled, verified secrets are treated as `critical`. Child policy jobs fail on active findings, but the umbrella workflow continues when findings are below the blocking threshold. |
 | `timeout-minutes` | number | No | `30` | Timeout for the `security-source-scan` job. security-image-scan jobs use their own default. |
@@ -73,7 +73,7 @@ security-resolve-anchor-image
 security-source-scan                                   (independent; runs in parallel)
 ```
 
-Each matrix entry calls an internal stage workflow that first discovers the latest version for that stage/environment and then scans that exact version. The security-source-scan job runs in parallel with the per-stage matrices. For source scans, `secret-scan-scope: full-history` applies to TruffleHog git scanning; Trivy scans only the current checked-out branch tree. The `security-scan-blocking-severity` input is passed to every child scan. Its default `off` keeps scheduled scans report-only; setting it to `low`, `medium`, `high`, or `critical` makes findings at or above that severity fail the umbrella workflow, while below-threshold findings fail only the child policy job.
+Each matrix entry calls an internal stage workflow that first discovers the latest version for that stage/environment and then scans that exact version. The security-source-scan job runs in parallel with the per-stage matrices. For source scans, `secret-scan-scope: full-history` applies to TruffleHog git scanning; Trivy scans only the current checked-out branch tree. Source detection remains repository-wide, while ignore evaluation uses the Repository Security Ignore plus the Application Security Ignore selected by `working-directory`. Scheduled image scans use the same `working-directory` Application context and keep the normal `images[].name` matching rules. The `security-scan-blocking-severity` input is passed to every child scan. Its default `off` keeps scheduled scans report-only; setting it to `low`, `medium`, `high`, or `critical` makes findings at or above that severity fail the umbrella workflow, while below-threshold findings fail only the child policy job.
 
 ## Version discovery
 

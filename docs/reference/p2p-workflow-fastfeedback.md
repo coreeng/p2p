@@ -37,12 +37,12 @@ Grant `pull-requests: write` when the workflow runs on pull requests so source a
 | `dry-run` | `boolean` | No | `false` | When `true`, runs commands without making persistent changes. |
 | `main-branch` | `string` | No | `refs/heads/main` | Full ref of the main branch, used to gate promotion and Slack alerts. |
 | `checkout-version` | `string` | No | `''` | Git ref to check out. Defaults to the current workflow ref when empty. |
-| `app-name` | `string` | No | `''` | Application name. Must equal the tenant name (each application has its own application tenant). Also scopes source and image security sticky PR comments so multi-app repositories do not overwrite comments between apps. |
+| `app-name` | `string` | No | `''` | Application name. Must equal the tenant name (each Application has its own Application tenant). Also scopes source and image security sticky PR comments so multi-Application repositories do not overwrite comments between Applications. It does not select security ignore files. |
 | `tenant-name` | `string` | No | `''` | Tenant name passed to all make targets. |
 | `region` | `string` | No | `europe-west2` | Cloud region used by all make targets. |
 | `source` | `string` | No | `${{ vars.FAST_FEEDBACK }}` | JSON matrix of deploy environments for the fast-feedback stage. |
 | `destination` | `string` | No | `${{ vars.EXTENDED_TEST }}` | JSON matrix of deploy environments to promote to after integration tests pass. |
-| `working-directory` | `string` | No | `.` | Repository path from which make targets are executed. |
+| `working-directory` | `string` | No | `.` | Repository path from which make targets are executed. Also selects the Application Security Ignore file for source and image security scans when non-root. |
 | `skip-fastfeedback-integration-on-prs` | `boolean` | No | `false` | When `true`, skips the `integration-test` job on pull requests (runs unconditionally on main or tags). |
 | `skip-subnamespaces-create` | `boolean` | No | `false` | Skips creating subnamespaces before running make targets. |
 | `artifacts` | `string` | No | `''` | YAML-formatted map of make target names to artifact paths. Paths matching each active command are uploaded after that command runs. |
@@ -93,7 +93,7 @@ security-source-scan  (independent of build; runs in parallel)
 notify-failure       (needs: all jobs; runs on main-branch when any job fails)
 ```
 
-All jobs use a matrix derived from `source`. The `promote` job uses a matrix derived from `destination`. The `security-source-scan` job is not part of the matrix; it runs once per workflow. Security PR comments are scoped to `app-name`.
+All jobs use a matrix derived from `source`. The `promote` job uses a matrix derived from `destination`. The `security-source-scan` job is not part of the matrix; it runs once per workflow. Security PR comments are scoped to `app-name`; security ignore file selection is scoped by `working-directory`.
 
 ## See also
 

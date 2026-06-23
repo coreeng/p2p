@@ -5,6 +5,8 @@ const path = require('path');
 
 const {
   loadSecurityIgnore,
+  loadImageSecurityIgnore,
+  loadSourceSecurityIgnore,
   validateSecurityIgnore,
   splitSourceVulnerabilities,
   splitSourceSecrets,
@@ -30,6 +32,12 @@ fs.writeFileSync(path.join(workspace, '.p2p-security-ignore.yaml'), [
   '  vulnerabilities:',
   '    - id: CVE-ID-ONLY',
   '      reason: accepted source vuln',
+  '    - id: CVE-ID-ONLY',
+  '      reason: second accepted source vuln',
+  '      expires: 2026-12-31',
+  '    - id: CVE-ID-ONLY',
+  '      reason: expired duplicate source vuln',
+  '      expires: 2020-01-01',
   '    - id: CVE-EXPIRED',
   '      reason: expired source vuln',
   '      expires: 2020-01-01',
@@ -50,6 +58,7 @@ fs.writeFileSync(path.join(workspace, '.p2p-security-ignore.yaml'), [
 
 const ignore = loadSecurityIgnore(workspace);
 assert.strictEqual(ignore.present, true);
+assert.deepStrictEqual(ignore.ignoreFiles, [{ scope: 'repository', path: '.p2p-security-ignore.yaml' }]);
 assert.deepStrictEqual(ignore.images, [
   {
     name: 'api',
@@ -96,7 +105,11 @@ const vulnerabilities = [
 const vulnSplit = splitSourceVulnerabilities(vulnerabilities, ignore);
 assert.deepStrictEqual(vulnSplit.ignored.map(v => v.id), ['CVE-ID-ONLY']);
 assert.deepStrictEqual(vulnSplit.active.map(v => v.id), ['CVE-EXPIRED', 'CVE-PACKAGE-MISMATCH']);
-assert.deepStrictEqual(vulnSplit.ignored[0].ignore, { reason: 'accepted source vuln' });
+assert.deepStrictEqual(vulnSplit.ignored[0].matchedIgnores, [
+  { scope: 'repository', path: '.p2p-security-ignore.yaml', reason: 'accepted source vuln' },
+  { scope: 'repository', path: '.p2p-security-ignore.yaml', reason: 'second accepted source vuln', expires: '2026-12-31' },
+]);
+assert.strictEqual(vulnSplit.ignored[0].ignore, undefined);
 assert.strictEqual(vulnSplit.ignored[0].blocking, false);
 
 const secrets = [
@@ -116,7 +129,10 @@ const imageVulnerabilities = [
 const imageVulnSplit = splitImageVulnerabilities(imageVulnerabilities, ignore, 'api');
 assert.deepStrictEqual(imageVulnSplit.ignored.map(v => v.package), ['image-package']);
 assert.deepStrictEqual(imageVulnSplit.active.map(v => v.id), ['CVE-IMAGE', 'CVE-OTHER']);
-assert.deepStrictEqual(imageVulnSplit.ignored[0].ignore, { reason: 'accepted image risk' });
+assert.deepStrictEqual(imageVulnSplit.ignored[0].matchedIgnores, [
+  { scope: 'repository', path: '.p2p-security-ignore.yaml', reason: 'accepted image risk' },
+]);
+assert.strictEqual(imageVulnSplit.ignored[0].ignore, undefined);
 assert.strictEqual(splitImageVulnerabilities(imageVulnerabilities, ignore, 'worker').ignored.length, 0);
 
 const imageSecrets = [
@@ -148,8 +164,129 @@ assert.throws(
 const emptyWorkspace = fs.mkdtempSync(path.join(os.tmpdir(), 'security-ignore-empty-'));
 assert.deepStrictEqual(loadSecurityIgnore(emptyWorkspace), {
   present: false,
+  ignoreFiles: [],
   images: [],
   source: { vulnerabilities: [], secrets: [] },
 });
+
+const scopedWorkspace = fs.mkdtempSync(path.join(os.tmpdir(), 'security-ignore-scoped-'));
+fs.mkdirSync(path.join(scopedWorkspace, 'services', 'api'), { recursive: true });
+fs.writeFileSync(path.join(scopedWorkspace, '.p2p-security-ignore.yaml'), [
+  'version: 1',
+  'images:',
+  '  - name: api',
+  '    vulnerabilities:',
+  '      - id: CVE-APP-IMAGE',
+  '        reason: repository image acceptance',
+  'source:',
+  '  vulnerabilities:',
+  '    - id: CVE-SCOPED',
+  '      reason: repository scoped acceptance',
+  '    - id: CVE-SCOPED',
+  '      reason: expired repository scoped acceptance',
+  '      expires: 2020-01-01',
+  '',
+].join('\n'));
+fs.writeFileSync(path.join(scopedWorkspace, 'services', 'api', '.p2p-security-ignore.yaml'), [
+  'version: 1',
+  'images:',
+  '  - name: api',
+  '    vulnerabilities:',
+  '      - id: CVE-APP-IMAGE',
+  '        reason: application image acceptance',
+  'source:',
+  '  vulnerabilities:',
+  '    - id: CVE-SCOPED',
+  '      reason: application scoped acceptance',
+  '    - id: CVE-SCOPED',
+  '      reason: second application scoped acceptance',
+  '  secrets: []',
+  '',
+].join('\n'));
+const scopedIgnore = loadSourceSecurityIgnore(scopedWorkspace, 'services/api');
+assert.deepStrictEqual(scopedIgnore.ignoreFiles, [
+  { scope: 'application', path: 'services/api/.p2p-security-ignore.yaml' },
+  { scope: 'repository', path: '.p2p-security-ignore.yaml' },
+]);
+assert.deepStrictEqual(
+  splitSourceVulnerabilities([{ id: 'CVE-SCOPED', package: 'pkg', source: 'services/api/package-lock.json', blocking: true }], scopedIgnore)
+    .ignored[0]
+    .matchedIgnores,
+  [
+    { scope: 'application', path: 'services/api/.p2p-security-ignore.yaml', reason: 'application scoped acceptance' },
+    { scope: 'application', path: 'services/api/.p2p-security-ignore.yaml', reason: 'second application scoped acceptance' },
+    { scope: 'repository', path: '.p2p-security-ignore.yaml', reason: 'repository scoped acceptance' },
+  ],
+);
+assert.deepStrictEqual(
+  splitImageVulnerabilities([{ id: 'CVE-APP-IMAGE', package: 'pkg', blocking: true }], scopedIgnore, 'api')
+    .ignored[0]
+    .matchedIgnores,
+  [
+    { scope: 'application', path: 'services/api/.p2p-security-ignore.yaml', reason: 'application image acceptance' },
+    { scope: 'repository', path: '.p2p-security-ignore.yaml', reason: 'repository image acceptance' },
+  ],
+);
+assert.deepStrictEqual(loadSourceSecurityIgnore(scopedWorkspace, '').ignoreFiles, [
+  { scope: 'repository', path: '.p2p-security-ignore.yaml' },
+]);
+assert.deepStrictEqual(loadSourceSecurityIgnore(scopedWorkspace, '.').ignoreFiles, [
+  { scope: 'repository', path: '.p2p-security-ignore.yaml' },
+]);
+fs.symlinkSync(scopedWorkspace, path.join(scopedWorkspace, 'root-link'), 'dir');
+const rootSymlinkIgnore = loadSourceSecurityIgnore(scopedWorkspace, 'root-link');
+assert.deepStrictEqual(rootSymlinkIgnore.ignoreFiles, [
+  { scope: 'repository', path: '.p2p-security-ignore.yaml' },
+]);
+assert.deepStrictEqual(
+  splitSourceVulnerabilities([{ id: 'CVE-SCOPED', package: 'pkg', source: 'package-lock.json', blocking: true }], rootSymlinkIgnore)
+    .ignored[0]
+    .matchedIgnores,
+  [
+    { scope: 'repository', path: '.p2p-security-ignore.yaml', reason: 'repository scoped acceptance' },
+  ],
+);
+assert.throws(
+  () => loadSourceSecurityIgnore(scopedWorkspace, '/tmp/app'),
+  /working-directory must be repository-relative/,
+);
+assert.throws(
+  () => loadSourceSecurityIgnore(scopedWorkspace, '../outside'),
+  /working-directory must stay within the repository/,
+);
+const outsideWorkspace = fs.mkdtempSync(path.join(os.tmpdir(), 'security-ignore-outside-'));
+fs.writeFileSync(path.join(outsideWorkspace, '.p2p-security-ignore.yaml'), 'not: valid: yaml\n');
+fs.symlinkSync(outsideWorkspace, path.join(scopedWorkspace, 'linked-outside'), 'dir');
+assert.throws(
+  () => loadSourceSecurityIgnore(scopedWorkspace, 'linked-outside'),
+  /working-directory must stay within the repository/,
+);
+fs.mkdirSync(path.join(scopedWorkspace, 'services', 'web'), { recursive: true });
+fs.symlinkSync(
+  path.join(outsideWorkspace, '.p2p-security-ignore.yaml'),
+  path.join(scopedWorkspace, 'services', 'web', '.p2p-security-ignore.yaml'),
+);
+assert.throws(
+  () => loadSourceSecurityIgnore(scopedWorkspace, 'services/web'),
+  /application ignore file must stay within the repository/,
+);
+assert.throws(
+  () => loadSourceSecurityIgnore(scopedWorkspace, 'missing-app'),
+  /working-directory does not exist: missing-app/,
+);
+assert.deepStrictEqual(loadSourceSecurityIgnore('', ''), {
+  present: false,
+  ignoreFiles: [],
+  images: [],
+  source: { vulnerabilities: [], secrets: [] },
+});
+assert.throws(
+  () => loadSourceSecurityIgnore('', 'services/api'),
+  /GITHUB_WORKSPACE is required when working-directory is not repository root/,
+);
+assert.throws(
+  () => loadImageSecurityIgnore('', 'services/api'),
+  /GITHUB_WORKSPACE is required when working-directory is not repository root/,
+);
 
 console.log('security ignore helper fixtures passed');

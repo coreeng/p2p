@@ -23,6 +23,18 @@ async function runReport() {
     '      paths:',
     '        - package-lock.json',
     '      expires: 2026-09-01',
+    '    - id: CVE-2026-0001',
+    '      reason: Secondary source acceptance.',
+    '      package: dev-only-tool',
+    '      paths:',
+    '        - package-lock.json',
+    '      expires: 2026-11-01',
+    '    - id: CVE-2026-0001',
+    '      reason: Expired source acceptance.',
+    '      package: dev-only-tool',
+    '      paths:',
+    '        - package-lock.json',
+    '      expires: 2020-01-01',
     '  secrets:',
     '    - id: source-secret-1',
     '      reason: Rotated credential retained until history rewrite.',
@@ -201,7 +213,11 @@ async function runReportWithoutIgnoreFile() {
   };
 
   await buildSourceSecurityReport({ core: sandbox.core, env: sandbox.process.env });
-  return { outputs, summary };
+  return {
+    outputs,
+    summary,
+    normalized: JSON.parse(fs.readFileSync(outputs['json-file'], 'utf8')),
+  };
 }
 
 async function runReportWithScannerWarning() {
@@ -437,6 +453,238 @@ async function runAllIgnoredReport() {
   };
 }
 
+async function runApplicationScopedReport(appName = 'not-used-for-ignore-selection') {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'source-app-ignore-'));
+  const root = path.join(tmp, 'source-security');
+  const workspace = path.join(tmp, 'repo');
+  fs.mkdirSync(path.join(root, 'trivy'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'trufflehog'), { recursive: true });
+  fs.mkdirSync(path.join(workspace, 'services', 'api'), { recursive: true });
+  fs.writeFileSync(path.join(workspace, '.p2p-security-ignore.yaml'), [
+    'version: 1',
+    'source:',
+    '  vulnerabilities:',
+    '    - id: CVE-BOTH-SCOPES',
+    '      reason: Repository source acceptance.',
+    '    - id: CVE-REPOSITORY-ONLY',
+    '      reason: Repository fallback acceptance.',
+    '    - id: CVE-APP-EXPIRED-REPO-VALID',
+    '      reason: Repository acceptance remains after application expiry.',
+    '  secrets:',
+    '    - id: secret-both-scopes',
+    '      reason: Repository secret acceptance.',
+    '',
+  ].join('\n'));
+  fs.writeFileSync(path.join(workspace, 'services', 'api', '.p2p-security-ignore.yaml'), [
+    'version: 1',
+    'source:',
+    '  vulnerabilities:',
+    '    - id: CVE-BOTH-SCOPES',
+    '      reason: Application source acceptance.',
+    '    - id: CVE-BOTH-SCOPES',
+    '      reason: Second application source acceptance.',
+    '    - id: CVE-APP-EXPIRED',
+    '      reason: Expired application source acceptance.',
+    '      expires: 2020-01-01',
+    '    - id: CVE-APP-EXPIRED-REPO-VALID',
+    '      reason: Expired application source acceptance with repository fallback.',
+    '      expires: 2020-01-01',
+    '  secrets:',
+    '    - id: secret-both-scopes',
+    '      reason: Application secret acceptance.',
+    '    - id: secret-app-expired',
+    '      reason: Expired application secret acceptance.',
+    '      expires: 2020-01-01',
+    '',
+  ].join('\n'));
+  fs.writeFileSync(path.join(root, 'trivy', 'trivy-fs.json'), JSON.stringify({
+    Results: [
+      {
+        Target: 'package-lock.json',
+        Vulnerabilities: [
+          { VulnerabilityID: 'CVE-BOTH-SCOPES', PkgName: 'root-package', Severity: 'CRITICAL', PrimaryURL: 'https://example.test/CVE-BOTH-SCOPES' },
+        ],
+      },
+      {
+        Target: 'services/api/package-lock.json',
+        Vulnerabilities: [
+          { VulnerabilityID: 'CVE-APP-EXPIRED', PkgName: 'app-package', Severity: 'CRITICAL', PrimaryURL: 'https://example.test/CVE-APP-EXPIRED' },
+          { VulnerabilityID: 'CVE-APP-EXPIRED-REPO-VALID', PkgName: 'fallback-package', Severity: 'CRITICAL', PrimaryURL: 'https://example.test/CVE-APP-EXPIRED-REPO-VALID' },
+          { VulnerabilityID: 'CVE-REPOSITORY-ONLY', PkgName: 'repo-package', Severity: 'HIGH', PrimaryURL: 'https://example.test/CVE-REPOSITORY-ONLY' },
+        ],
+      },
+    ],
+  }));
+  fs.writeFileSync(path.join(root, 'trufflehog', 'findings.ndjson'), [
+    JSON.stringify({ id: 'secret-both-scopes', detector: 'Github', status: 'verified', file: 'docs/root.env', line: 1, commit: 'abcdef1234567890', url: 'https://example.test/blob/abcdef/docs/root.env#L1' }),
+    JSON.stringify({ id: 'secret-app-expired', detector: 'Slack', status: 'verified', file: 'services/api/.env', line: 2, commit: 'abcdef1234567890', url: 'https://example.test/blob/abcdef/services/api/.env#L2' }),
+  ].join('\n') + '\n');
+
+  const outputs = {};
+  const failures = [];
+  await buildSourceSecurityReport({
+    env: {
+      ROOT: root,
+      GITHUB_WORKSPACE: workspace,
+      WORKING_DIRECTORY: 'services/api',
+      APP_NAME: appName,
+      DRY_RUN: 'false',
+      BLOCKING_SEVERITY: 'high',
+      SCOPE: 'changes',
+      BASE: 'base-sha',
+      SECRET_SCAN_RESULT: 'success',
+      SCA_SCAN_RESULT: 'success',
+      P2P_SECURITY_IGNORE_HELPER: helperPath,
+      GITHUB_SERVER_URL: 'https://github.example',
+      GITHUB_REPOSITORY: 'org/repo',
+      GITHUB_RUN_ID: '42',
+    },
+    core: {
+      setOutput: (key, value) => { outputs[key] = value; },
+      setFailed: (message) => { failures.push(message); },
+      info: () => {},
+      warning: () => {},
+      summary: {
+        addRaw() {
+          return this;
+        },
+        write() {
+          return Promise.resolve();
+        },
+      },
+    },
+  });
+  return {
+    outputs,
+    failures,
+    normalized: JSON.parse(fs.readFileSync(outputs['json-file'], 'utf8')),
+  };
+}
+
+async function runApplicationIgnoreFileWithoutSourceEntries() {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'source-app-ignore-empty-source-'));
+  const root = path.join(tmp, 'source-security');
+  const workspace = path.join(tmp, 'repo');
+  fs.mkdirSync(path.join(root, 'trivy'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'trufflehog'), { recursive: true });
+  fs.mkdirSync(path.join(workspace, 'services', 'api'), { recursive: true });
+  fs.writeFileSync(path.join(workspace, '.p2p-security-ignore.yaml'), 'version: 1\nsource: {}\n');
+  fs.writeFileSync(path.join(workspace, 'services', 'api', '.p2p-security-ignore.yaml'), [
+    'version: 1',
+    'images:',
+    '  - name: api',
+    '    vulnerabilities:',
+    '      - id: CVE-IMAGE-ONLY',
+    '        reason: Image-only application acceptance.',
+    '',
+  ].join('\n'));
+  fs.writeFileSync(path.join(root, 'trivy', 'trivy-fs.json'), JSON.stringify({ Results: [] }));
+  fs.writeFileSync(path.join(root, 'trufflehog', 'findings.ndjson'), '');
+
+  const outputs = {};
+  await buildSourceSecurityReport({
+    env: {
+      ROOT: root,
+      GITHUB_WORKSPACE: workspace,
+      WORKING_DIRECTORY: 'services/api',
+      DRY_RUN: 'false',
+      BLOCKING_SEVERITY: 'high',
+      SCOPE: 'changes',
+      BASE: 'base-sha',
+      SECRET_SCAN_RESULT: 'success',
+      SCA_SCAN_RESULT: 'success',
+      P2P_SECURITY_IGNORE_HELPER: helperPath,
+      GITHUB_SERVER_URL: 'https://github.example',
+      GITHUB_REPOSITORY: 'org/repo',
+      GITHUB_RUN_ID: '42',
+    },
+    core: {
+      setOutput: (key, value) => { outputs[key] = value; },
+      setFailed: () => {},
+      info: () => {},
+      warning: () => {},
+      summary: {
+        addRaw() {
+          return this;
+        },
+        write() {
+          return Promise.resolve();
+        },
+      },
+    },
+  });
+  return JSON.parse(fs.readFileSync(outputs['json-file'], 'utf8'));
+}
+
+async function runApplicationOnlyScopedReport() {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'source-app-only-ignore-'));
+  const root = path.join(tmp, 'source-security');
+  const workspace = path.join(tmp, 'repo');
+  fs.mkdirSync(path.join(root, 'trivy'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'trufflehog'), { recursive: true });
+  fs.mkdirSync(path.join(workspace, 'services', 'api'), { recursive: true });
+  fs.writeFileSync(path.join(workspace, 'services', 'api', '.p2p-security-ignore.yaml'), [
+    'version: 1',
+    'source:',
+    '  vulnerabilities:',
+    '    - id: CVE-APP-ONLY',
+    '      reason: Application-only source acceptance.',
+    '      paths:',
+    '        - services/api/package-lock.json',
+    '',
+  ].join('\n'));
+  fs.writeFileSync(path.join(root, 'trivy', 'trivy-fs.json'), JSON.stringify({
+    Results: [
+      {
+        Target: 'services/api/package-lock.json',
+        Vulnerabilities: [
+          { VulnerabilityID: 'CVE-APP-ONLY', PkgName: 'app-only-package', Severity: 'CRITICAL', PrimaryURL: 'https://example.test/CVE-APP-ONLY' },
+        ],
+      },
+    ],
+  }));
+  fs.writeFileSync(path.join(root, 'trufflehog', 'findings.ndjson'), '');
+
+  const outputs = {};
+  const failures = [];
+  await buildSourceSecurityReport({
+    env: {
+      ROOT: root,
+      GITHUB_WORKSPACE: workspace,
+      WORKING_DIRECTORY: 'services/api',
+      DRY_RUN: 'false',
+      BLOCKING_SEVERITY: 'high',
+      SCOPE: 'changes',
+      BASE: 'base-sha',
+      SECRET_SCAN_RESULT: 'success',
+      SCA_SCAN_RESULT: 'success',
+      P2P_SECURITY_IGNORE_HELPER: helperPath,
+      GITHUB_SERVER_URL: 'https://github.example',
+      GITHUB_REPOSITORY: 'org/repo',
+      GITHUB_RUN_ID: '42',
+    },
+    core: {
+      setOutput: (key, value) => { outputs[key] = value; },
+      setFailed: (message) => { failures.push(message); },
+      info: () => {},
+      warning: () => {},
+      summary: {
+        addRaw() {
+          return this;
+        },
+        write() {
+          return Promise.resolve();
+        },
+      },
+    },
+  });
+  return {
+    outputs,
+    failures,
+    normalized: JSON.parse(fs.readFileSync(outputs['json-file'], 'utf8')),
+  };
+}
+
 async function runReportWithMatcherEdgeCases() {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'source-ignore-matcher-'));
   const root = path.join(tmp, 'source-security');
@@ -596,7 +844,7 @@ async function runOffModeVerifiedSecretReport() {
   };
 }
 
-async function runReportWithInvalidIgnoreFile(ignoreFile) {
+async function runReportWithInvalidIgnoreFile(ignoreFile, dryRun = false) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'source-invalid-ignore-'));
   const root = path.join(tmp, 'source-security');
   const workspace = path.join(tmp, 'repo');
@@ -612,7 +860,7 @@ async function runReportWithInvalidIgnoreFile(ignoreFile) {
       env: {
         ROOT: root,
         GITHUB_WORKSPACE: workspace,
-        DRY_RUN: 'false',
+        DRY_RUN: dryRun ? 'true' : 'false',
         BLOCKING_SEVERITY: 'high',
         SCOPE: 'changes',
         BASE: 'base-sha',
@@ -641,6 +889,94 @@ async function runReportWithInvalidIgnoreFile(ignoreFile) {
   };
 
   await buildSourceSecurityReport({ core: sandbox.core, env: sandbox.process.env });
+}
+
+async function runReportWithInvalidApplicationIgnoreFile(ignoreFile, dryRun = false) {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'source-invalid-app-ignore-'));
+  const root = path.join(tmp, 'source-security');
+  const workspace = path.join(tmp, 'repo');
+  fs.mkdirSync(path.join(root, 'trivy'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'trufflehog'), { recursive: true });
+  fs.mkdirSync(path.join(workspace, 'services', 'api'), { recursive: true });
+  fs.writeFileSync(path.join(workspace, '.p2p-security-ignore.yaml'), 'version: 1\nsource: {}\n');
+  fs.writeFileSync(path.join(workspace, 'services', 'api', '.p2p-security-ignore.yaml'), ignoreFile);
+  fs.writeFileSync(path.join(root, 'trivy', 'trivy-fs.json'), JSON.stringify({ Results: [] }));
+  fs.writeFileSync(path.join(root, 'trufflehog', 'findings.ndjson'), '');
+
+  await buildSourceSecurityReport({
+    env: {
+      ROOT: root,
+      GITHUB_WORKSPACE: workspace,
+      WORKING_DIRECTORY: 'services/api',
+      DRY_RUN: dryRun ? 'true' : 'false',
+      BLOCKING_SEVERITY: 'high',
+      SCOPE: 'changes',
+      BASE: 'base-sha',
+      SECRET_SCAN_RESULT: 'success',
+      SCA_SCAN_RESULT: 'success',
+      P2P_SECURITY_IGNORE_HELPER: helperPath,
+      GITHUB_SERVER_URL: 'https://github.example',
+      GITHUB_REPOSITORY: 'org/repo',
+      GITHUB_RUN_ID: '42',
+    },
+    core: {
+      setOutput: () => {},
+      setFailed: () => {},
+      info: () => {},
+      warning: () => {},
+      summary: {
+        addRaw() {
+          return this;
+        },
+        write() {
+          return Promise.resolve();
+        },
+      },
+    },
+  });
+}
+
+async function runReportWithWorkingDirectory(workingDirectory) {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'source-invalid-working-dir-'));
+  const root = path.join(tmp, 'source-security');
+  const workspace = path.join(tmp, 'repo');
+  fs.mkdirSync(path.join(root, 'trivy'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'trufflehog'), { recursive: true });
+  fs.mkdirSync(workspace, { recursive: true });
+  fs.writeFileSync(path.join(root, 'trivy', 'trivy-fs.json'), JSON.stringify({ Results: [] }));
+  fs.writeFileSync(path.join(root, 'trufflehog', 'findings.ndjson'), '');
+
+  await buildSourceSecurityReport({
+    env: {
+      ROOT: root,
+      GITHUB_WORKSPACE: workspace,
+      WORKING_DIRECTORY: workingDirectory,
+      DRY_RUN: 'true',
+      BLOCKING_SEVERITY: 'high',
+      SCOPE: 'changes',
+      BASE: 'base-sha',
+      SECRET_SCAN_RESULT: 'success',
+      SCA_SCAN_RESULT: 'success',
+      P2P_SECURITY_IGNORE_HELPER: helperPath,
+      GITHUB_SERVER_URL: 'https://github.example',
+      GITHUB_REPOSITORY: 'org/repo',
+      GITHUB_RUN_ID: '42',
+    },
+    core: {
+      setOutput: () => {},
+      setFailed: () => {},
+      info: () => {},
+      warning: () => {},
+      summary: {
+        addRaw() {
+          return this;
+        },
+        write() {
+          return Promise.resolve();
+        },
+      },
+    },
+  });
 }
 
 async function runReportWithCorruptTruffleHogOutput() {
@@ -788,26 +1124,47 @@ async function runReportWithMissingTruffleHogOutput() {
   assert.strictEqual(result.outputs['secret-blocking'], 0);
   assert.deepStrictEqual(result.normalized.vulnerabilities.map(v => v.id), ['CVE-2026-0002', 'GHSA-xxjr-mmjv-4gpg']);
   assert.deepStrictEqual(result.normalized.secrets.map(s => s.id), ['source-secret-2']);
+  assert.deepStrictEqual(result.normalized.ignoreFiles, [{ scope: 'repository', path: '.p2p-security-ignore.yaml' }]);
   assert.deepStrictEqual(result.normalized.ignored.vulnerabilities.map(v => ({
     id: v.id,
-    reason: v.ignore.reason,
-    expires: v.ignore.expires,
+    matchedIgnores: v.matchedIgnores,
+    ignore: v.ignore,
   })), [
     {
       id: 'CVE-2026-0001',
-      reason: 'Dev-only dependency is unreachable.',
-      expires: '2026-09-01',
+      matchedIgnores: [
+        {
+          scope: 'repository',
+          path: '.p2p-security-ignore.yaml',
+          reason: 'Dev-only dependency is unreachable.',
+          expires: '2026-09-01',
+        },
+        {
+          scope: 'repository',
+          path: '.p2p-security-ignore.yaml',
+          reason: 'Secondary source acceptance.',
+          expires: '2026-11-01',
+        },
+      ],
+      ignore: undefined,
     },
   ]);
   assert.deepStrictEqual(result.normalized.ignored.secrets.map(s => ({
     id: s.id,
-    reason: s.ignore.reason,
-    expires: s.ignore.expires,
+    matchedIgnores: s.matchedIgnores,
+    ignore: s.ignore,
   })), [
     {
       id: 'source-secret-1',
-      reason: 'Rotated credential retained until history rewrite.',
-      expires: '2026-10-01',
+      matchedIgnores: [
+        {
+          scope: 'repository',
+          path: '.p2p-security-ignore.yaml',
+          reason: 'Rotated credential retained until history rewrite.',
+          expires: '2026-10-01',
+        },
+      ],
+      ignore: undefined,
     },
   ]);
   assert(!result.summary.includes('### Ignored source findings'));
@@ -826,6 +1183,7 @@ async function runReportWithMissingTruffleHogOutput() {
   assert.strictEqual(noIgnore.outputs['vulnerability-blocking'], 1);
   assert(!noIgnore.summary.includes('**Ignored:**'));
   assert(!noIgnore.summary.includes('### Ignored source findings'));
+  assert.deepStrictEqual(noIgnore.normalized.ignoreFiles, []);
 
   const unsafeMarkdown = await runUnsafeMarkdownReport();
   assert(!unsafeMarkdown.summary.includes('javascript:alert(1)'));
@@ -859,6 +1217,86 @@ async function runReportWithMissingTruffleHogOutput() {
   assert(!allIgnored.summary.includes('Accepted source vulnerability.'));
   assert(!allIgnored.summary.includes('Accepted source secret.'));
   assert(!allIgnored.summary.includes('_No source security findings detected._'));
+
+  const applicationScoped = await runApplicationScopedReport();
+  assert.deepStrictEqual(applicationScoped.failures, []);
+  assert.deepStrictEqual(applicationScoped.normalized.ignoreFiles, [
+    { scope: 'application', path: 'services/api/.p2p-security-ignore.yaml' },
+    { scope: 'repository', path: '.p2p-security-ignore.yaml' },
+  ]);
+  assert.deepStrictEqual(applicationScoped.normalized.vulnerabilities.map(v => v.id), ['CVE-APP-EXPIRED']);
+  assert.deepStrictEqual(applicationScoped.normalized.secrets.map(s => s.id), ['secret-app-expired']);
+  assert.deepStrictEqual(applicationScoped.normalized.ignored.vulnerabilities.map(v => ({
+    id: v.id,
+    source: v.source,
+    matchedIgnores: v.matchedIgnores,
+  })), [
+    {
+      id: 'CVE-APP-EXPIRED-REPO-VALID',
+      source: 'services/api/package-lock.json',
+      matchedIgnores: [
+        { scope: 'repository', path: '.p2p-security-ignore.yaml', reason: 'Repository acceptance remains after application expiry.' },
+      ],
+    },
+    {
+      id: 'CVE-BOTH-SCOPES',
+      source: 'package-lock.json',
+      matchedIgnores: [
+        { scope: 'application', path: 'services/api/.p2p-security-ignore.yaml', reason: 'Application source acceptance.' },
+        { scope: 'application', path: 'services/api/.p2p-security-ignore.yaml', reason: 'Second application source acceptance.' },
+        { scope: 'repository', path: '.p2p-security-ignore.yaml', reason: 'Repository source acceptance.' },
+      ],
+    },
+    {
+      id: 'CVE-REPOSITORY-ONLY',
+      source: 'services/api/package-lock.json',
+      matchedIgnores: [
+        { scope: 'repository', path: '.p2p-security-ignore.yaml', reason: 'Repository fallback acceptance.' },
+      ],
+    },
+  ]);
+  assert.deepStrictEqual(applicationScoped.normalized.ignored.secrets.map(s => ({
+    id: s.id,
+    matchedIgnores: s.matchedIgnores,
+  })), [
+    {
+      id: 'secret-both-scopes',
+      matchedIgnores: [
+        { scope: 'application', path: 'services/api/.p2p-security-ignore.yaml', reason: 'Application secret acceptance.' },
+        { scope: 'repository', path: '.p2p-security-ignore.yaml', reason: 'Repository secret acceptance.' },
+      ],
+    },
+  ]);
+
+  const applicationScopedWithRenamedApp = await runApplicationScopedReport('renamed-application');
+  assert.deepStrictEqual(applicationScopedWithRenamedApp.failures, []);
+  assert.deepStrictEqual(applicationScopedWithRenamedApp.normalized, applicationScoped.normalized);
+
+  const applicationIgnoreWithoutSourceEntries = await runApplicationIgnoreFileWithoutSourceEntries();
+  assert.deepStrictEqual(applicationIgnoreWithoutSourceEntries.ignoreFiles, [
+    { scope: 'application', path: 'services/api/.p2p-security-ignore.yaml' },
+    { scope: 'repository', path: '.p2p-security-ignore.yaml' },
+  ]);
+
+  const applicationOnlyScoped = await runApplicationOnlyScopedReport();
+  assert.deepStrictEqual(applicationOnlyScoped.failures, []);
+  assert.deepStrictEqual(applicationOnlyScoped.normalized.ignoreFiles, [
+    { scope: 'application', path: 'services/api/.p2p-security-ignore.yaml' },
+  ]);
+  assert.deepStrictEqual(applicationOnlyScoped.normalized.vulnerabilities, []);
+  assert.deepStrictEqual(applicationOnlyScoped.normalized.ignored.vulnerabilities.map(v => ({
+    id: v.id,
+    source: v.source,
+    matchedIgnores: v.matchedIgnores,
+  })), [
+    {
+      id: 'CVE-APP-ONLY',
+      source: 'services/api/package-lock.json',
+      matchedIgnores: [
+        { scope: 'application', path: 'services/api/.p2p-security-ignore.yaml', reason: 'Application-only source acceptance.' },
+      ],
+    },
+  ]);
 
   const matcherEdges = await runReportWithMatcherEdgeCases();
   assert.deepStrictEqual(matcherEdges.failures, []);
@@ -906,13 +1344,39 @@ async function runReportWithMissingTruffleHogOutput() {
     ['invalid image vulnerability shape', 'version: 1\nimages:\n  - name: api\n    vulnerabilities:\n      id: CVE-2026-IMAGE\n', 'images[0].vulnerabilities must be a list'],
     ['invalid image vulnerability entry', 'version: 1\nimages:\n  - name: api\n    vulnerabilities:\n      - id: CVE-2026-IMAGE\n        paths:\n          - package-lock.json\n        reason: image accepted risk\n', 'images[0].vulnerabilities[0] has unsupported field: paths'],
     ['invalid image secret entry', 'version: 1\nimages:\n  - name: api\n    secrets:\n      - id: image-secret-1\n        expires: 2026-09-01\n', 'images[0].secrets[0].reason must be a non-empty string'],
+    ['license ignore remains unsupported', 'version: 1\nsource:\n  licenses:\n    - id: GPL-3.0\n      reason: no license ignores\n', 'source has unsupported field: licenses'],
   ]) {
     await assert.rejects(
       () => runReportWithInvalidIgnoreFile(ignoreFile),
       error => error.message.includes(expected),
       name,
     );
+    await assert.rejects(
+      () => runReportWithInvalidIgnoreFile(ignoreFile, true),
+      error => error.message.includes(expected),
+      `${name} dry-run`,
+    );
   }
+  await assert.rejects(
+    () => runReportWithInvalidApplicationIgnoreFile('version: 1\nsource:\n  vulnerabilities:\n    - id: CVE-APP\n', false),
+    error => error.message.includes('source.vulnerabilities[0].reason must be a non-empty string'),
+  );
+  await assert.rejects(
+    () => runReportWithInvalidApplicationIgnoreFile('version: 1\nsource:\n  vulnerabilities:\n    - id: CVE-APP\n', true),
+    error => error.message.includes('source.vulnerabilities[0].reason must be a non-empty string'),
+  );
+  await assert.rejects(
+    () => runReportWithWorkingDirectory('/tmp/app'),
+    error => error.message.includes('working-directory must be repository-relative'),
+  );
+  await assert.rejects(
+    () => runReportWithWorkingDirectory('../outside'),
+    error => error.message.includes('working-directory must stay within the repository'),
+  );
+  await assert.rejects(
+    () => runReportWithWorkingDirectory('services/missing'),
+    error => error.message.includes('working-directory does not exist: services/missing'),
+  );
   await assert.rejects(
     () => runReportWithCorruptTruffleHogOutput(),
     error => error.message.includes('Failed to process TruffleHog source report'),

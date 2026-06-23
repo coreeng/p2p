@@ -56,6 +56,14 @@ async function runReport() {
     '        package: openssl',
     '        expires: 2026-09-01',
     '      - id: CVE-2026-IMAGE-1',
+    '        reason: Secondary image package acceptance.',
+    '        package: openssl',
+    '        expires: 2026-11-01',
+    '      - id: CVE-2026-IMAGE-1',
+    '        reason: Expired image package acceptance.',
+    '        package: openssl',
+    '        expires: 2020-01-01',
+    '      - id: CVE-2026-IMAGE-1',
     '        reason: Related SSL package is accepted separately.',
     '        package: libssl',
     '        expires: 2026-10-01',
@@ -643,6 +651,271 @@ async function runZeroScanTargetReport() {
   });
 }
 
+async function runSkippedImageReportWithInvalidIgnoreFile(ignoreFile) {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'image-invalid-ignore-'));
+  const workspace = path.join(tmp, 'repo');
+  const trivyDir = path.join(tmp, 'trivy');
+  const secretDir = path.join(tmp, 'trufflehog-image');
+  fs.mkdirSync(workspace, { recursive: true });
+  fs.mkdirSync(trivyDir, { recursive: true });
+  fs.mkdirSync(secretDir, { recursive: true });
+  fs.writeFileSync(path.join(workspace, '.p2p-security-ignore.yaml'), ignoreFile);
+  const reportList = path.join(trivyDir, 'reports.txt');
+  const secretList = path.join(secretDir, 'reports.txt');
+  fs.writeFileSync(reportList, '');
+  fs.writeFileSync(secretList, '');
+
+  return runReportModule({
+    RUNNER_TEMP: tmp,
+    GITHUB_WORKSPACE: workspace,
+    REPORT_LIST: reportList,
+    SECRET_REPORT_LIST: secretList,
+    SCAN_TARGET_COUNT: '0',
+    BLOCKING_SEVERITY: 'high',
+    PIPELINE_STAGE: 'prod',
+    GITHUB_ENV_INPUT: 'gcp-prod',
+    VERSION: '1.2.3',
+    P2P_SECURITY_IGNORE_HELPER: helperPath,
+    GITHUB_SERVER_URL: 'https://github.example',
+    GITHUB_REPOSITORY: 'org/repo',
+    GITHUB_RUN_ID: '42',
+  });
+}
+
+async function runApplicationScopedImageReport(appName = 'api') {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'image-app-ignore-'));
+  const workspace = path.join(tmp, 'repo');
+  const trivyDir = path.join(tmp, 'trivy');
+  const secretDir = path.join(tmp, 'trufflehog-image');
+  fs.mkdirSync(path.join(workspace, 'services', 'api'), { recursive: true });
+  fs.mkdirSync(trivyDir, { recursive: true });
+  fs.mkdirSync(secretDir, { recursive: true });
+  fs.writeFileSync(path.join(workspace, '.p2p-security-ignore.yaml'), [
+    'version: 1',
+    'images:',
+    '  - name: services/api',
+    '    vulnerabilities:',
+    '      - id: CVE-BOTH-SCOPES',
+    '        reason: Repository image acceptance.',
+    '        package: openssl',
+    '      - id: CVE-APP-EXPIRED-REPO-VALID',
+    '        reason: Repository fallback after application expiry.',
+    '        package: zlib',
+    '    secrets:',
+    `      - id: ${secretId('image-secret-both-scopes')}`,
+    '        reason: Repository image secret acceptance.',
+    '        path: /app/both.env',
+    '  - name: services/worker',
+    '    vulnerabilities:',
+    '      - id: CVE-WORKER-ONLY',
+    '        reason: Repository worker acceptance must not match api.',
+    '',
+  ].join('\n'));
+  fs.writeFileSync(path.join(workspace, 'services', 'api', '.p2p-security-ignore.yaml'), [
+    'version: 1',
+    'images:',
+    '  - name: services/worker',
+    '    vulnerabilities:',
+    '      - id: CVE-BOTH-SCOPES',
+    '        reason: Application worker acceptance must not match api.',
+    '        package: openssl',
+    '  - name: services/api',
+    '    vulnerabilities:',
+    '      - id: CVE-BOTH-SCOPES',
+    '        reason: Application image acceptance.',
+    '        package: openssl',
+    '      - id: CVE-BOTH-SCOPES',
+    '        reason: Second application image acceptance.',
+    '        package: openssl',
+    '      - id: CVE-APP-EXPIRED',
+    '        reason: Expired application image acceptance.',
+    '        package: curl',
+    '        expires: 2020-01-01',
+    '      - id: CVE-APP-EXPIRED-REPO-VALID',
+    '        reason: Expired application fallback acceptance.',
+    '        package: zlib',
+    '        expires: 2020-01-01',
+    '      - id: CVE-APP-ONLY',
+    '        reason: Application-only image acceptance.',
+    '        package: zzapp',
+    '    secrets:',
+    `      - id: ${secretId('image-secret-both-scopes')}`,
+    '        reason: Application image secret acceptance.',
+    '        path: /app/both.env',
+    `      - id: ${secretId('image-secret-app-only')}`,
+    '        reason: Application-only image secret acceptance.',
+    '        path: /app/app-only.env',
+    `      - id: ${secretId('image-secret-expired')}`,
+    '        reason: Expired application image secret acceptance.',
+    '        path: /app/expired.env',
+    '        expires: 2020-01-01',
+    '',
+  ].join('\n'));
+
+  const vulnReport = path.join(trivyDir, 'api.json');
+  fs.writeFileSync(vulnReport, JSON.stringify({
+    Results: [
+      {
+        Target: 'api-image (debian)',
+        Vulnerabilities: [
+          { VulnerabilityID: 'CVE-BOTH-SCOPES', PkgName: 'openssl', InstalledVersion: '1.0.0', FixedVersion: '1.0.1', Severity: 'CRITICAL', PrimaryURL: 'https://example.test/CVE-BOTH-SCOPES' },
+          { VulnerabilityID: 'CVE-APP-EXPIRED', PkgName: 'curl', InstalledVersion: '2.0.0', FixedVersion: '2.0.1', Severity: 'CRITICAL', PrimaryURL: 'https://example.test/CVE-APP-EXPIRED' },
+          { VulnerabilityID: 'CVE-APP-EXPIRED-REPO-VALID', PkgName: 'zlib', InstalledVersion: '3.0.0', FixedVersion: '3.0.1', Severity: 'CRITICAL', PrimaryURL: 'https://example.test/CVE-APP-EXPIRED-REPO-VALID' },
+          { VulnerabilityID: 'CVE-APP-ONLY', PkgName: 'zzapp', InstalledVersion: '4.0.0', FixedVersion: '4.0.1', Severity: 'CRITICAL', PrimaryURL: 'https://example.test/CVE-APP-ONLY' },
+        ],
+      },
+    ],
+  }));
+  const reportList = path.join(trivyDir, 'reports.txt');
+  fs.writeFileSync(reportList, [
+    `europe-west2-docker.pkg.dev/project/tenant/prod/prod/services/api:1.2.3\tlinux/amd64\tsha256:api\t${vulnReport}`,
+    '',
+  ].join('\n'));
+
+  const secretReport = path.join(secretDir, 'api.jsonl');
+  fs.writeFileSync(secretReport, [
+    JSON.stringify({
+      DetectorName: 'Github',
+      Verified: true,
+      Raw: 'image-secret-both-scopes',
+      SourceMetadata: { Data: { Docker: { layer: 'sha256:layer1', file: '/app/both.env' } } },
+    }),
+    JSON.stringify({
+      DetectorName: 'Gitlab',
+      Verified: true,
+      Raw: 'image-secret-app-only',
+      SourceMetadata: { Data: { Docker: { layer: 'sha256:layer-app-only', file: '/app/app-only.env' } } },
+    }),
+    JSON.stringify({
+      DetectorName: 'Slack',
+      Verified: true,
+      Raw: 'image-secret-expired',
+      SourceMetadata: { Data: { Docker: { layer: 'sha256:layer2', file: '/app/expired.env' } } },
+    }),
+  ].join('\n') + '\n');
+  const secretList = path.join(secretDir, 'reports.txt');
+  fs.writeFileSync(secretList, [
+    `europe-west2-docker.pkg.dev/project/tenant/prod/prod/services/api:1.2.3\tlinux/amd64\tsha256:api\t${secretReport}`,
+    '',
+  ].join('\n'));
+
+  return runReportModule({
+    RUNNER_TEMP: tmp,
+    GITHUB_WORKSPACE: workspace,
+    WORKING_DIRECTORY: 'services/api',
+    APP_NAME: appName,
+    REPORT_LIST: reportList,
+    SECRET_REPORT_LIST: secretList,
+    BLOCKING_SEVERITY: 'high',
+    PIPELINE_STAGE: 'prod',
+    GITHUB_ENV_INPUT: '',
+    VERSION: '1.2.3',
+    REGION: 'europe-west2',
+    PROJECT_ID: 'project',
+    TENANT_NAME: 'prod',
+    P2P_SECURITY_IGNORE_HELPER: helperPath,
+    GITHUB_SERVER_URL: 'https://github.example',
+    GITHUB_REPOSITORY: 'org/repo',
+    GITHUB_RUN_ID: '42',
+  });
+}
+
+async function runImageReportWithApplicationIgnoreWithoutImageEntries() {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'image-app-ignore-empty-images-'));
+  const workspace = path.join(tmp, 'repo');
+  const trivyDir = path.join(tmp, 'trivy');
+  const secretDir = path.join(tmp, 'trufflehog-image');
+  fs.mkdirSync(path.join(workspace, 'services', 'api'), { recursive: true });
+  fs.mkdirSync(trivyDir, { recursive: true });
+  fs.mkdirSync(secretDir, { recursive: true });
+  fs.writeFileSync(path.join(workspace, '.p2p-security-ignore.yaml'), 'version: 1\nimages: []\n');
+  fs.writeFileSync(path.join(workspace, 'services', 'api', '.p2p-security-ignore.yaml'), 'version: 1\nsource: {}\n');
+  const reportList = path.join(trivyDir, 'reports.txt');
+  const secretList = path.join(secretDir, 'reports.txt');
+  fs.writeFileSync(reportList, '');
+  fs.writeFileSync(secretList, '');
+
+  return runReportModule({
+    RUNNER_TEMP: tmp,
+    GITHUB_WORKSPACE: workspace,
+    WORKING_DIRECTORY: 'services/api',
+    REPORT_LIST: reportList,
+    SECRET_REPORT_LIST: secretList,
+    SCAN_TARGET_COUNT: '0',
+    BLOCKING_SEVERITY: 'high',
+    PIPELINE_STAGE: 'prod',
+    GITHUB_ENV_INPUT: 'gcp-prod',
+    VERSION: '1.2.3',
+    P2P_SECURITY_IGNORE_HELPER: helperPath,
+    GITHUB_SERVER_URL: 'https://github.example',
+    GITHUB_REPOSITORY: 'org/repo',
+    GITHUB_RUN_ID: '42',
+  });
+}
+
+async function runSkippedImageReportWithInvalidApplicationIgnoreFile(ignoreFile) {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'image-invalid-app-ignore-'));
+  const workspace = path.join(tmp, 'repo');
+  const trivyDir = path.join(tmp, 'trivy');
+  const secretDir = path.join(tmp, 'trufflehog-image');
+  fs.mkdirSync(path.join(workspace, 'services', 'api'), { recursive: true });
+  fs.mkdirSync(trivyDir, { recursive: true });
+  fs.mkdirSync(secretDir, { recursive: true });
+  fs.writeFileSync(path.join(workspace, 'services', 'api', '.p2p-security-ignore.yaml'), ignoreFile);
+  const reportList = path.join(trivyDir, 'reports.txt');
+  const secretList = path.join(secretDir, 'reports.txt');
+  fs.writeFileSync(reportList, '');
+  fs.writeFileSync(secretList, '');
+
+  return runReportModule({
+    RUNNER_TEMP: tmp,
+    GITHUB_WORKSPACE: workspace,
+    WORKING_DIRECTORY: 'services/api',
+    REPORT_LIST: reportList,
+    SECRET_REPORT_LIST: secretList,
+    SCAN_TARGET_COUNT: '0',
+    BLOCKING_SEVERITY: 'high',
+    PIPELINE_STAGE: 'prod',
+    GITHUB_ENV_INPUT: 'gcp-prod',
+    VERSION: '1.2.3',
+    P2P_SECURITY_IGNORE_HELPER: helperPath,
+    GITHUB_SERVER_URL: 'https://github.example',
+    GITHUB_REPOSITORY: 'org/repo',
+    GITHUB_RUN_ID: '42',
+  });
+}
+
+async function runImageReportWithWorkingDirectory(workingDirectory) {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'image-working-dir-'));
+  const workspace = path.join(tmp, 'repo');
+  const trivyDir = path.join(tmp, 'trivy');
+  const secretDir = path.join(tmp, 'trufflehog-image');
+  fs.mkdirSync(path.join(workspace, 'services', 'api'), { recursive: true });
+  fs.mkdirSync(trivyDir, { recursive: true });
+  fs.mkdirSync(secretDir, { recursive: true });
+  const reportList = path.join(trivyDir, 'reports.txt');
+  const secretList = path.join(secretDir, 'reports.txt');
+  fs.writeFileSync(reportList, '');
+  fs.writeFileSync(secretList, '');
+
+  return runReportModule({
+    RUNNER_TEMP: tmp,
+    GITHUB_WORKSPACE: workspace,
+    WORKING_DIRECTORY: workingDirectory,
+    REPORT_LIST: reportList,
+    SECRET_REPORT_LIST: secretList,
+    SCAN_TARGET_COUNT: '0',
+    BLOCKING_SEVERITY: 'high',
+    PIPELINE_STAGE: 'prod',
+    GITHUB_ENV_INPUT: 'gcp-prod',
+    VERSION: '1.2.3',
+    P2P_SECURITY_IGNORE_HELPER: helperPath,
+    GITHUB_SERVER_URL: 'https://github.example',
+    GITHUB_REPOSITORY: 'org/repo',
+    GITHUB_RUN_ID: '42',
+  });
+}
+
 (async () => {
   const result = await runReport();
   assert.deepStrictEqual(result.failures, []);
@@ -676,6 +949,7 @@ async function runZeroScanTargetReport() {
       blocking: true,
     },
   ]);
+  assert.deepStrictEqual(result.normalized.ignoreFiles, [{ scope: 'repository', path: '.p2p-security-ignore.yaml' }]);
   assert.deepStrictEqual(result.normalized.ignored.vulnerabilities.map(v => ({
     image: v.image,
     shortName: v.shortName,
@@ -689,8 +963,8 @@ async function runZeroScanTargetReport() {
     source: v.source,
     isBlocking: v.isBlocking,
     fullRef: v.fullRef,
-    reason: v.ignore.reason,
-    expires: v.ignore.expires,
+    matchedIgnores: v.matchedIgnores,
+    ignore: v.ignore,
   })), [
     {
       image: 'tools/prod/api',
@@ -705,8 +979,15 @@ async function runZeroScanTargetReport() {
       source: 'debian',
       isBlocking: false,
       fullRef: 'europe-west2-docker.pkg.dev/project/tenant/prod/prod/tools/prod/api:1.2.3',
-      reason: 'Related SSL package is accepted separately.',
-      expires: '2026-10-01',
+      matchedIgnores: [
+        {
+          scope: 'repository',
+          path: '.p2p-security-ignore.yaml',
+          reason: 'Related SSL package is accepted separately.',
+          expires: '2026-10-01',
+        },
+      ],
+      ignore: undefined,
     },
     {
       image: 'tools/prod/api',
@@ -721,30 +1002,51 @@ async function runZeroScanTargetReport() {
       source: 'debian',
       isBlocking: false,
       fullRef: 'europe-west2-docker.pkg.dev/project/tenant/prod/prod/tools/prod/api:1.2.3',
-      reason: 'Base image package is accepted until upstream fixes it.',
-      expires: '2026-09-01',
+      matchedIgnores: [
+        {
+          scope: 'repository',
+          path: '.p2p-security-ignore.yaml',
+          reason: 'Base image package is accepted until upstream fixes it.',
+          expires: '2026-09-01',
+        },
+        {
+          scope: 'repository',
+          path: '.p2p-security-ignore.yaml',
+          reason: 'Secondary image package acceptance.',
+          expires: '2026-11-01',
+        },
+      ],
+      ignore: undefined,
     },
   ]);
   assert.deepStrictEqual(result.normalized.ignored.secrets.map(s => ({
     image: s.image,
     id: s.id,
     path: s.path,
-    reason: s.ignore.reason,
-    expires: s.ignore.expires,
+    matchedIgnores: s.matchedIgnores,
+    ignore: s.ignore,
     blocking: s.isBlocking,
   })), [
     {
       image: 'tools/prod/api',
       id: secretId('accepted-image-secret-value'),
       path: '/app/accepted.env',
-      reason: 'Synthetic image secret fixture is accepted.',
-      expires: '2026-10-01',
+      matchedIgnores: [
+        {
+          scope: 'repository',
+          path: '.p2p-security-ignore.yaml',
+          reason: 'Synthetic image secret fixture is accepted.',
+          expires: '2026-10-01',
+        },
+      ],
+      ignore: undefined,
       blocking: false,
     },
   ]);
   const normalizedText = JSON.stringify(result.normalized);
   assert(!normalizedText.includes('accepted-image-secret-value'));
   assert(!normalizedText.includes('active-image-secret-value'));
+  assert(!normalizedText.includes('expired-image-secret-value'));
   assert(!result.summary.includes('### Ignored image findings'));
   assert(!result.summary.includes('Base image package is accepted until upstream fixes it.'));
   assert(!result.summary.includes('Synthetic image secret fixture is accepted.'));
@@ -811,6 +1113,7 @@ async function runZeroScanTargetReport() {
   assert.strictEqual(zeroTargets.outputs['secret-blocking-count'], 0);
   assert.deepStrictEqual(zeroTargets.normalized.vulnerabilities, []);
   assert.deepStrictEqual(zeroTargets.normalized.secrets, []);
+  assert.deepStrictEqual(zeroTargets.normalized.ignoreFiles, []);
   assert(zeroTargets.summary.includes('_No scannable container image targets were found._'));
   assert(!zeroTargets.summary.includes('### Scanner output warnings'));
 
@@ -843,7 +1146,8 @@ async function runZeroScanTargetReport() {
     severity: v.severity,
     source: v.source,
     isBlocking: v.isBlocking,
-    reason: v.ignore.reason,
+    matchedIgnores: v.matchedIgnores,
+    ignore: v.ignore,
   })), [
     {
       image: 'services/api',
@@ -856,27 +1160,144 @@ async function runZeroScanTargetReport() {
       severity: 'CRITICAL',
       source: 'debian',
       isBlocking: false,
-      reason: 'Accepted off-mode image vulnerability.',
+      matchedIgnores: [
+        { scope: 'repository', path: '.p2p-security-ignore.yaml', reason: 'Accepted off-mode image vulnerability.' },
+      ],
+      ignore: undefined,
     },
   ]);
   assert.deepStrictEqual(offMode.normalized.ignored.secrets.map(s => ({
     image: s.image,
     id: s.id,
-    reason: s.ignore.reason,
+    matchedIgnores: s.matchedIgnores,
+    ignore: s.ignore,
     blocking: s.isBlocking,
   })), [
     {
       image: 'services/api',
       id: secretId('off-mode-image-secret-value'),
-      reason: 'Accepted off-mode image secret.',
+      matchedIgnores: [
+        { scope: 'repository', path: '.p2p-security-ignore.yaml', reason: 'Accepted off-mode image secret.' },
+      ],
+      ignore: undefined,
       blocking: false,
     },
   ]);
   assert(offMode.summary.includes('**Vulnerabilities:** 0 total · 0 blocking'));
+  assert(!JSON.stringify(offMode.normalized).includes('off-mode-image-secret-value'));
   assert(offMode.summary.includes('· **Secrets:** 0 total · 0 blocking'));
   assert(!offMode.summary.includes('### Ignored image findings'));
   assert(!offMode.summary.includes('Accepted off-mode image vulnerability.'));
   assert(!offMode.summary.includes('Accepted off-mode image secret.'));
+
+  const applicationScoped = await runApplicationScopedImageReport();
+  assert.deepStrictEqual(applicationScoped.failures, []);
+  assert.deepStrictEqual(applicationScoped.normalized.ignoreFiles, [
+    { scope: 'application', path: 'services/api/.p2p-security-ignore.yaml' },
+    { scope: 'repository', path: '.p2p-security-ignore.yaml' },
+  ]);
+  assert.deepStrictEqual(applicationScoped.normalized.vulnerabilities.map(v => v.id), ['CVE-APP-EXPIRED']);
+  assert.deepStrictEqual(applicationScoped.normalized.secrets.map(s => s.id), [secretId('image-secret-expired')]);
+  const applicationScopedText = JSON.stringify(applicationScoped.normalized);
+  assert(!applicationScopedText.includes('image-secret-both-scopes'));
+  assert(!applicationScopedText.includes('image-secret-app-only'));
+  assert(!applicationScopedText.includes('image-secret-expired'));
+  assert.deepStrictEqual(applicationScoped.normalized.ignored.vulnerabilities.map(v => ({
+    image: v.image,
+    id: v.id,
+    package: v.package,
+    matchedIgnores: v.matchedIgnores,
+  })), [
+    {
+      image: 'services/api',
+      id: 'CVE-BOTH-SCOPES',
+      package: 'openssl',
+      matchedIgnores: [
+        { scope: 'application', path: 'services/api/.p2p-security-ignore.yaml', reason: 'Application image acceptance.' },
+        { scope: 'application', path: 'services/api/.p2p-security-ignore.yaml', reason: 'Second application image acceptance.' },
+        { scope: 'repository', path: '.p2p-security-ignore.yaml', reason: 'Repository image acceptance.' },
+      ],
+    },
+    {
+      image: 'services/api',
+      id: 'CVE-APP-EXPIRED-REPO-VALID',
+      package: 'zlib',
+      matchedIgnores: [
+        { scope: 'repository', path: '.p2p-security-ignore.yaml', reason: 'Repository fallback after application expiry.' },
+      ],
+    },
+    {
+      image: 'services/api',
+      id: 'CVE-APP-ONLY',
+      package: 'zzapp',
+      matchedIgnores: [
+        { scope: 'application', path: 'services/api/.p2p-security-ignore.yaml', reason: 'Application-only image acceptance.' },
+      ],
+    },
+  ]);
+  assert.deepStrictEqual(applicationScoped.normalized.ignored.secrets.map(s => ({
+    image: s.image,
+    id: s.id,
+    path: s.path,
+    matchedIgnores: s.matchedIgnores,
+  })), [
+    {
+      image: 'services/api',
+      id: secretId('image-secret-both-scopes'),
+      path: '/app/both.env',
+      matchedIgnores: [
+        { scope: 'application', path: 'services/api/.p2p-security-ignore.yaml', reason: 'Application image secret acceptance.' },
+        { scope: 'repository', path: '.p2p-security-ignore.yaml', reason: 'Repository image secret acceptance.' },
+      ],
+    },
+    {
+      image: 'services/api',
+      id: secretId('image-secret-app-only'),
+      path: '/app/app-only.env',
+      matchedIgnores: [
+        { scope: 'application', path: 'services/api/.p2p-security-ignore.yaml', reason: 'Application-only image secret acceptance.' },
+      ],
+    },
+  ]);
+
+  const applicationScopedWithRenamedApp = await runApplicationScopedImageReport('renamed-application');
+  assert.deepStrictEqual(applicationScopedWithRenamedApp.failures, []);
+  assert.deepStrictEqual(applicationScopedWithRenamedApp.normalized, applicationScoped.normalized);
+
+  const applicationIgnoreWithoutImageEntries = await runImageReportWithApplicationIgnoreWithoutImageEntries();
+  assert.deepStrictEqual(applicationIgnoreWithoutImageEntries.normalized.ignoreFiles, [
+    { scope: 'application', path: 'services/api/.p2p-security-ignore.yaml' },
+    { scope: 'repository', path: '.p2p-security-ignore.yaml' },
+  ]);
+
+  await assert.rejects(
+    () => runSkippedImageReportWithInvalidIgnoreFile('version: 1\nimages:\n  - vulnerabilities:\n      - id: CVE-1\n        reason: missing image name\n'),
+    error => error.message.includes('Invalid .p2p-security-ignore.yaml') && error.message.includes('images[0].name must be a non-empty string'),
+  );
+  await assert.rejects(
+    () => runSkippedImageReportWithInvalidIgnoreFile('version: 1\nsource:\n  licenses:\n    - id: GPL-3.0\n      reason: no license ignores\n'),
+    error => error.message.includes('source has unsupported field: licenses'),
+  );
+  await assert.rejects(
+    () => runSkippedImageReportWithInvalidApplicationIgnoreFile('version: 1\nimages:\n  - vulnerabilities:\n      - id: CVE-APP\n        reason: missing image name\n'),
+    error => error.message.includes('images[0].name must be a non-empty string'),
+  );
+  await assert.rejects(
+    () => runSkippedImageReportWithInvalidApplicationIgnoreFile('version: 1\nsource:\n  licenses:\n    - id: GPL-3.0\n      reason: no license ignores\n'),
+    error => error.message.includes('source has unsupported field: licenses'),
+  );
+  await assert.rejects(
+    () => runImageReportWithWorkingDirectory('/tmp/app'),
+    error => error.message.includes('working-directory must be repository-relative'),
+  );
+  await assert.rejects(
+    () => runImageReportWithWorkingDirectory('../outside'),
+    error => error.message.includes('working-directory must stay within the repository'),
+  );
+  await assert.rejects(
+    () => runImageReportWithWorkingDirectory('services/missing'),
+    error => error.message.includes('working-directory does not exist: services/missing'),
+  );
   const imageStatusSteps = readStatusStepNames(path.resolve(__dirname, '../../workflows/p2p-workflow-image-scan.yaml'));
   assert.deepStrictEqual(imageStatusSteps, [
     '      - name: "Output security risk: ${{ needs.security-image-scan.outputs.security-risk || \'unknown\' }}; scan: ${{ needs.security-image-scan.outputs.scan-status || \'failed\' }}"',

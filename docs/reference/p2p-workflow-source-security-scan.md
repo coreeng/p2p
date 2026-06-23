@@ -11,11 +11,12 @@ Internal workflow called from [`p2p-workflow-fastfeedback`](p2p-workflow-fastfee
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `secret-scan-scope` | string | Yes | - | `changes` for PR/push scanning or `full-history` for scheduled monitoring. TruffleHog uses this to choose git history scope. Trivy scans the current checked-out source tree. |
-| `app-name` | string | No | `''` | Application name used to scope sticky PR comments in multi-app repositories. Primary P2P workflow templates pass this through. When omitted by direct callers, comment scope falls back to `tenant-name`, then `vars.TENANT_NAME`. |
+| `app-name` | string | No | `''` | Application name used to scope sticky PR comments in multi-Application repositories. Primary P2P workflow templates pass this through. When omitted by direct callers, comment scope falls back to `tenant-name`, then `vars.TENANT_NAME`. |
 | `tenant-name` | string | No | `''` | Tenant identifier used as the sticky comment scope fallback when `app-name` is omitted. |
+| `working-directory` | string | No | `.` | Repository-relative Application directory used to select the Application Security Ignore file. Source detection remains repository-wide and is not limited to this path. |
 | `blocking-severity` | string | No | `off` | Minimum finding severity that blocks the workflow: `off`, `low`, `medium`, `high`, or `critical`. When blocking is enabled, verified secrets are treated as `critical`. The `security-source-policy` job fails on active vulnerability or secret findings, but the workflow continues when findings are below the blocking threshold. |
 | `ignore-unfixed` | boolean | No | `true` | Passed to Trivy vulnerability scanning. |
-| `dry-run` | boolean | No | `false` | When `true`, skips scanner installs, scans, sticky PR comments, artifact upload, and policy enforcement. The summary reports that the scan was skipped. Dry-run still parses `.p2p-security-ignore.yaml`, so a malformed ignore file can fail report generation. |
+| `dry-run` | boolean | No | `false` | When `true`, skips scanner installs, scans, sticky PR comments, artifact upload, and policy enforcement. The summary reports that the scan was skipped. Dry-run still validates Repository Security Ignore and Application Security Ignore files, so a malformed ignore file can fail report generation. |
 | `checkout-version` | string | No | `''` | Git ref to check out before scanning. Ignored when `dry-run` is `true`; the workflow checks out the default ref. |
 | `timeout-minutes` | number | No | `30` | Job timeout for scanner jobs. |
 
@@ -49,17 +50,17 @@ Results are also surfaced via:
 - sticky PR comment with `header: security-source-scan-findings-<app-name>` on `pull_request` events;
 - `security-source-scan-findings` artifact containing redacted TruffleHog findings, raw Trivy filesystem output, and `source-security-findings.json`.
 
-If the repository root contains `.p2p-security-ignore.yaml`, source vulnerability and source secret findings that match a valid, unexpired ignore entry are omitted from active finding tables in the workflow summary and sticky PR comment. Ignored findings stay visible in `source-security-findings.json` with their ignore reason and expiry metadata when present. They are excluded from active totals, active blocking counts, and policy failures.
+If source vulnerability or source secret findings match a valid, unexpired Repository Security Ignore or current Application Security Ignore entry, they are omitted from active finding tables in the workflow summary and sticky PR comment. Those surfaces do not expose ignore reasons. Ignored findings stay visible in `source-security-findings.json` under `ignored.vulnerabilities` and `ignored.secrets`. They are excluded from active totals, active blocking counts, and policy failures.
 
-`source-security-findings.json` uses top-level `vulnerabilities`, `licenses`, and `secrets` collections. When an ignore file is present, it also includes `ignored.vulnerabilities` and `ignored.secrets`.
+`source-security-findings.json` uses top-level `vulnerabilities`, `licenses`, and `secrets` collections. It always includes top-level `ignoreFiles`, using `[]` when no ignore files are loaded. Ignored findings include `matchedIgnores`; each match records `scope`, `path`, `reason`, and optional `expires`.
 
-The source scan scope is scanner-specific. With `secret-scan-scope: changes`, TruffleHog limits git scanning to the changed commit range, while Trivy still scans the current checked-out source tree. With `secret-scan-scope: full-history`, TruffleHog scans reachable git history, while Trivy still scans only the current branch's checked-out tree. When called from fast-feedback, the source scan checks out the same `checkout-version` ref as build, test, and promotion jobs. Trivy is not limited to `working-directory`, so shared manifests and related modules outside the P2P make target directory are still covered.
+The source scan scope is scanner-specific. With `secret-scan-scope: changes`, TruffleHog limits git scanning to the changed commit range, while Trivy still scans the current checked-out source tree. With `secret-scan-scope: full-history`, TruffleHog scans reachable git history, while Trivy still scans only the current branch's checked-out tree. When called from fast-feedback, the source scan checks out the same `checkout-version` ref as build, test, and promotion jobs. Trivy is not limited to `working-directory`, so shared manifests and related modules outside the P2P make target directory are still covered. Source detection remains repository-wide; only ignore evaluation uses the Repository Security Ignore plus the Application Security Ignore selected by `working-directory`.
 
 ## Security ignore file
 
-The source security workflow reads one P2P-owned ignore file from the repository root: `.p2p-security-ignore.yaml`. If the file is absent, scans behave normally. If it is present but malformed, uses an unsupported schema version, omits required fields, has invalid shapes, or contains invalid expiry dates, the scan/report job fails.
+The source security workflow reads the Repository Security Ignore from `.p2p-security-ignore.yaml` at the repository root when present. When `working-directory` is non-root, it also reads the Application Security Ignore from `<working-directory>/.p2p-security-ignore.yaml` when present. If a loaded file is malformed, uses an unsupported schema version, omits required fields, has invalid shapes, or contains invalid expiry dates, the scan/report job fails, including during dry-run.
 
-See [How to ignore security findings](../how-to/ignore-security-findings.md) for the v1 schema, matching rules, and secret ID guidance. The source scan uses the repository-root ignore file even when other P2P workflows use a non-root `working-directory`.
+See [How to ignore security findings](../how-to/ignore-security-findings.md) for the v1 schema, matching rules, and secret ID guidance. `app-name` does not affect ignore file selection.
 
 ## Blocking policy
 

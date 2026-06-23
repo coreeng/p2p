@@ -12,13 +12,13 @@ On pull requests, the scanners upsert sticky comments in the PR conversation ins
 | Source restricted/forbidden licenses | `security-source-scan-findings-<app-name>` | `security-source-scan-findings` |
 | Git tree secrets | `security-source-scan-findings-<app-name>` | `security-source-scan-findings` |
 | Image vulnerabilities | `security-image-scan-findings-<app-name>-<stage>-<github_env>` | `security-image-scan-reports-<stage>-<github_env>` |
-| Image secrets | `security-image-scan-findings-<app-name>-<stage>-<github_env>` (same comment as image vulnerabilities for that app/stage/environment) | `security-image-scan-reports-<stage>-<github_env>` |
+| Image secrets | `security-image-scan-findings-<app-name>-<stage>-<github_env>` (same comment as image vulnerabilities for that Application/stage/environment) | `security-image-scan-reports-<stage>-<github_env>` |
 
 Restricted and forbidden license findings are shown for triage only. The source scan reports only HIGH and CRITICAL license classifications. Trivy's license classification is not a legal decision and is not a P2P-wide organization policy; confirm the finding against your organization's open-source policy before taking enforcement action.
 
 PR comments are optional for backward compatibility with orchestrator workflows that existed before security scans posted comments. If the caller does not grant `pull-requests: write`, the workflows still write summaries and upload artifacts, but the sticky PR comment steps are non-fatal and cannot update the PR.
 
-P2P workflow templates pass `app-name` to security scans so each app updates its own source and image security comments.
+P2P workflow templates pass `app-name` to security scans so each Application updates its own source and image security comments. `app-name` does not select security ignore files; `working-directory` selects the current Application Security Ignore file.
 
 The source-security comment renders source vulnerabilities, restricted or forbidden licenses, and git-tree secrets under one header. Vulnerability rows include package, installed version, fixed version, CVE, and source where available. License rows identify the package and detected license. Git-tree secret rows show `Detector`, `Status`, `File`, `Line`, and `Commit`.
 
@@ -27,7 +27,7 @@ The security-image-scan comment renders up to two tables under one header:
 - **Vulnerabilities**: a per-image summary table plus a `<details>` block per image with `Severity`, `Package`, `Installed`, `Fixed`, `CVE`, and `Source` columns. Sorted by severity, then package, then CVE; truncated to 100 rows.
 - **Secrets in image**: `Detector`, `Status`, `ID`, `Layer`, `Path`. `Status` is `verified`, `unknown`, or `unverified`; when blocking is enabled, `verified` rows are treated as `critical`. Use the `ID` value when adding an image secret ignore entry. Truncated independently at 100 rows.
 
-When a finding matches `.p2p-security-ignore.yaml`, comments and workflow summaries omit it from active finding tables. Ignored findings are not included in active finding totals, active blocking counts, or policy failures. They remain available in normalized JSON artifacts so the dashboard can distinguish accepted risk from clean scans without exposing ignore reasons in PR comments.
+When a finding matches a Repository Security Ignore or the current Application Security Ignore, comments and workflow summaries omit it from active finding tables. Ignored findings are not included in active finding totals, active blocking counts, or policy failures. PR comments and workflow summaries do not expose ignore reasons. Ignored findings remain available in normalized JSON artifacts so the dashboard can distinguish accepted risk from clean scans.
 
 ## 2. Download the full artifact
 
@@ -41,7 +41,9 @@ If the PR comment is truncated or you need raw data:
 
 The image artifact's root `manifest.json` is the supported index. It records the stage and points to artifact-relative raw Trivy JSON reports under `trivy/` and redacted TruffleHog JSON-lines reports under `trufflehog-image/`, both keyed by scanned image x platform. A configured OCI reference can be absent from `manifest.json` when the workflow skipped it as non-scannable, such as a Helm chart artifact or confirmed empty container image; check the security-image-scan job logs for skip warnings. A TruffleHog JSONL file can be empty when no image secrets were found. Dashboard evidence does not expose secret values; use the P2P redacted secret ID, detector, status, layer, and path metadata for triage. The `security-source-scan-findings` artifact contains raw Trivy filesystem output, redacted TruffleHog source findings, and `source-security-findings.json` for source vulnerabilities, source license findings, and git-tree secrets.
 
-`source-security-findings.json` uses top-level `vulnerabilities`, `licenses`, and `secrets` collections. `image-security-findings.json` uses top-level `vulnerabilities` and `secrets` collections. When an ignore file is present, both files also include `ignored.vulnerabilities` and `ignored.secrets`; ignored records include the matched reason and expiry metadata when present. This lets dashboard ingestion display ignored findings alongside active findings without treating them as active remediation or blocking policy counts.
+`source-security-findings.json` uses top-level `vulnerabilities`, `licenses`, and `secrets` collections. `image-security-findings.json` uses top-level `vulnerabilities` and `secrets` collections. Both files always include top-level `ignoreFiles`, using `[]` when no ignore files are loaded. Loaded files are listed with `scope` and `path`.
+
+When findings are ignored, both normalized files include `ignored.vulnerabilities` and `ignored.secrets`. Ignored records include `matchedIgnores`; each match records the ignore `scope` (`repository` or `application`), ignore file `path`, `reason`, and optional `expires`. This lets dashboard ingestion display ignored findings alongside active findings without treating them as active remediation or blocking policy counts.
 
 ## 3. Remediate first when the scan is correct
 
@@ -55,7 +57,7 @@ Preferred fixes:
 
 ## 4. Record accepted security findings
 
-Use `.p2p-security-ignore.yaml` only after confirming the finding is accepted risk. See [How to ignore security findings](ignore-security-findings.md) for the v1 schema, matching rules, and secret ID guidance.
+Use `.p2p-security-ignore.yaml` only after confirming the finding is accepted risk. See [How to ignore security findings](ignore-security-findings.md) for the v1 schema, Repository Security Ignore and Application Security Ignore matching rules, and secret ID guidance.
 
 ## 5. Temporarily stop findings from blocking the workflow
 

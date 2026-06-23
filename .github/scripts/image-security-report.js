@@ -58,7 +58,7 @@ const rowSort = (a, b) => (
 const normalizeVulnerabilityRows = (rawRows, group, blockingSet, options = {}) => {
   const dedup = new Map();
   for (const rawRow of rawRows) {
-    const ignoreKey = rawRow.ignore ? JSON.stringify([rawRow.package, rawRow.ignore]) : '';
+    const ignoreKey = rawRow.matchedIgnores ? JSON.stringify([rawRow.package, rawRow.matchedIgnores]) : '';
     const key = [rawRow.severity, rawRow.installed, rawRow.fixed, rawRow.id, rawRow.source, ignoreKey].join('\u0000');
     if (!dedup.has(key)) {
       dedup.set(key, {
@@ -74,7 +74,7 @@ const normalizeVulnerabilityRows = (rawRows, group, blockingSet, options = {}) =
         shortName: group.shortName,
         ...(options.includeImage ? { image: group.shortName } : {}),
         ...(options.includeFullRef ? { fullRef: group.fullRef } : {}),
-        ...(rawRow.ignore ? { ignore: rawRow.ignore } : {}),
+        ...(rawRow.matchedIgnores ? { matchedIgnores: rawRow.matchedIgnores } : {}),
       });
     }
     const row = dedup.get(key);
@@ -112,18 +112,21 @@ const sameReportKeys = (left, right) => (
 const buildImageSecurityReport = async ({ core, env = process.env } = {}) => {
   const securityIgnoreHelper = env.P2P_SECURITY_IGNORE_HELPER || path.join(__dirname, 'p2p-security-ignore.js');
   const {
-    loadSecurityIgnore,
+    loadImageSecurityIgnore,
     splitImageVulnerabilities,
     splitImageSecrets,
     p2pRedactedSecretId,
   } = require(securityIgnoreHelper);
+  if (typeof loadImageSecurityIgnore !== 'function') {
+    throw new Error('Security ignore helper must export loadImageSecurityIgnore');
+  }
   const blockingSet = blockingSeveritySet(env.BLOCKING_SEVERITY, core);
   const reportedSeverities = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNKNOWN'];
   const list = env.REPORT_LIST;
   const zeroScanTargets = env.SCAN_TARGET_COUNT === '0';
   const listExists = !!(list && fs.existsSync(list) && fs.statSync(list).size > 0);
   const runUrl = `${env.GITHUB_SERVER_URL}/${env.GITHUB_REPOSITORY}/actions/runs/${env.GITHUB_RUN_ID}`;
-  const securityIgnore = loadSecurityIgnore(env.GITHUB_WORKSPACE);
+  const securityIgnore = loadImageSecurityIgnore(env.GITHUB_WORKSPACE, env.WORKING_DIRECTORY);
 
   const shortNameFromRef = ref => {
     const refWithoutDigest = String(ref || '').split('@')[0];
@@ -477,6 +480,7 @@ const buildImageSecurityReport = async ({ core, env = process.env } = {}) => {
   fs.mkdirSync(jsonRoot, { recursive: true });
   const jsonPath = path.join(jsonRoot, 'image-security-findings.json');
   const normalized = {
+    ignoreFiles: securityIgnore.ignoreFiles,
     vulnerabilities: imageSummaries.flatMap(group => group.rows.map(row => ({ ...row, image: group.shortName, id: row.cve }))),
     secrets: secretSummaries.flatMap(group => group.rows.map(row => ({ ...row, image: group.shortName }))),
   };

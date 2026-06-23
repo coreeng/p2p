@@ -49,6 +49,8 @@ Scheduled scans are report-only by default. The wrapper passes `security-scan-bl
 
 To make scheduled scans block on findings, set `security-scan-blocking-severity` to `low`, `medium`, `high`, or `critical`. The value is passed to the full source scan and every image scan.
 
+Scheduled scans use the same `working-directory` Application context as regular P2P workflows. The repository-root `.p2p-security-ignore.yaml` is the Repository Security Ignore. When `working-directory` is non-root, `<working-directory>/.p2p-security-ignore.yaml` is the Application Security Ignore for the scheduled source scan and each scheduled image scan. `app-name` scopes comments and display surfaces; it does not select security ignore files.
+
 ## 3. Image discovery
 
 By default, the umbrella runs `make p2p-images` from `working-directory` and uses the first returned image name as the anchor for latest-version discovery. Each stage image scan then resolves its scan targets independently: it uses the explicit `image-names` input when provided, or runs `make p2p-images` from `working-directory` when `image-names` is empty.
@@ -97,7 +99,7 @@ with:
   timeout-minutes: 60
 ```
 
-For repositories with multiple P2P projects, set `working-directory` to the directory that contains the relevant Makefile:
+For repositories with multiple P2P projects, set `working-directory` to the directory that contains the relevant Makefile and Application Security Ignore file:
 
 ```yaml
 with:
