@@ -46,7 +46,7 @@ This workflow runs image scanning before deployment. The image scan authenticate
 | `region` | `string` | No | `europe-west2` | Cloud region used by the `p2p-prod` make target. |
 | `source` | `string` | No | `${{ vars.PROD }}` | JSON matrix of deploy environments for the prod stage. |
 | `working-directory` | `string` | No | `.` | Repository path from which the make target is executed. |
-| `app-name` | `string` | No | `''` | Application name. Must equal the tenant name (each application has its own application tenant). |
+| `app-name` | `string` | No | `''` | Application name. Must equal the tenant name (each application has its own application tenant). Also scopes image security sticky PR comments so multi-app repositories do not overwrite comments between apps. |
 | `tenant-name` | `string` | No | `''` | Tenant name passed to the make target. |
 | `skip-subnamespaces-create` | `boolean` | No | `false` | Skips creating subnamespaces before running the make target. |
 | `security-scan-blocking-severity` | `string` | No | `off` | Minimum image-scan finding severity that blocks the workflow: `off`, `low`, `medium`, `high`, or `critical`. Verified image secrets are treated as `critical`. The policy job fails on active findings, but the workflow continues when findings are below the blocking threshold. |

@@ -25,6 +25,10 @@ on:
         required: false
         type: string
         default: ''
+      app-name:
+        required: false
+        type: string
+        default: ''
       region:
         required: false
         type: string
@@ -251,7 +255,7 @@ jobs:
         continue-on-error: true
         uses: marocchino/sticky-pull-request-comment@v3
         with:
-          header: image-scan-findings-${{ inputs.pipeline-stage }}-${{ inputs.github_env || 'local' }}
+          header: image-scan-findings${{ inputs.app-name != '' && format('-{0}', inputs.app-name) || '' }}-${{ inputs.pipeline-stage }}-${{ inputs.github_env || 'local' }}
           path: ${{ steps.report.outputs.comment-path }}
           recreate: true
 

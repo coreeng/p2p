@@ -106,6 +106,7 @@ jobs:
           assert 'path: .p2p-workflow-src' in workflow
           assert 'Move P2P workflow sources outside app workspace' in workflow
           assert 'mv .p2p-workflow-src "$RUNNER_TEMP/p2p-workflow-src"' in workflow
+          assert "header: source-security-scan-findings$" + "{{ inputs.app-name != '' && format('-{0}', inputs.app-name) || '' }}" in workflow
           assert 'P2P_SECURITY_IGNORE_HELPER: $' + '{{ runner.temp }}/p2p-workflow-src/.github/scripts/p2p-security-ignore.js' in workflow
           assert "process.env.RUNNER_TEMP, 'p2p-workflow-src'" in workflow
           assert 'github.workspace' not in workflow
@@ -159,8 +160,13 @@ jobs:
           blocking_count = workflow.count(blocking)
           assert blocking_count == 3, f'expected 3 scheduled blocking-severity pass-throughs, got {blocking_count}'
 
+          app_name = 'app-name: $' + '{{ inputs.app-name }}'
+          app_name_count = workflow.count(app_name)
+          assert app_name_count == 4, f'expected source plus 3 scheduled app-name pass-throughs, got {app_name_count}'
+
           stage_workflow = Path('.github/workflows/p2p-workflow-security-image-scan-stage.yaml').read_text()
           assert 'blocking-severity: $' + '{{ inputs.security-scan-blocking-severity }}' in stage_workflow
+          assert 'app-name: $' + '{{ inputs.app-name }}' in stage_workflow
 
           ci_workflow = Path('.github/workflows/internal-ci.yaml').read_text()
           scheduled_security_call = 'uses: ./.github/workflows/' + 'p2p-workflow-security-scan.yaml'
@@ -202,7 +208,7 @@ jobs:
           assert "name: image-scan ($" + "{{ inputs.github_env != '' && format('{0}, {1}', inputs.pipeline-stage, inputs.github_env) || inputs.pipeline-stage }})" in workflow
           assert 'name: ' + "'image-scan ($" + '{{ inputs.github_env }})' not in workflow
           assert 'PIPELINE_STAGE: $' + '{{ inputs.pipeline-stage }}' in workflow
-          assert 'header: image-scan-findings-$' + '{{ inputs.pipeline-stage }}-$' + '{{ inputs.github_env || ' in workflow
+          assert "header: image-scan-findings$" + "{{ inputs.app-name != '' && format('-{0}', inputs.app-name) || '' }}" + '-$' + '{{ inputs.pipeline-stage }}-$' + '{{ inputs.github_env || ' in workflow
           assert 'name: image-scan-reports-$' + '{{ inputs.pipeline-stage }}-$' + '{{ inputs.github_env || ' in workflow
           assert 'path: .p2p-workflow-src' in workflow
           assert 'Move P2P workflow sources outside app workspace' in workflow
