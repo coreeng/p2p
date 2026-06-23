@@ -93,7 +93,7 @@ source-security-scan  (independent of build; runs in parallel)
 notify-failure       (needs: all jobs; runs on main-branch when any job fails)
 ```
 
-All jobs use a matrix derived from `source`. The `promote` job uses a matrix derived from `destination`. The `source-security-scan` job is not part of the matrix; it runs once per workflow. When `app-name` is set, security PR comments are scoped to that app.
+All jobs use a matrix derived from `source`. The `promote` job uses a matrix derived from `destination`. The `source-security-scan` job is not part of the matrix; it runs once per workflow. Security PR comments are scoped to `app-name`.
 
 ## See also
 

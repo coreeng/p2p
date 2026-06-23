@@ -27,6 +27,7 @@ jobs:
       container_registry_url: ${{ secrets.CONTAINER_REGISTRY_URL }}
     with:
       tenant-name: my-tenant
+      app-name: my-tenant
       security-scan-blocking-severity: 'off'
 ```
 
@@ -35,7 +36,7 @@ jobs:
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `tenant-name` | string | No | `''` | Tenant identifier passed through to child workflows. Falls back to `vars.TENANT_NAME` when empty. |
-| `app-name` | string | No | `''` | Application name passed through to child security scans so sticky PR comments are scoped per app in multi-app repositories. |
+| `app-name` | string | No | `''` | Application name passed through to child security scans so sticky PR comments are scoped per app in multi-app repositories. Scheduled wrappers should set this to the application tenant name. |
 | `image-names` | string | No | `''` | Newline-, comma-, or whitespace-separated list of standard P2P image names. The first entry is the version-lookup anchor for each stage, and the full list is passed to each image scan. If empty, image scans fall back to `make p2p-images` in `working-directory`. |
 | `working-directory` | string | No | `.` | Working directory for `make p2p-images` when `image-names` is empty. |
 | `region` | string | No | `europe-west2` | GCP region; overridden by `vars.REGION`. |

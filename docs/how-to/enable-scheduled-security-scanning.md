@@ -28,6 +28,7 @@ jobs:
       env_vars: ${{ secrets.ENV_VARS }}
     with:
       tenant-name: my-tenant
+      app-name: my-tenant
       security-scan-blocking-severity: 'off'
 ```
 
@@ -65,6 +66,7 @@ jobs:
       env_vars: ${{ secrets.ENV_VARS }}
     with:
       tenant-name: my-tenant
+      app-name: my-tenant
       image-names: |
         api
         worker
@@ -91,6 +93,7 @@ For large histories, increase the source scan timeout:
 ```yaml
 with:
   tenant-name: my-tenant
+  app-name: my-tenant
   timeout-minutes: 60
 ```
 
@@ -99,6 +102,7 @@ For repositories with multiple P2P projects, set `working-directory` to the dire
 ```yaml
 with:
   tenant-name: my-tenant
+  app-name: my-tenant
   working-directory: services/api
 ```
 
