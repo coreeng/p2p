@@ -11,6 +11,8 @@ Internal workflow called from [`p2p-workflow-fastfeedback`](p2p-workflow-fastfee
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `secret-scan-scope` | string | Yes | - | `changes` for PR/push scanning or `full-history` for scheduled monitoring. TruffleHog uses this to choose git history scope. Trivy scans the current checked-out source tree. |
+| `app-name` | string | No | `''` | Application name used to scope sticky PR comments in multi-app repositories. Primary P2P workflow templates pass this through. When omitted by direct callers, comment scope falls back to `tenant-name`, then `vars.TENANT_NAME`. |
+| `tenant-name` | string | No | `''` | Tenant identifier used as the sticky comment scope fallback when `app-name` is omitted. |
 | `blocking-severity` | string | No | `off` | Minimum finding severity that blocks the workflow: `off`, `low`, `medium`, `high`, or `critical`. When blocking is enabled, verified secrets are treated as `critical`. The policy job fails on active vulnerability or secret findings, but the workflow continues when findings are below the blocking threshold. |
 | `ignore-unfixed` | boolean | No | `true` | Passed to Trivy vulnerability scanning. |
 | `dry-run` | boolean | No | `false` | When `true`, skips scanner installs, scans, sticky PR comments, artifact upload, and policy enforcement. The summary reports that the scan was skipped. Dry-run still parses `.p2p-security-ignore.yaml`, so a malformed ignore file can fail report generation. |
@@ -44,7 +46,7 @@ Results are also surfaced via:
 
 - workflow summary;
 - policy step named `Output security risk: <risk>; scan: <status>` for dashboard extraction;
-- sticky PR comment with `header: source-security-scan-findings` on `pull_request` events;
+- sticky PR comment with `header: source-security-scan-findings-<app-name>` on `pull_request` events;
 - `source-security-scan-findings` artifact containing redacted TruffleHog findings, raw Trivy filesystem output, and `source-security-findings.json`.
 
 If the repository root contains `.p2p-security-ignore.yaml`, source vulnerability and source secret findings that match a valid, unexpired ignore entry are omitted from active finding tables in the workflow summary and sticky PR comment. Ignored findings stay visible in `source-security-findings.json` with their ignore reason and expiry metadata when present. They are excluded from active totals, active blocking counts, and policy failures.

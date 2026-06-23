@@ -37,7 +37,7 @@ Grant `pull-requests: write` when the workflow runs on pull requests so source a
 | `dry-run` | `boolean` | No | `false` | When `true`, runs commands without making persistent changes. |
 | `main-branch` | `string` | No | `refs/heads/main` | Full ref of the main branch, used to gate promotion and Slack alerts. |
 | `checkout-version` | `string` | No | `''` | Git ref to check out. Defaults to the current workflow ref when empty. |
-| `app-name` | `string` | No | `''` | Application name. Must equal the tenant name (each application has its own application tenant). |
+| `app-name` | `string` | No | `''` | Application name. Must equal the tenant name (each application has its own application tenant). Also scopes source and image security sticky PR comments so multi-app repositories do not overwrite comments between apps. |
 | `tenant-name` | `string` | No | `''` | Tenant name passed to all make targets. |
 | `region` | `string` | No | `europe-west2` | Cloud region used by all make targets. |
 | `source` | `string` | No | `${{ vars.FAST_FEEDBACK }}` | JSON matrix of deploy environments for the fast-feedback stage. |
@@ -93,7 +93,7 @@ source-security-scan  (independent of build; runs in parallel)
 notify-failure       (needs: all jobs; runs on main-branch when any job fails)
 ```
 
-All jobs use a matrix derived from `source`. The `promote` job uses a matrix derived from `destination`. The `source-security-scan` job is not part of the matrix; it runs once per workflow.
+All jobs use a matrix derived from `source`. The `promote` job uses a matrix derived from `destination`. The `source-security-scan` job is not part of the matrix; it runs once per workflow. Security PR comments are scoped to `app-name`.
 
 ## See also
 

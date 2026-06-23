@@ -104,6 +104,8 @@ jobs:
     uses: ./.github/workflows/p2p-workflow-source-security-scan.yaml
     with:
       secret-scan-scope: changes
+      app-name: ${{ inputs.app-name }}
+      tenant-name: ${{ inputs.tenant-name }}
       blocking-severity: ${{ inputs.security-scan-blocking-severity }}
       dry-run: ${{ inputs.dry-run }}
       checkout-version: ${{ inputs.checkout-version }}
@@ -124,6 +126,7 @@ jobs:
       pipeline-stage: fast-feedback
       github_env: ${{ matrix.deploy_env }}
       tenant-name: ${{ inputs.tenant-name }}
+      app-name: ${{ inputs.app-name }}
       version: ${{ inputs.version }}
       region: ${{ inputs.region }}
       working-directory: ${{ inputs.working-directory }}

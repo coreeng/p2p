@@ -23,6 +23,10 @@ on:
         required: false
         type: string
         default: ''
+      app-name:
+        required: false
+        type: string
+        default: ''
       image-name:
         required: true
         type: string
@@ -87,6 +91,7 @@ jobs:
       pipeline-stage: ${{ inputs.pipeline-stage }}
       github_env: ${{ inputs.github_env }}
       tenant-name: ${{ inputs.tenant-name }}
+      app-name: ${{ inputs.app-name }}
       version: ${{ needs.discover-version.outputs.version }}
       region: ${{ inputs.region }}
       working-directory: ${{ inputs.working-directory }}

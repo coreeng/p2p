@@ -55,6 +55,7 @@ jobs:
       env_vars: ${{ secrets.ENV_VARS }}
     with:
       tenant-name: my-tenant
+      app-name: my-tenant
 ```
 
 Teams read results in the GitHub Actions workflow run summary and artifacts. The source scan writes source vulnerability and secret results to the workflow run summary on every non-dry-run scan. On pull requests, source scan comments are posted when the workflow has `pull-requests: write`; image scan comments are also posted when that permission is granted through the caller chain. If the permission is omitted, image scanning still runs and uploads artifacts, but PR comment posting is non-fatal.
@@ -81,4 +82,4 @@ The platform owns scanner versions, default policy, report shape, and reusable w
 
 Scheduled scans can surface historical or dormant findings repeatedly until they are remediated or otherwise handled. This is intentional for monitoring, but it means scheduled results are reporting signals rather than default hard gates.
 
-Image scan PR comments are stage/environment scoped today, so a pull request can receive more than one image scan comment when multiple environments run. This keeps comments tied to the workflow jobs and artifacts that produced them.
+Security scan PR comments are scoped to the app. Image scan comments are additionally scoped by stage and environment, so multi-app pull requests and multi-environment runs update distinct sticky comments.

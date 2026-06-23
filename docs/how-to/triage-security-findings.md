@@ -8,15 +8,17 @@ On pull requests, the scanners upsert sticky comments in the PR conversation ins
 
 | Source | Sticky comment header | Artifact |
 |---|---|---|
-| Source vulnerabilities | `source-security-scan-findings` | `source-security-scan-findings` |
-| Source restricted/forbidden licenses | `source-security-scan-findings` | `source-security-scan-findings` |
-| Git tree secrets | `source-security-scan-findings` | `source-security-scan-findings` |
-| Image vulnerabilities | `image-scan-findings-<stage>-<github_env>` | `image-scan-reports-<stage>-<github_env>` |
-| Image secrets | `image-scan-findings-<stage>-<github_env>` (same comment as image vulnerabilities for that stage/environment) | `image-scan-reports-<stage>-<github_env>` |
+| Source vulnerabilities | `source-security-scan-findings-<app-name>` | `source-security-scan-findings` |
+| Source restricted/forbidden licenses | `source-security-scan-findings-<app-name>` | `source-security-scan-findings` |
+| Git tree secrets | `source-security-scan-findings-<app-name>` | `source-security-scan-findings` |
+| Image vulnerabilities | `image-scan-findings-<app-name>-<stage>-<github_env>` | `image-scan-reports-<stage>-<github_env>` |
+| Image secrets | `image-scan-findings-<app-name>-<stage>-<github_env>` (same comment as image vulnerabilities for that app/stage/environment) | `image-scan-reports-<stage>-<github_env>` |
 
 Restricted and forbidden license findings are shown for triage only. The source scan reports only HIGH and CRITICAL license classifications. Trivy's license classification is not a legal decision and is not a P2P-wide organization policy; confirm the finding against your organization's open-source policy before taking enforcement action.
 
 PR comments are optional for backward compatibility with orchestrator workflows that existed before security scans posted comments. If the caller does not grant `pull-requests: write`, the workflows still write summaries and upload artifacts, but the sticky PR comment steps are non-fatal and cannot update the PR.
+
+P2P workflow templates pass `app-name` to security scans so each app updates its own source and image security comments.
 
 The source-security comment renders source vulnerabilities, restricted or forbidden licenses, and git-tree secrets under one header. Vulnerability rows include package, installed version, fixed version, CVE, and source where available. License rows identify the package and detected license. Git-tree secret rows show `Detector`, `Status`, `File`, `Line`, and `Commit`.
 

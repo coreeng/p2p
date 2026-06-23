@@ -14,6 +14,10 @@ on:
         required: false
         type: string
         default: ''
+      app-name:
+        required: false
+        type: string
+        default: ''
       image-names:
         description: |
           Newline- or comma-separated list of image names. The first entry is
@@ -56,6 +60,8 @@ jobs:
     uses: ./.github/workflows/p2p-workflow-source-security-scan.yaml
     with:
       secret-scan-scope: full-history
+      app-name: ${{ inputs.app-name }}
+      tenant-name: ${{ inputs.tenant-name }}
       blocking-severity: ${{ inputs.security-scan-blocking-severity }}
       dry-run: ${{ inputs.dry-run }}
       checkout-version: ${{ inputs.checkout-version }}
@@ -112,6 +118,7 @@ jobs:
       registry-path: fast-feedback
       pipeline-stage: fast-feedback
       tenant-name: ${{ inputs.tenant-name }}
+      app-name: ${{ inputs.app-name }}
       image-name: ${{ needs.resolve-anchor-image.outputs.image-name }}
       image-names: ${{ inputs.image-names }}
       region: ${{ inputs.region }}
@@ -139,6 +146,7 @@ jobs:
       registry-path: extended-test
       pipeline-stage: extended-test
       tenant-name: ${{ inputs.tenant-name }}
+      app-name: ${{ inputs.app-name }}
       image-name: ${{ needs.resolve-anchor-image.outputs.image-name }}
       image-names: ${{ inputs.image-names }}
       region: ${{ inputs.region }}
@@ -166,6 +174,7 @@ jobs:
       registry-path: prod
       pipeline-stage: prod
       tenant-name: ${{ inputs.tenant-name }}
+      app-name: ${{ inputs.app-name }}
       image-name: ${{ needs.resolve-anchor-image.outputs.image-name }}
       image-names: ${{ inputs.image-names }}
       region: ${{ inputs.region }}

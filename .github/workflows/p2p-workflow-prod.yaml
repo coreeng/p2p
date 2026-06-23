@@ -98,6 +98,7 @@ jobs:
       pipeline-stage: prod
       github_env: ${{ matrix.deploy_env }}
       tenant-name: ${{ inputs.tenant-name }}
+      app-name: ${{ inputs.app-name }}
       version: ${{ inputs.version }}
       region: ${{ inputs.region }}
       working-directory: ${{ inputs.working-directory }}
