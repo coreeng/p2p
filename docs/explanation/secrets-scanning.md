@@ -1,6 +1,6 @@
 # Secrets scanning
 
-P2P provides platform-managed secrets scanning so application teams do not have to choose, configure, and maintain their own scanner. Secrets are now part of the internal [`p2p-workflow-source-security-scan`](../reference/p2p-workflow-source-security-scan.md) reusable workflow, alongside source dependency vulnerabilities and restricted or forbidden license signals. Fast-feedback calls it on every PR and push, and scheduled wrappers should call it through the [scheduled security umbrella](../reference/p2p-workflow-security-scan.md).
+P2P provides platform-managed secrets scanning so application teams do not have to choose, configure, and maintain their own scanner. Secrets are now part of the internal [`p2p-workflow-source-security-scan`](../reference/p2p-workflow-source-security-scan.md) reusable workflow, alongside source dependency vulnerabilities. Fast-feedback calls it on every PR and push, and scheduled wrappers should call it through the [scheduled security umbrella](../reference/p2p-workflow-security-scan.md).
 
 ## What gets scanned and when
 
@@ -9,7 +9,7 @@ P2P provides platform-managed secrets scanning so application teams do not have 
 | PR / push | `changes` - the delta (only commits introduced by the PR or push) | `p2p-workflow-fastfeedback` | No (opt in with `security-scan-blocking-severity: low`, `medium`, `high`, or `critical`) |
 | Cron | `full-history` - every reachable commit | `p2p-workflow-security-scan` wrapper | No |
 
-The two modes serve different purposes: the PR/push mode is a **gate candidate** that surfaces new secrets as they are introduced and can be promoted to a hard gate by setting `security-scan-blocking-severity` to a non-`off` threshold; the scheduled mode is a **monitoring signal** that surfaces legacy findings and re-checks dormant repositories. When blocking is enabled, verified secrets are treated as `critical`. The same source security report also shows source vulnerabilities and restricted or forbidden license findings.
+The two modes serve different purposes: the PR/push mode is a **gate candidate** that surfaces new secrets as they are introduced and can be promoted to a hard gate by setting `security-scan-blocking-severity` to a non-`off` threshold; the scheduled mode is a **monitoring signal** that surfaces legacy findings and re-checks dormant repositories. When blocking is enabled, verified secrets are treated as `critical`. The same source security report also shows source vulnerabilities.
 
 ## See also
 

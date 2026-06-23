@@ -38,12 +38,12 @@ jobs:
 
 Each scheduled run starts these scans:
 
-- source security scan over the repository's reachable git history for secrets and current source tree for dependency vulnerabilities and license signals;
+- source security scan over the repository's reachable git history for secrets and current source tree for dependency vulnerabilities;
 - latest fast-feedback images for each environment in `vars.FAST_FEEDBACK`;
 - latest extended-test images for each environment in `vars.EXTENDED_TEST`;
 - latest production images for each environment in `vars.PROD`.
 
-The source scan uses TruffleHog for committed secrets and Trivy for source dependency vulnerabilities plus restricted or forbidden license signals. In scheduled scans, `full-history` applies to TruffleHog git scanning; Trivy scans the current branch's checked-out source tree. The image scans use Trivy for image vulnerabilities and TruffleHog for embedded image secrets.
+The source scan uses TruffleHog for committed secrets and Trivy for source dependency vulnerabilities. In scheduled scans, `full-history` applies to TruffleHog git scanning; Trivy scans the current branch's checked-out source tree. The image scans use Trivy for image vulnerabilities and TruffleHog for embedded image secrets.
 
 Scheduled scans are report-only by default. The wrapper passes `security-scan-blocking-severity: 'off'`, so findings can fail the child policy jobs without failing the umbrella workflow. Scanner execution errors, authentication errors, and invalid configuration still fail the workflow.
 

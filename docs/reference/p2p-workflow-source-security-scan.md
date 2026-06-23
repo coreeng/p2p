@@ -1,6 +1,6 @@
 # p2p-workflow-source-security-scan
 
-> Scans repository source for committed secrets, dependency vulnerabilities, and restricted or forbidden licenses. Produces a workflow summary, optionally posts a sticky PR comment on `pull_request` events when permissions allow, and uploads a `security-source-scan-findings` artifact. The `security-source-policy` job fails on active vulnerability or secret findings; the configured blocking severity controls whether that policy failure fails the workflow.
+> Scans repository source for committed secrets and dependency vulnerabilities. Produces a workflow summary, optionally posts a sticky PR comment on `pull_request` events when permissions allow, and uploads a `security-source-scan-findings` artifact. The `security-source-policy` job fails on active vulnerability or secret findings; the configured blocking severity controls whether that policy failure fails the workflow.
 
 ## Usage
 
@@ -36,10 +36,9 @@ The workflow inherits permissions from the caller. Grant:
 | `json-file` | Path to `source-security-findings.json` on the runner, normally under `runner.temp`. |
 | `vulnerability-total` | Number of source vulnerability findings in the normalized report. |
 | `vulnerability-blocking` | Number of reported vulnerability findings at or above `blocking-severity`. |
-| `license-total` | Number of restricted or forbidden license findings in the normalized report. |
 | `secret-total` | Number of redacted TruffleHog findings in the normalized report. |
 | `secret-blocking` | Number of TruffleHog findings with `status: verified` when `blocking-severity` is not `off`. |
-| `security-risk` | Maximum active source vulnerability/secret risk after ignore rules: `critical`, `unclassified`, `high`, `medium`, `low`, `ok`, or `unknown`. License findings are not included. |
+| `security-risk` | Maximum active source vulnerability/secret risk after ignore rules: `critical`, `unclassified`, `high`, `medium`, `low`, `ok`, or `unknown`. |
 | `scan-status` | `ok` when scanner results were extracted successfully, otherwise `failed`. |
 
 Results are also surfaced via:
@@ -51,7 +50,7 @@ Results are also surfaced via:
 
 Source report generation discovers every `.p2p-security-ignore.yaml` in the repository. Source vulnerability and source secret findings that match a valid, unexpired ignore entry in an applicable ignore file are omitted from active finding tables in the workflow summary and sticky PR comment. Each ignore file's source entries apply only to findings under the directory containing that file; the repository-root ignore file applies to the whole repository. Ignored findings stay visible in `source-security-findings.json` with their ignore reason and expiry metadata when present. They are excluded from active totals, active blocking counts, and policy failures.
 
-`source-security-findings.json` uses top-level `vulnerabilities`, `licenses`, and `secrets` collections. When an ignore file is present, it also includes `ignored.vulnerabilities` and `ignored.secrets`.
+`source-security-findings.json` uses top-level `vulnerabilities` and `secrets` collections. When an ignore file is present, it also includes `ignored.vulnerabilities` and `ignored.secrets`.
 
 The source scan scope is scanner-specific and repository-wide, not folder-scoped. With `secret-scan-scope: changes`, TruffleHog scans the changed git commit range across the repository, while Trivy source dependency vulnerability scanning/SCA scans the current checked-out source tree. With `secret-scan-scope: full-history`, TruffleHog scans reachable git history across the repository, while Trivy scans the current branch's checked-out source tree. When called from fast-feedback, the source scan checks out the same `checkout-version` ref as build, test, and promotion jobs. `working-directory` does not limit either source scanner, so shared manifests and related modules outside the P2P make target directory are still covered.
 
@@ -68,10 +67,6 @@ The workflow is visibility-first by default. Scanner setup or execution errors a
 - `off`: findings do not fail the workflow, but the `security-source-policy` job fails when vulnerabilities or secrets are found;
 - `low`, `medium`, `high`, or `critical`: reported Trivy vulnerability findings below that threshold fail only the `security-source-policy` job, while findings at or above that threshold fail the workflow;
 - verified TruffleHog secrets are treated as `critical` findings and fail the workflow for any non-`off` threshold.
-
-Restricted and forbidden license findings are report-only for every threshold. The source scan reports only HIGH and CRITICAL license classifications.
-
-Trivy license classifications are triage signals, not a P2P-wide legal policy. Organization-specific allow/deny policy is out of scope for this version.
 
 ## See also
 

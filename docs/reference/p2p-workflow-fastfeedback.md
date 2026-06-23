@@ -87,8 +87,8 @@ security-source-scan  (independent of build; runs in parallel)
                       Checks out the same checkout-version ref as build/test jobs.
                       Scans source repository-wide; working-directory does not narrow
                       TruffleHog source secret scanning or Trivy source SCA.
-                      Reports source vulnerabilities, restricted/forbidden licenses,
-                      and git-tree secrets. Blocks only on vulnerabilities at or above
+                      Reports source vulnerabilities and git-tree secrets.
+                      Blocks only on vulnerabilities at or above
                       security-scan-blocking-severity or verified secrets when the
                       threshold is not off.
 

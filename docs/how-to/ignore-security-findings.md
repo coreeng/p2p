@@ -39,6 +39,6 @@ Rules for v1:
 - `expires` is optional for vulnerabilities and secrets. If present, it must use `YYYY-MM-DD`. If absent, the ignore has no expiry. If present and in the past, the ignore no longer applies.
 - Optional narrowing fields use exact matching in v1. Globs and regular expressions are not supported.
 - `app-name` scopes sticky PR comments only. It does not select source scanner scope or security ignore files.
-- License finding ignores and stage-specific ignores are out of scope for v1.
+- Stage-specific ignores are out of scope for v1.
 
 For source secrets, copy the exact `id` from `source-security-findings.json`. For image secrets, copy the `id` from the image PR comment, `image-security-findings.json`, or the dashboard evidence. Do not write raw secret values to `.p2p-security-ignore.yaml`; P2P secret finding IDs are redacted specifically so accepted secret findings can be tracked without disclosing the secret.

@@ -399,6 +399,57 @@ async function runEscapingWorkingDirectoryImageReport() {
   });
 }
 
+async function runSymlinkEscapingWorkingDirectoryImageReport() {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'image-working-directory-symlink-'));
+  const workspace = path.join(tmp, 'repo');
+  const outside = path.join(tmp, 'outside');
+  fs.mkdirSync(workspace, { recursive: true });
+  fs.mkdirSync(outside, { recursive: true });
+  fs.symlinkSync(outside, path.join(workspace, 'link'), 'dir');
+  fs.writeFileSync(path.join(outside, '.p2p-security-ignore.yaml'), [
+    'version: 1',
+    'images:',
+    '  - name: api',
+    '    vulnerabilities:',
+    '      - id: CVE-OUTSIDE-IMAGE',
+    '        reason: Outside repo ignore must not be loaded.',
+    '',
+  ].join('\n'));
+
+  await buildImageSecurityReport({
+    env: {
+      RUNNER_TEMP: tmp,
+      GITHUB_WORKSPACE: workspace,
+      WORKING_DIR: 'link',
+      BLOCKING_SEVERITY: 'high',
+      PIPELINE_STAGE: 'prod',
+      GITHUB_ENV_INPUT: '',
+      VERSION: '1.2.3',
+      REGION: 'europe-west2',
+      PROJECT_ID: 'project',
+      TENANT_NAME: 'prod',
+      P2P_SECURITY_IGNORE_HELPER: helperPath,
+      GITHUB_SERVER_URL: 'https://github.example',
+      GITHUB_REPOSITORY: 'org/repo',
+      GITHUB_RUN_ID: '42',
+    },
+    core: {
+      setOutput: () => {},
+      setFailed: () => {},
+      info: () => {},
+      warning: () => {},
+      summary: {
+        addRaw() {
+          return this;
+        },
+        write() {
+          return Promise.resolve();
+        },
+      },
+    },
+  });
+}
+
 async function runUnclassifiedImageReport() {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'image-unclassified-'));
   const workspace = path.join(tmp, 'repo');
@@ -1058,6 +1109,15 @@ async function runZeroScanTargetReport() {
     error => error.message.includes('working-directory must resolve inside GITHUB_WORKSPACE'),
     'image working-directory must not load ignore files outside the repository',
   );
+  try {
+    await assert.rejects(
+      () => runSymlinkEscapingWorkingDirectoryImageReport(),
+      error => error.message.includes('working-directory must resolve inside GITHUB_WORKSPACE'),
+      'image working-directory must not follow symlinks outside the repository',
+    );
+  } catch (error) {
+    if (error.code !== 'EPERM' && error.code !== 'EACCES') throw error;
+  }
   const imageStatusSteps = readStatusStepNames(path.resolve(__dirname, '../../workflows/p2p-workflow-image-scan.yaml'));
   assert.deepStrictEqual(imageStatusSteps, [
     '      - name: "Output security risk: ${{ needs.security-image-scan.outputs.security-risk || \'unknown\' }}; scan: ${{ needs.security-image-scan.outputs.scan-status || \'failed\' }}"',

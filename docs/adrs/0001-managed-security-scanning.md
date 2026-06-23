@@ -24,7 +24,7 @@ The workflows are visibility-first by default: findings are reported in workflow
 
 P2P also provides a scheduled umbrella workflow, `p2p-workflow-security-scan`, for repositories that want periodic monitoring. A repository enables it with a small cron wrapper. Each scheduled run scans:
 
-- the repository source history for secrets, and the current branch source tree for dependency vulnerabilities/SCA and license signals;
+- the repository source history for secrets, and the current branch source tree for dependency vulnerabilities/SCA;
 - the latest fast-feedback images;
 - the latest extended-test images;
 - the latest production images.

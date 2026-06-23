@@ -168,6 +168,13 @@ const loadImageSecurityIgnore = (workspace, workingDirectory = '') => {
   if (!isPathInsideOrEqual(selectedDirectory, rootDirectory)) {
     throw new Error('working-directory must resolve inside GITHUB_WORKSPACE');
   }
+  if (fs.existsSync(selectedDirectory)) {
+    const realRootDirectory = fs.realpathSync(rootDirectory);
+    const realSelectedDirectory = fs.realpathSync(selectedDirectory);
+    if (!isPathInsideOrEqual(realSelectedDirectory, realRootDirectory)) {
+      throw new Error('working-directory must resolve inside GITHUB_WORKSPACE');
+    }
+  }
   if (selectedDirectory === rootDirectory) return rootIgnore;
 
   const selectedIgnorePath = path.join(selectedDirectory, '.p2p-security-ignore.yaml');
