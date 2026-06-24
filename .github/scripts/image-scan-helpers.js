@@ -4,6 +4,8 @@ const { execFileSync, spawnSync } = require('child_process');
 
 const VALID_STAGES = ['fast-feedback', 'extended-test', 'prod'];
 const NON_IMAGE_OCI_MEDIA_TYPES = new Set([
+  'application/tar+gzip',
+  'application/vnd.oci.empty.v1+json',
   'application/vnd.cncf.helm.chart.content.v1.tar+gzip',
   'application/vnd.cncf.helm.config.v1+json',
 ]);
