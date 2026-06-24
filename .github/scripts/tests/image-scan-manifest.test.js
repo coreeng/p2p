@@ -249,6 +249,104 @@ async function runManifestScript({ stage, vulnLines = [], secretLines = [], vuln
   assert.strictEqual(fs.readFileSync(allArtifacts.outputs['list-path'], 'utf8'), '');
   assert.strictEqual(allArtifacts.outputs['scan-target-count'], '0');
 
+  const attestationArtifact = await runPullScript(
+    ['europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/prod/api:1.2.3'],
+    {
+      'europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/prod/api:1.2.3': {
+        formatted: {
+          manifest: {
+            digest: 'sha256:attestation',
+            mediaType: 'application/vnd.oci.image.manifest.v1+json',
+          },
+          image: {
+            architecture: '',
+            os: '',
+            config: {},
+            rootfs: { type: '', diff_ids: null },
+          },
+        },
+        raw: {
+          schemaVersion: 2,
+          mediaType: 'application/vnd.oci.image.manifest.v1+json',
+          config: {
+            mediaType: 'application/vnd.oci.empty.v1+json',
+            digest: 'sha256:empty-config',
+            size: 2,
+          },
+          layers: [
+            {
+              mediaType: 'application/vnd.in-toto+json',
+              digest: 'sha256:provenance',
+              size: 1024,
+            },
+          ],
+        },
+      },
+    },
+  );
+  assert.deepStrictEqual(attestationArtifact.failures, []);
+  assert.deepStrictEqual(attestationArtifact.warnings, [
+    'Skipping europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/prod/api:1.2.3; it is an OCI artifact, not a container image.',
+  ]);
+  assert.strictEqual(fs.readFileSync(attestationArtifact.outputs['list-path'], 'utf8'), '');
+  assert.strictEqual(attestationArtifact.outputs['scan-target-count'], '0');
+
+  const attestationArtifactFromFormattedInspect = await runPullScript(
+    ['europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/prod/api:1.2.3'],
+    {
+      'europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/prod/api:1.2.3': {
+        manifest: {
+          digest: 'sha256:attestation',
+          mediaType: 'application/vnd.oci.image.manifest.v1+json',
+          config: { mediaType: 'application/vnd.oci.empty.v1+json' },
+        },
+      },
+    },
+  );
+  assert.deepStrictEqual(attestationArtifactFromFormattedInspect.failures, []);
+  assert.deepStrictEqual(attestationArtifactFromFormattedInspect.warnings, [
+    'Skipping europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/prod/api:1.2.3; it is an OCI artifact, not a container image.',
+  ]);
+  assert.strictEqual(fs.readFileSync(attestationArtifactFromFormattedInspect.outputs['list-path'], 'utf8'), '');
+  assert.strictEqual(attestationArtifactFromFormattedInspect.outputs['scan-target-count'], '0');
+
+  const mixedAttestationArtifact = await runPullScript(
+    [
+      'europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/prod/api:1.2.3',
+      'europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/prod/api-starter:1.2.3',
+    ],
+    {
+      'europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/prod/api:1.2.3': {
+        manifest: { digest: 'sha256:resolved' },
+        image: { os: 'linux', architecture: 'amd64' },
+      },
+      'europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/prod/api-starter:1.2.3': {
+        formatted: {
+          artifactType: 'application/tar+gzip',
+          manifest: {
+            digest: 'sha256:starter-content',
+            mediaType: 'application/vnd.oci.image.manifest.v1+json',
+          },
+          image: {
+            architecture: '',
+            os: '',
+            config: {},
+            rootfs: { type: '', diff_ids: null },
+          },
+        },
+      },
+    },
+  );
+  assert.deepStrictEqual(mixedAttestationArtifact.failures, []);
+  assert.deepStrictEqual(mixedAttestationArtifact.warnings, [
+    'Skipping europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/prod/api-starter:1.2.3; it is an OCI artifact, not a container image.',
+  ]);
+  assert.deepStrictEqual(
+    fs.readFileSync(mixedAttestationArtifact.outputs['list-path'], 'utf8').trim(),
+    'europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/prod/api:1.2.3\tlinux/amd64\tsha256:resolved',
+  );
+  assert.strictEqual(mixedAttestationArtifact.outputs['scan-target-count'], '1');
+
   const mixedEmptyImages = await runPullScript(
     [
       'europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/prod/api:1.2.3',
