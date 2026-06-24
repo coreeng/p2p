@@ -14,7 +14,7 @@ Internal workflow called by [`p2p-workflow-fastfeedback`](p2p-workflow-fastfeedb
 | `version` | string | Yes | — | Image tag to scan. Used with each standard P2P image name to build the stage Artifact Registry reference. |
 | `github_env` | string | No | `''` | GitHub Environment used for environment-scoped variables and GCP auth. Required in practice — image pulls go through Workload Identity Federation bound to this environment. |
 | `tenant-name` | string | No | `''` | Tenant identifier. Falls back to `vars.TENANT_NAME` when empty. |
-| `app-name` | string | No | `''` | Application name used to scope sticky PR comments in multi-app repositories. It does not select security ignore files. Primary P2P workflow templates pass this through. When omitted by direct callers, comment scope falls back to `tenant-name`, then `vars.TENANT_NAME`. |
+| `app-name` | string | No | `''` | Application name used to scope sticky PR comments and the `make p2p-images` fallback in multi-app repositories. It does not select security ignore files. Primary P2P workflow templates pass this through. When omitted by direct callers, comment scope falls back to `tenant-name`, then `vars.TENANT_NAME`. |
 | `region` | string | No | `europe-west2` | GCP region for the Artifact Registry. Overridden by `vars.REGION` when set on the environment. |
 | `working-directory` | string | No | `.` | Directory from which `make p2p-images` is executed when `image-names` is empty. |
 | `image-names` | string | No | `''` | Newline-, comma-, or whitespace-separated list of standard P2P image names to scan. When set, this list is used instead of `make p2p-images`. |
@@ -68,7 +68,7 @@ The job runs under `environment: ${{ inputs.github_env }}` and authenticates to 
 
 ## Image resolution
 
-If `image-names` is set, the workflow splits it on commas or whitespace and treats exactly those standard P2P image names as scan candidates. If it is empty, the workflow runs `make p2p-images` in `working-directory` after checking out `checkout-version`; that target must print standard P2P image names with no registry and no tag. Each image name is combined with the registry path for `pipeline-stage` and the `version` input to form the full reference:
+If `image-names` is set, the workflow splits it on commas or whitespace and treats exactly those standard P2P image names as scan candidates. If it is empty, the workflow runs `make p2p-images` in `working-directory` after checking out `checkout-version`; that target must print standard P2P image names with no registry and no tag. The Make fallback receives `P2P_TENANT_NAME`, `P2P_APP_NAME`, and `P2P_VERSION` from the workflow inputs and resolved tenant context, so multi-app repositories can scope image discovery by `app-name`. Each image name is combined with the registry path for `pipeline-stage` and the `version` input to form the full reference:
 
 ```
 <region>-docker.pkg.dev/<project>/tenant/<tenant>/<pipeline-stage>/<image>:<version>

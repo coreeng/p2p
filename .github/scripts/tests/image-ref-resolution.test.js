@@ -20,6 +20,9 @@ async function runCase(name, makeOutputs, envOverrides = {}) {
       VERSION: '1.2.3',
       WORKING_DIR: '/repo',
       GITHUB_WORKSPACE: '/repo',
+      P2P_TENANT_NAME: 'tenant-a',
+      P2P_APP_NAME: 'api',
+      P2P_VERSION: '1.2.3',
       ...envOverrides,
     },
     core: {
@@ -28,7 +31,7 @@ async function runCase(name, makeOutputs, envOverrides = {}) {
       setFailed: message => { failures.push(message); },
     },
     execFileSyncImpl(command, args, options) {
-      calls.push({ command, args, cwd: options.cwd });
+      calls.push({ command, args, cwd: options.cwd, env: options.env });
       assert.strictEqual(command, 'make', `${name}: command`);
       const target = args[args.length - 1];
       if (args.includes('-q')) {
@@ -63,6 +66,18 @@ async function runCase(name, makeOutputs, envOverrides = {}) {
       'europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/fast-feedback/api:1.2.3',
       'europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/fast-feedback/ui:1.2.3',
     ],
+  );
+  assert.deepStrictEqual(
+    fallback.calls.map(call => ({
+      p2pTenantName: call.env.P2P_TENANT_NAME,
+      p2pAppName: call.env.P2P_APP_NAME,
+      p2pVersion: call.env.P2P_VERSION,
+    })),
+    [
+      { p2pTenantName: 'tenant-a', p2pAppName: 'api', p2pVersion: '1.2.3' },
+      { p2pTenantName: 'tenant-a', p2pAppName: 'api', p2pVersion: '1.2.3' },
+    ],
+    'missing image-names falls back with P2P make context',
   );
 
   const inputImages = await runCase(

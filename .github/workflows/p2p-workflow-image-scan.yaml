@@ -154,6 +154,9 @@ jobs:
           PIPELINE_STAGE: ${{ inputs.pipeline-stage }}
           WORKING_DIR: ${{ inputs.working-directory }}
           IMAGE_NAMES: ${{ inputs.image-names }}
+          P2P_TENANT_NAME: ${{ env.TENANT_NAME }}
+          P2P_APP_NAME: ${{ inputs.app-name }}
+          P2P_VERSION: ${{ inputs.version }}
           P2P_IMAGE_SCAN_HELPERS: ${{ runner.temp }}/p2p-workflow-src/.github/scripts/image-scan-helpers.js
         with:
           script: |

@@ -86,6 +86,8 @@ jobs:
         env:
           IMAGE_NAMES: ${{ inputs.image-names }}
           WORKING_DIR: ${{ inputs.working-directory }}
+          P2P_TENANT_NAME: ${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}
+          P2P_APP_NAME: ${{ inputs.app-name }}
         run: |
           set -euo pipefail
           if [ -n "${IMAGE_NAMES//[[:space:],]/}" ]; then

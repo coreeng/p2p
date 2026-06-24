@@ -73,6 +73,7 @@ async function resolveImages({
     return execFileSyncImpl('make', ['--no-print-directory', target], {
       encoding: 'utf8',
       cwd: workingDirectory,
+      env: processEnvForMake(env),
     });
   }
 
@@ -80,6 +81,7 @@ async function resolveImages({
     try {
       execFileSyncImpl('make', ['--no-print-directory', '-q', target], {
         cwd: workingDirectory,
+        env: processEnvForMake(env),
         stdio: 'ignore',
       });
       return true;
@@ -113,6 +115,27 @@ async function resolveImages({
   core.setOutput('image-refs', refs.join('\n'));
   core.info('Resolved image references:');
   refs.forEach(r => core.info(`  - ${r}`));
+}
+
+function processEnvForMake(env) {
+  const valueFromEnv = (key, fallbackKey) => {
+    if (Object.prototype.hasOwnProperty.call(env, key)) return env[key];
+    if (fallbackKey && Object.prototype.hasOwnProperty.call(env, fallbackKey)) return env[fallbackKey];
+    return process.env[key];
+  };
+
+  const makeEnv = {
+    ...process.env,
+    ...env,
+  };
+  for (const [key, value] of [
+    ['P2P_TENANT_NAME', valueFromEnv('P2P_TENANT_NAME', 'TENANT_NAME')],
+    ['P2P_APP_NAME', valueFromEnv('P2P_APP_NAME')],
+    ['P2P_VERSION', valueFromEnv('P2P_VERSION', 'VERSION')],
+  ]) {
+    if (value !== undefined) makeEnv[key] = value;
+  }
+  return makeEnv;
 }
 
 async function pullImages({

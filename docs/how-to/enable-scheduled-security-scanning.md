@@ -51,7 +51,7 @@ To make scheduled scans block on findings, set `security-scan-blocking-severity`
 
 ## 3. Image discovery
 
-By default, the umbrella runs `make p2p-images` from `working-directory` and uses the first returned image name as the anchor for latest-version discovery. Each stage image scan then resolves its scan targets independently: it uses the explicit `image-names` input when provided, or runs `make p2p-images` from `working-directory` when `image-names` is empty.
+By default, the umbrella runs `make p2p-images` from `working-directory` and uses the first returned image name as the anchor for latest-version discovery. Each stage image scan then resolves its scan targets independently: it uses the explicit `image-names` input when provided, or runs `make p2p-images` from `working-directory` when `image-names` is empty. Fallback Make calls receive `P2P_TENANT_NAME` and `P2P_APP_NAME`, and image-scan target resolution also receives `P2P_VERSION`, so multi-app repositories can return an app-specific image list.
 
 If your repository cannot use `make p2p-images` for scheduled scans, pass `image-names` explicitly:
 
