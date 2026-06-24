@@ -10,21 +10,28 @@ async function runCase(name, makeOutputs, envOverrides = {}) {
   const infos = [];
   const failures = [];
   const make = target => makeOutputs[target] ?? null;
+  const env = {
+    PIPELINE_STAGE: 'fast-feedback',
+    REGION: 'europe-west2',
+    PROJECT_ID: 'project-a',
+    TENANT_NAME: 'tenant-a',
+    VERSION: '1.2.3',
+    WORKING_DIR: '/repo',
+    GITHUB_WORKSPACE: '/repo',
+    P2P_TENANT_NAME: 'tenant-a',
+    P2P_APP_NAME: 'api',
+    P2P_VERSION: '1.2.3',
+  };
+  for (const [key, value] of Object.entries(envOverrides)) {
+    if (value === undefined) {
+      delete env[key];
+    } else {
+      env[key] = value;
+    }
+  }
 
   await resolveImages({
-    env: {
-      PIPELINE_STAGE: 'fast-feedback',
-      REGION: 'europe-west2',
-      PROJECT_ID: 'project-a',
-      TENANT_NAME: 'tenant-a',
-      VERSION: '1.2.3',
-      WORKING_DIR: '/repo',
-      GITHUB_WORKSPACE: '/repo',
-      P2P_TENANT_NAME: 'tenant-a',
-      P2P_APP_NAME: 'api',
-      P2P_VERSION: '1.2.3',
-      ...envOverrides,
-    },
+    env,
     core: {
       setOutput: (key, value) => { outputs[key] = value; },
       info: message => { infos.push(message); },
@@ -95,6 +102,40 @@ async function runCase(name, makeOutputs, envOverrides = {}) {
     ],
   );
   assert.deepStrictEqual(inputImages.calls, [], 'image-names input wins: make is not called');
+
+  const omittedAppName = await runCase('empty app-name lets make defaults apply', {
+    'p2p-images': 'tenant-a\n',
+  }, { P2P_APP_NAME: '' });
+  assert.deepStrictEqual(omittedAppName.failures, [], 'empty app-name lets make defaults apply: no failures');
+  assert.strictEqual(
+    omittedAppName.outputs['image-refs'],
+    'europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/fast-feedback/tenant-a:1.2.3',
+  );
+  assert.deepStrictEqual(
+    omittedAppName.calls.map(call => Object.prototype.hasOwnProperty.call(call.env, 'P2P_APP_NAME')),
+    [false, false],
+    'empty app-name is omitted from make env so Makefile ?= defaults can apply',
+  );
+
+  const fallbackMakeContext = await runCase('make context falls back to workflow env names', {
+    'p2p-images': 'api\n',
+  }, {
+    P2P_TENANT_NAME: undefined,
+    P2P_APP_NAME: undefined,
+    P2P_VERSION: undefined,
+  });
+  assert.deepStrictEqual(
+    fallbackMakeContext.calls.map(call => ({
+      p2pTenantName: call.env.P2P_TENANT_NAME,
+      hasP2pAppName: Object.prototype.hasOwnProperty.call(call.env, 'P2P_APP_NAME'),
+      p2pVersion: call.env.P2P_VERSION,
+    })),
+    [
+      { p2pTenantName: 'tenant-a', hasP2pAppName: false, p2pVersion: '1.2.3' },
+      { p2pTenantName: 'tenant-a', hasP2pAppName: false, p2pVersion: '1.2.3' },
+    ],
+    'make context falls back from TENANT_NAME and VERSION when P2P names are absent',
+  );
 
   const emptyInput = await runCase('empty image-names falls back', {
     'p2p-images': 'worker\n',

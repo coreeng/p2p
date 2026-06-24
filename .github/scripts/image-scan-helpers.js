@@ -133,7 +133,11 @@ function processEnvForMake(env) {
     ['P2P_APP_NAME', valueFromEnv('P2P_APP_NAME')],
     ['P2P_VERSION', valueFromEnv('P2P_VERSION', 'VERSION')],
   ]) {
-    if (value !== undefined) makeEnv[key] = value;
+    if (value === undefined || value === '') {
+      delete makeEnv[key];
+    } else {
+      makeEnv[key] = value;
+    }
   }
   return makeEnv;
 }

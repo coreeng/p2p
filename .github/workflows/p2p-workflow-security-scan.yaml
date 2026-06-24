@@ -93,6 +93,8 @@ jobs:
           if [ -n "${IMAGE_NAMES//[[:space:],]/}" ]; then
             anchor=$(printf '%s' "$IMAGE_NAMES" | tr ',\n' '  ' | awk 'NF { print $1; exit }')
           else
+            if [ -z "${P2P_TENANT_NAME:-}" ]; then unset P2P_TENANT_NAME; fi
+            if [ -z "${P2P_APP_NAME:-}" ]; then unset P2P_APP_NAME; fi
             anchor=$(make --no-print-directory -C "$WORKING_DIR" p2p-images | awk 'NF { print $1; exit }')
           fi
           if [ -z "$anchor" ]; then
