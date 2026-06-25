@@ -65,6 +65,11 @@ on:
         required: false
         type: boolean
         default: true
+      security-scan-fail-on-non-blocking-findings:
+        description: 'Fail security policy jobs for non-blocking findings for GitHub UI visibility.'
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   validate-version:
@@ -111,6 +116,7 @@ jobs:
       checkout-version: ${{ inputs.version-prefix }}${{ inputs.version }}
       blocking-severity: ${{ inputs.security-scan-blocking-severity }}
       security-scan-enabled: ${{ inputs.security-scan-enabled }}
+      fail-on-non-blocking-findings: ${{ inputs.security-scan-fail-on-non-blocking-findings }}
 
   prod-deploy:
     name: prod-deploy

@@ -534,11 +534,14 @@ function assertWorkflowEnforcesScanStatus(workflowPath, outputName) {
   assert(workflow.includes('Security scan did not complete successfully.'));
 }
 
-function assertImagePolicyFailsOnAnyFindingButOnlyBlocksOnBlockingFindings(workflowPath) {
+function assertImagePolicyFailsOnNonBlockingFindingsOnlyWhenEnabled(workflowPath) {
   const workflow = fs.readFileSync(workflowPath, 'utf8');
-  assert(workflow.includes("continue-on-error: ${{ inputs.blocking-severity == 'off' || (needs.security-image-scan.outputs.blocking-count == '0' && needs.security-image-scan.outputs.secret-blocking-count == '0') }}"));
-  assert(workflow.includes('elif [ "${TOTAL:-0}" -gt 0 ] || [ "${SECRET_TOTAL:-0}" -gt 0 ]; then'));
-  assert(workflow.includes('Security finding(s) detected below blocking-severity=${BLOCKING_SEVERITY}; this policy job is allowed to fail without failing the workflow.'));
+  assert(workflow.includes('fail-on-non-blocking-findings:'));
+  assert(workflow.includes("continue-on-error: ${{ inputs.fail-on-non-blocking-findings && (inputs.blocking-severity == 'off' || (needs.security-image-scan.outputs.blocking-count == '0' && needs.security-image-scan.outputs.secret-blocking-count == '0')) }}"));
+  assert(workflow.includes('FAIL_ON_NON_BLOCKING_FINDINGS: ${{ inputs.fail-on-non-blocking-findings }}'));
+  assert(workflow.includes('if [ "${BLOCKING:-0}" -gt 0 ] || [ "${SECRET_BLOCKING:-0}" -gt 0 ]; then'));
+  assert(workflow.includes('elif [ "${FAIL_ON_NON_BLOCKING_FINDINGS}" = "true" ] && { [ "${TOTAL:-0}" -gt 0 ] || [ "${SECRET_TOTAL:-0}" -gt 0 ]; }; then'));
+  assert(workflow.includes('fail-on-non-blocking-findings=true, so this policy job is allowed to fail without failing the workflow.'));
 }
 
 function assertImageScanCanBeDisabled(workflowPath) {
@@ -1133,7 +1136,7 @@ async function runZeroScanTargetReport() {
     '      - name: "Output security risk: ${{ needs.security-image-scan.outputs.security-risk || \'unknown\' }}; scan: ${{ needs.security-image-scan.outputs.scan-status || \'failed\' }}"',
   ]);
   assertWorkflowEnforcesScanStatus(path.resolve(__dirname, '../../workflows/p2p-workflow-image-scan.yaml'), 'security-image-scan');
-  assertImagePolicyFailsOnAnyFindingButOnlyBlocksOnBlockingFindings(path.resolve(__dirname, '../../workflows/p2p-workflow-image-scan.yaml'));
+  assertImagePolicyFailsOnNonBlockingFindingsOnlyWhenEnabled(path.resolve(__dirname, '../../workflows/p2p-workflow-image-scan.yaml'));
   assertImageScanCanBeDisabled(path.resolve(__dirname, '../../workflows/p2p-workflow-image-scan.yaml'));
   assertLatestImageLookupDoesNotRequireCallerCheckout(path.resolve(__dirname, '../../workflows/p2p-get-latest-image.yaml'));
   console.log('image security ignore report fixtures passed');

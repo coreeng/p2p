@@ -261,11 +261,14 @@ function assertWorkflowEnforcesScanStatus(workflowPath, outputName) {
   assert(workflow.includes('Security scan did not complete successfully.'));
 }
 
-function assertSourcePolicyFailsOnAnyFindingButOnlyBlocksOnBlockingFindings(workflowPath) {
+function assertSourcePolicyFailsOnNonBlockingFindingsOnlyWhenEnabled(workflowPath) {
   const workflow = fs.readFileSync(workflowPath, 'utf8');
-  assert(workflow.includes("continue-on-error: ${{ inputs.blocking-severity == 'off' || (needs.security-source-report.outputs.vulnerability-blocking == '0' && needs.security-source-report.outputs.secret-blocking == '0') }}"));
-  assert(workflow.includes('elif [ "${VULN_TOTAL:-0}" -gt 0 ] || [ "${SECRET_TOTAL:-0}" -gt 0 ]; then'));
-  assert(workflow.includes('Security finding(s) detected below blocking-severity=${BLOCKING_SEVERITY}; this policy job is allowed to fail without failing the workflow.'));
+  assert(workflow.includes('fail-on-non-blocking-findings:'));
+  assert(workflow.includes("continue-on-error: ${{ inputs.fail-on-non-blocking-findings && (inputs.blocking-severity == 'off' || (needs.security-source-report.outputs.vulnerability-blocking == '0' && needs.security-source-report.outputs.secret-blocking == '0')) }}"));
+  assert(workflow.includes('FAIL_ON_NON_BLOCKING_FINDINGS: ${{ inputs.fail-on-non-blocking-findings }}'));
+  assert(workflow.includes('if [ "${VULN_BLOCKING:-0}" -gt 0 ] || [ "${SECRET_BLOCKING:-0}" -gt 0 ]; then'));
+  assert(workflow.includes('elif [ "${FAIL_ON_NON_BLOCKING_FINDINGS}" = "true" ] && { [ "${VULN_TOTAL:-0}" -gt 0 ] || [ "${SECRET_TOTAL:-0}" -gt 0 ]; }; then'));
+  assert(workflow.includes('fail-on-non-blocking-findings=true, so this policy job is allowed to fail without failing the workflow.'));
 }
 
 function assertSourceScanCanBeDisabled(workflowPath) {
@@ -1221,7 +1224,7 @@ async function runReportWithMissingTruffleHogOutput() {
     '      - name: "Output security risk: ${{ needs.security-source-report.outputs.security-risk || \'unknown\' }}; scan: ${{ needs.security-source-report.outputs.scan-status || \'failed\' }}"',
   ]);
   assertWorkflowEnforcesScanStatus(path.resolve(__dirname, '../../workflows/p2p-workflow-source-security-scan.yaml'), 'security-source-report');
-  assertSourcePolicyFailsOnAnyFindingButOnlyBlocksOnBlockingFindings(path.resolve(__dirname, '../../workflows/p2p-workflow-source-security-scan.yaml'));
+  assertSourcePolicyFailsOnNonBlockingFindingsOnlyWhenEnabled(path.resolve(__dirname, '../../workflows/p2p-workflow-source-security-scan.yaml'));
   assertSourceScanCanBeDisabled(path.resolve(__dirname, '../../workflows/p2p-workflow-source-security-scan.yaml'));
   assertSourceTrivyReportsUnknownSeverity(path.resolve(__dirname, '../../workflows/p2p-workflow-source-security-scan.yaml'));
   for (const mode of ['missing', 'empty', 'invalid']) {

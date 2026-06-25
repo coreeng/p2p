@@ -49,8 +49,9 @@ This workflow runs image scanning before deployment. The image scan authenticate
 | `app-name` | `string` | No | `''` | Application name. Must equal the tenant name (each application has its own application tenant). Also scopes image security sticky PR comments so multi-app repositories do not overwrite comments between apps. |
 | `tenant-name` | `string` | No | `''` | Tenant name passed to the make target. |
 | `skip-subnamespaces-create` | `boolean` | No | `false` | Skips creating subnamespaces before running the make target. |
-| `security-scan-blocking-severity` | `string` | No | `off` | Minimum security-image-scan finding severity that blocks the workflow: `off`, `low`, `medium`, `high`, or `critical`. Verified image secrets are treated as `critical`. The policy job fails on active findings, but the workflow continues when findings are below the blocking threshold. |
+| `security-scan-blocking-severity` | `string` | No | `off` | Minimum security-image-scan finding severity that blocks the workflow: `off`, `low`, `medium`, `high`, or `critical`. Verified image secrets are treated as `critical`. The policy job fails only for blocking findings unless `security-scan-fail-on-non-blocking-findings` is enabled. |
 | `security-scan-enabled` | `boolean` | No | `true` | Runs managed image security scans. Set to `false` as an escape hatch to skip image security scanning and policy enforcement while keeping deployment dependencies unblocked. |
+| `security-scan-fail-on-non-blocking-findings` | `boolean` | No | `false` | Fails security policy jobs for non-blocking findings so GitHub shows red policy jobs while the workflow continues. Blocking findings always fail the workflow. |
 
 ## Secrets
 

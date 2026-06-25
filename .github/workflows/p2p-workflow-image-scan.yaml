@@ -61,6 +61,11 @@ on:
         required: false
         type: boolean
         default: true
+      fail-on-non-blocking-findings:
+        description: 'Fail policy jobs for non-blocking findings for GitHub UI visibility.'
+        required: false
+        type: boolean
+        default: false
       ignore-unfixed:
         required: false
         type: boolean
@@ -326,7 +331,7 @@ jobs:
     runs-on: ubuntu-24.04
     needs: [security-image-scan]
     if: ${{ always() && inputs.security-scan-enabled && inputs.dry-run == false }}
-    continue-on-error: ${{ inputs.blocking-severity == 'off' || (needs.security-image-scan.outputs.blocking-count == '0' && needs.security-image-scan.outputs.secret-blocking-count == '0') }}
+    continue-on-error: ${{ inputs.fail-on-non-blocking-findings && (inputs.blocking-severity == 'off' || (needs.security-image-scan.outputs.blocking-count == '0' && needs.security-image-scan.outputs.secret-blocking-count == '0')) }}
     timeout-minutes: 1
     steps:
       - name: "Output security risk: ${{ needs.security-image-scan.outputs.security-risk || 'unknown' }}; scan: ${{ needs.security-image-scan.outputs.scan-status || 'failed' }}"
@@ -340,6 +345,7 @@ jobs:
           TOTAL: ${{ needs.security-image-scan.outputs.total-count }}
           SECRET_BLOCKING: ${{ needs.security-image-scan.outputs.secret-blocking-count }}
           SECRET_TOTAL: ${{ needs.security-image-scan.outputs.secret-total-count }}
+          FAIL_ON_NON_BLOCKING_FINDINGS: ${{ inputs.fail-on-non-blocking-findings }}
         run: |
           set -euo pipefail
           case "${BLOCKING_SEVERITY}" in
@@ -352,15 +358,11 @@ jobs:
           echo "Trivy: total=${TOTAL:-0}, blocking=${BLOCKING:-0}"
           echo "TruffleHog: total=${SECRET_TOTAL:-0}, blocking=${SECRET_BLOCKING:-0}"
           echo "blocking-severity=${BLOCKING_SEVERITY}"
-          if [ "${BLOCKING_SEVERITY}" = "off" ]; then
-            if [ "${TOTAL:-0}" -gt 0 ] || [ "${SECRET_TOTAL:-0}" -gt 0 ]; then
-              echo "::error::Security finding(s) detected. blocking-severity=off, so this policy job is allowed to fail without failing the workflow."
-              exit 1
-            fi
-          elif [ "${BLOCKING:-0}" -gt 0 ] || [ "${SECRET_BLOCKING:-0}" -gt 0 ]; then
+          echo "fail-on-non-blocking-findings=${FAIL_ON_NON_BLOCKING_FINDINGS}"
+          if [ "${BLOCKING:-0}" -gt 0 ] || [ "${SECRET_BLOCKING:-0}" -gt 0 ]; then
             echo "::error::Security finding(s) at or above blocking-severity=${BLOCKING_SEVERITY} detected."
             exit 1
-          elif [ "${TOTAL:-0}" -gt 0 ] || [ "${SECRET_TOTAL:-0}" -gt 0 ]; then
-            echo "::error::Security finding(s) detected below blocking-severity=${BLOCKING_SEVERITY}; this policy job is allowed to fail without failing the workflow."
+          elif [ "${FAIL_ON_NON_BLOCKING_FINDINGS}" = "true" ] && { [ "${TOTAL:-0}" -gt 0 ] || [ "${SECRET_TOTAL:-0}" -gt 0 ]; }; then
+            echo "::error::Security finding(s) detected, but none are blocking; fail-on-non-blocking-findings=true, so this policy job is allowed to fail without failing the workflow."
             exit 1
           fi
