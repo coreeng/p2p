@@ -47,6 +47,7 @@ Grant `pull-requests: write` when the workflow runs on pull requests so source a
 | `skip-subnamespaces-create` | `boolean` | No | `false` | Skips creating subnamespaces before running make targets. |
 | `artifacts` | `string` | No | `''` | YAML-formatted map of make target names to artifact paths. Paths matching each active command are uploaded after that command runs. |
 | `security-scan-blocking-severity` | `string` | No | `off` | Minimum security finding severity that blocks the workflow: `off`, `low`, `medium`, `high`, or `critical`. When blocking is enabled, verified secrets are treated as `critical`. Policy jobs fail on active findings, but the workflow continues when findings are below the blocking threshold. |
+| `security-scan-enabled` | `boolean` | No | `true` | Runs managed source and image security scans. Set to `false` as an escape hatch to skip security scanning and policy enforcement while keeping build/test/promotion dependencies unblocked. |
 
 ## Secrets
 
@@ -81,6 +82,8 @@ security-image-scan           (needs: build)
                      Checks out the same checkout-version ref for image target resolution.
                      Blocks the workflow on findings at or above
                      security-scan-blocking-severity (default: off).
+                     When security-scan-enabled=false, records a disabled summary
+                     and does not run image scanner auth, pulls, or policy jobs.
 
 security-source-scan  (independent of build; runs in parallel)
                       Calls p2p-workflow-source-security-scan with secret-scan-scope: changes.
@@ -91,6 +94,8 @@ security-source-scan  (independent of build; runs in parallel)
                       Blocks only on vulnerabilities at or above
                       security-scan-blocking-severity or verified secrets when the
                       threshold is not off.
+                      When security-scan-enabled=false, records a disabled summary
+                      and does not run source scanners or policy jobs.
 
 notify-failure       (needs: all jobs; runs on main-branch when any job fails)
 ```

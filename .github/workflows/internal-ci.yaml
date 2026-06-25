@@ -165,6 +165,10 @@ jobs:
           blocking_count = workflow.count(blocking)
           assert blocking_count == 3, f'expected 3 scheduled blocking-severity pass-throughs, got {blocking_count}'
 
+          enabled = 'security-scan-enabled: $' + '{{ inputs.security-scan-enabled }}'
+          enabled_count = workflow.count(enabled)
+          assert enabled_count == 4, f'expected source plus 3 scheduled security-scan-enabled pass-throughs, got {enabled_count}'
+
           app_name = 'app-name: $' + '{{ inputs.app-name }}'
           app_name_count = workflow.count(app_name)
           assert app_name_count == 4, f'expected source plus 3 scheduled app-name pass-throughs, got {app_name_count}'
@@ -175,6 +179,8 @@ jobs:
 
           stage_workflow = Path('.github/workflows/p2p-workflow-security-image-scan-stage.yaml').read_text()
           assert 'blocking-severity: $' + '{{ inputs.security-scan-blocking-severity }}' in stage_workflow
+          assert 'security-scan-enabled: $' + '{{ inputs.security-scan-enabled }}' in stage_workflow
+          assert 'security-image-scan-disabled' in stage_workflow
           assert 'app-name: $' + '{{ inputs.app-name }}' in stage_workflow
 
           ci_workflow = Path('.github/workflows/internal-ci.yaml').read_text()

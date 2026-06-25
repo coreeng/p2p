@@ -268,6 +268,16 @@ function assertSourcePolicyFailsOnAnyFindingButOnlyBlocksOnBlockingFindings(work
   assert(workflow.includes('Security finding(s) detected below blocking-severity=${BLOCKING_SEVERITY}; this policy job is allowed to fail without failing the workflow.'));
 }
 
+function assertSourceScanCanBeDisabled(workflowPath) {
+  const workflow = fs.readFileSync(workflowPath, 'utf8');
+  assert(workflow.includes('security-scan-enabled:'));
+  assert(workflow.includes('default: true'));
+  assert(workflow.includes('if: inputs.security-scan-enabled'));
+  assert(workflow.includes('if: ${{ inputs.security-scan-enabled == false }}'));
+  assert(workflow.includes('Scan disabled by security-scan-enabled=false.'));
+  assert(workflow.includes('if: ${{ always() && inputs.security-scan-enabled && inputs.dry-run == false }}'));
+}
+
 function assertSourceTrivyReportsUnknownSeverity(workflowPath) {
   const workflow = fs.readFileSync(workflowPath, 'utf8');
   assert(workflow.includes('--severity "UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL"'));
@@ -1212,6 +1222,7 @@ async function runReportWithMissingTruffleHogOutput() {
   ]);
   assertWorkflowEnforcesScanStatus(path.resolve(__dirname, '../../workflows/p2p-workflow-source-security-scan.yaml'), 'security-source-report');
   assertSourcePolicyFailsOnAnyFindingButOnlyBlocksOnBlockingFindings(path.resolve(__dirname, '../../workflows/p2p-workflow-source-security-scan.yaml'));
+  assertSourceScanCanBeDisabled(path.resolve(__dirname, '../../workflows/p2p-workflow-source-security-scan.yaml'));
   assertSourceTrivyReportsUnknownSeverity(path.resolve(__dirname, '../../workflows/p2p-workflow-source-security-scan.yaml'));
   for (const mode of ['missing', 'empty', 'invalid']) {
     await assert.rejects(

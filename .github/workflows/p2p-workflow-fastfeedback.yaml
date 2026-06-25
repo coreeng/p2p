@@ -72,6 +72,11 @@ on:
         required: false
         type: string
         default: off
+      security-scan-enabled:
+        description: 'Run managed source and image security scans.'
+        required: false
+        type: boolean
+        default: true
     outputs:
       version:
         value: ${{ inputs.version }}
@@ -107,6 +112,7 @@ jobs:
       app-name: ${{ inputs.app-name }}
       tenant-name: ${{ inputs.tenant-name }}
       blocking-severity: ${{ inputs.security-scan-blocking-severity }}
+      security-scan-enabled: ${{ inputs.security-scan-enabled }}
       dry-run: ${{ inputs.dry-run }}
       checkout-version: ${{ inputs.checkout-version }}
       timeout-minutes: 10
@@ -133,6 +139,7 @@ jobs:
       dry-run: ${{ inputs.dry-run }}
       checkout-version: ${{ inputs.checkout-version }}
       blocking-severity: ${{ inputs.security-scan-blocking-severity }}
+      security-scan-enabled: ${{ inputs.security-scan-enabled }}
 
   functional-test:
     needs: [build]

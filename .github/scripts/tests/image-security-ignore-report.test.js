@@ -541,6 +541,16 @@ function assertImagePolicyFailsOnAnyFindingButOnlyBlocksOnBlockingFindings(workf
   assert(workflow.includes('Security finding(s) detected below blocking-severity=${BLOCKING_SEVERITY}; this policy job is allowed to fail without failing the workflow.'));
 }
 
+function assertImageScanCanBeDisabled(workflowPath) {
+  const workflow = fs.readFileSync(workflowPath, 'utf8');
+  assert(workflow.includes('security-scan-enabled:'));
+  assert(workflow.includes('default: true'));
+  assert(workflow.includes("environment: ${{ inputs.security-scan-enabled && inputs.github_env || '' }}"));
+  assert(workflow.includes('if: ${{ inputs.security-scan-enabled == false }}'));
+  assert(workflow.includes('Scan disabled by security-scan-enabled=false.'));
+  assert(workflow.includes('if: ${{ always() && inputs.security-scan-enabled && inputs.dry-run == false }}'));
+}
+
 function assertLatestImageLookupDoesNotRequireCallerCheckout(workflowPath) {
   const workflow = fs.readFileSync(workflowPath, 'utf8');
   assert(!workflow.includes('working-directory: ${{ inputs.working-directory }}'));
@@ -1124,6 +1134,7 @@ async function runZeroScanTargetReport() {
   ]);
   assertWorkflowEnforcesScanStatus(path.resolve(__dirname, '../../workflows/p2p-workflow-image-scan.yaml'), 'security-image-scan');
   assertImagePolicyFailsOnAnyFindingButOnlyBlocksOnBlockingFindings(path.resolve(__dirname, '../../workflows/p2p-workflow-image-scan.yaml'));
+  assertImageScanCanBeDisabled(path.resolve(__dirname, '../../workflows/p2p-workflow-image-scan.yaml'));
   assertLatestImageLookupDoesNotRequireCallerCheckout(path.resolve(__dirname, '../../workflows/p2p-get-latest-image.yaml'));
   console.log('image security ignore report fixtures passed');
 })().catch(error => {

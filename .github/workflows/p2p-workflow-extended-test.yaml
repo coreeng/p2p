@@ -31,6 +31,11 @@ on:
         required: false
         type: string
         default: off
+      security-scan-enabled:
+        description: 'Run managed image security scans.'
+        required: false
+        type: boolean
+        default: true
       region:
         required: false
         type: string
@@ -120,6 +125,7 @@ jobs:
       dry-run: ${{ inputs.dry-run }}
       checkout-version: ${{ inputs.version-prefix }}${{ inputs.version }}
       blocking-severity: ${{ inputs.security-scan-blocking-severity }}
+      security-scan-enabled: ${{ inputs.security-scan-enabled }}
 
   promote:
     uses: ./.github/workflows/p2p-promote-image.yaml
