@@ -46,8 +46,9 @@ Grant `pull-requests: write` when the workflow runs on pull requests so source a
 | `skip-fastfeedback-integration-on-prs` | `boolean` | No | `false` | When `true`, skips the `integration-test` job on pull requests (runs unconditionally on main or tags). |
 | `skip-subnamespaces-create` | `boolean` | No | `false` | Skips creating subnamespaces before running make targets. |
 | `artifacts` | `string` | No | `''` | YAML-formatted map of make target names to artifact paths. Paths matching each active command are uploaded after that command runs. |
-| `security-scan-blocking-severity` | `string` | No | `off` | Minimum security finding severity that blocks the workflow: `off`, `low`, `medium`, `high`, or `critical`. When blocking is enabled, verified secrets are treated as `critical`. Policy jobs fail on active findings, but the workflow continues when findings are below the blocking threshold. |
+| `security-scan-blocking-severity` | `string` | No | `off` | Minimum security finding severity that blocks the workflow: `off`, `low`, `medium`, `high`, or `critical`. When blocking is enabled, verified secrets are treated as `critical`. Policy jobs fail only for blocking findings unless `security-scan-fail-on-non-blocking-findings` is enabled. |
 | `security-scan-enabled` | `boolean` | No | `true` | Runs managed source and image security scans. Set to `false` as an escape hatch to skip security scanning and policy enforcement while keeping build/test/promotion dependencies unblocked. |
+| `security-scan-fail-on-non-blocking-findings` | `boolean` | No | `false` | Fails security policy jobs for non-blocking findings so GitHub shows red policy jobs while the workflow continues. Blocking findings always fail the workflow. |
 
 ## Secrets
 

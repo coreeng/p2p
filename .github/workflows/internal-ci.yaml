@@ -169,6 +169,13 @@ jobs:
           enabled_count = workflow.count(enabled)
           assert enabled_count == 4, f'expected source plus 3 scheduled security-scan-enabled pass-throughs, got {enabled_count}'
 
+          non_blocking = 'security-scan-fail-on-non-blocking-findings: $' + '{{ inputs.security-scan-fail-on-non-blocking-findings }}'
+          non_blocking_count = workflow.count(non_blocking)
+          assert non_blocking_count == 3, f'expected 3 scheduled non-blocking visibility pass-throughs, got {non_blocking_count}'
+
+          source_non_blocking = 'fail-on-non-blocking-findings: $' + '{{ inputs.security-scan-fail-on-non-blocking-findings }}'
+          assert source_non_blocking in workflow
+
           app_name = 'app-name: $' + '{{ inputs.app-name }}'
           app_name_count = workflow.count(app_name)
           assert app_name_count == 4, f'expected source plus 3 scheduled app-name pass-throughs, got {app_name_count}'
@@ -180,6 +187,7 @@ jobs:
           stage_workflow = Path('.github/workflows/p2p-workflow-security-image-scan-stage.yaml').read_text()
           assert 'blocking-severity: $' + '{{ inputs.security-scan-blocking-severity }}' in stage_workflow
           assert 'security-scan-enabled: $' + '{{ inputs.security-scan-enabled }}' in stage_workflow
+          assert 'fail-on-non-blocking-findings: $' + '{{ inputs.security-scan-fail-on-non-blocking-findings }}' in stage_workflow
           assert 'security-image-scan-disabled' in stage_workflow
           assert 'app-name: $' + '{{ inputs.app-name }}' in stage_workflow
 
@@ -233,7 +241,7 @@ jobs:
           assert 'github.workspace' not in workflow
           assert 'json-file:' in workflow
           assert 'value: $' + '{{ jobs.security-image-scan.outputs.json-file }}' in workflow
-          assert 'json-file: $' + '{{ steps.report.outputs.json-file }}' in workflow
+          assert 'json-file: $' + '{{ steps.report.outputs.json-file || steps.disabled-report.outputs.json-file }}' in workflow
 
           report_module = Path('.github/scripts/image-security-report.js').read_text()
           assert '## Image scan (${code(env.PIPELINE_STAGE)}${envSuffix})' in report_module
