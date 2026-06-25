@@ -46,7 +46,7 @@ Grant `pull-requests: write` when the workflow runs on pull requests so source a
 | `skip-fastfeedback-integration-on-prs` | `boolean` | No | `false` | When `true`, skips the `integration-test` job on pull requests (runs unconditionally on main or tags). |
 | `skip-subnamespaces-create` | `boolean` | No | `false` | Skips creating subnamespaces before running make targets. |
 | `artifacts` | `string` | No | `''` | YAML-formatted map of make target names to artifact paths. Paths matching each active command are uploaded after that command runs. |
-| `security-scan-blocking-severity` | `string` | No | `off` | Minimum security finding severity that blocks the workflow: `off`, `low`, `medium`, `high`, or `critical`. When blocking is enabled, verified secrets are treated as `critical`. Policy jobs fail on active findings, but the workflow continues when findings are below the blocking threshold. |
+| `security-scan-blocking-severity` | `string` | No | `off` | Minimum security finding severity that blocks the workflow: `off`, `low`, `medium`, `high`, or `critical`. `off` is report-only and does not fail the workflow for findings or incomplete scanner output. When blocking is enabled, scanner output must be complete and verified secrets are treated as `critical`. |
 
 ## Secrets
 
@@ -80,7 +80,8 @@ security-image-scan           (needs: build)
                      Calls p2p-workflow-image-scan against the built images.
                      Checks out the same checkout-version ref for image target resolution.
                      Blocks the workflow on findings at or above
-                     security-scan-blocking-severity (default: off).
+                     security-scan-blocking-severity, and on incomplete scanner
+                     output when that threshold is not off.
 
 security-source-scan  (independent of build; runs in parallel)
                       Calls p2p-workflow-source-security-scan with secret-scan-scope: changes.
@@ -90,7 +91,8 @@ security-source-scan  (independent of build; runs in parallel)
                       Reports source vulnerabilities and git-tree secrets.
                       Blocks only on vulnerabilities at or above
                       security-scan-blocking-severity or verified secrets when the
-                      threshold is not off.
+                      threshold is not off. Also blocks on incomplete scanner
+                      output when that threshold is not off.
 
 notify-failure       (needs: all jobs; runs on main-branch when any job fails)
 ```

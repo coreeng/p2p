@@ -1,6 +1,6 @@
 # p2p-workflow-image-scan
 
-> Scans every scannable container image resolved by the repository's P2P image targets for known vulnerabilities (Trivy) and embedded secrets (TruffleHog). Produces a workflow summary, optionally posts a sticky PR comment on `pull_request` events, and uploads a `security-image-scan-reports-<stage>-<github_env>` artifact. The `security-image-policy` job fails on active vulnerability or secret findings; the configured blocking severity controls whether that policy failure fails the workflow.
+> Scans every scannable container image resolved by the repository's P2P image targets for known vulnerabilities (Trivy) and embedded secrets (TruffleHog). Produces a workflow summary, optionally posts a sticky PR comment on `pull_request` events, and uploads a `security-image-scan-reports-<stage>-<github_env>` artifact. The `security-image-policy` job fails only on findings at or above the configured blocking severity.
 
 ## Usage
 
@@ -20,7 +20,7 @@ Internal workflow called by [`p2p-workflow-fastfeedback`](p2p-workflow-fastfeedb
 | `image-names` | string | No | `''` | Newline-, comma-, or whitespace-separated list of standard P2P image names to scan. When set, this list is used instead of `make p2p-images`. |
 | `dry-run` | boolean | No | `false` | When `true`, still checks out the repo and resolves image names from `image-names` or `make p2p-images`, then skips GCP auth, registry login, image pulls, scanner installs, scans, sticky PR comment, artifact upload, and policy step. The `Build report` step still runs and produces a "Scan skipped" summary. Dry-run still parses the repository-root and selected `working-directory` `.p2p-security-ignore.yaml` files, so a malformed selected ignore file can fail report generation. |
 | `checkout-version` | string | No | `''` | Git ref to check out before resolving image names. Ignored when `dry-run` is `true`; the workflow checks out the default ref. |
-| `blocking-severity` | string | No | `off` | Minimum finding severity that blocks the workflow: `off`, `low`, `medium`, `high`, or `critical`. When blocking is enabled, verified image secrets are treated as `critical`. The `security-image-policy` job fails on active vulnerability or secret findings, but the workflow continues when findings are below the blocking threshold. |
+| `blocking-severity` | string | No | `off` | Minimum finding severity that blocks the workflow: `off`, `low`, `medium`, `high`, or `critical`. `off` is report-only and does not fail the workflow for findings or incomplete scanner output. When blocking is enabled, scanner output must be complete and verified image secrets are treated as `critical`. |
 | `ignore-unfixed` | boolean | No | `true` | When `true`, passes `--ignore-unfixed` to Trivy — only vulnerabilities with a fixed version are reported. |
 | `timeout-minutes` | number | No | `20` | Job timeout. |
 
@@ -74,7 +74,7 @@ If `image-names` is set, the workflow splits it on commas or whitespace and trea
 <region>-docker.pkg.dev/<project>/tenant/<tenant>/<pipeline-stage>/<image>:<version>
 ```
 
-Before running Trivy or TruffleHog, the workflow inspects each resolved reference and platform-specific manifest. It excludes OCI artifacts that are known not to be container images, currently Helm chart artifacts, and excludes confirmed empty container images whose raw image manifest has a Docker/OCI image config and explicit `layers: []`. Skipped references are logged as warnings and do not produce Trivy reports, TruffleHog reports, or `manifest.json` entries. Apps do not have to publish OCI images or a scannable container image; if no image refs are resolved or no scannable image targets remain, the image scan completes successfully with zero findings. Scanner execution failures for remaining scan targets still fail the scan.
+Before running Trivy or TruffleHog, the workflow inspects each resolved reference and platform-specific manifest. It excludes OCI artifacts that are known not to be container images, currently Helm chart artifacts, and excludes confirmed empty container images whose raw image manifest has a Docker/OCI image config and explicit `layers: []`. Skipped references are logged as warnings and do not produce Trivy reports, TruffleHog reports, or `manifest.json` entries. Apps do not have to publish OCI images or a scannable container image; if no image refs are resolved or no scannable image targets remain, the image scan completes successfully with zero findings. Scanner execution failures for remaining scan targets fail the workflow when `blocking-severity` is not `off`.
 
 If neither `image-names` nor `p2p-images` produces candidate names, or if all candidate references are excluded as non-scannable, the image scan completes successfully with zero findings.
 

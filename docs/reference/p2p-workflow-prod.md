@@ -49,7 +49,7 @@ This workflow runs image scanning before deployment. The image scan authenticate
 | `app-name` | `string` | No | `''` | Application name. Must equal the tenant name (each application has its own application tenant). Also scopes image security sticky PR comments so multi-app repositories do not overwrite comments between apps. |
 | `tenant-name` | `string` | No | `''` | Tenant name passed to the make target. |
 | `skip-subnamespaces-create` | `boolean` | No | `false` | Skips creating subnamespaces before running the make target. |
-| `security-scan-blocking-severity` | `string` | No | `off` | Minimum security-image-scan finding severity that blocks the workflow: `off`, `low`, `medium`, `high`, or `critical`. Verified image secrets are treated as `critical`. The policy job fails on active findings, but the workflow continues when findings are below the blocking threshold. |
+| `security-scan-blocking-severity` | `string` | No | `off` | Minimum security-image-scan finding severity that blocks the workflow: `off`, `low`, `medium`, `high`, or `critical`. `off` is report-only and does not fail the workflow for findings or incomplete scanner output. When blocking is enabled, scanner output must be complete and verified image secrets are treated as `critical`. |
 
 ## Secrets
 
@@ -75,7 +75,8 @@ validate-version
                 Only runs on main-branch.
                 checkout-version = version-prefix + version.
                 Blocks the workflow on findings at or above
-                security-scan-blocking-severity (default: off).
+                security-scan-blocking-severity, and on incomplete scanner output
+                when that threshold is not off.
 └── prod-deploy (needs: security-image-scan)
                 Runs p2p-prod make target.
                 Only runs on main-branch after security-image-scan succeeds.

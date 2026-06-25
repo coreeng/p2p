@@ -527,18 +527,22 @@ function readStatusStepNames(workflowPath) {
     .filter(line => line.includes('Output security risk:'));
 }
 
-function assertWorkflowEnforcesScanStatus(workflowPath, outputName) {
+function assertWorkflowEnforcesScanStatusWhenBlockingEnabled(workflowPath, outputName) {
   const workflow = fs.readFileSync(workflowPath, 'utf8');
+  assert(workflow.includes('BLOCKING_SEVERITY: ${{ inputs.blocking-severity }}'));
   assert(workflow.includes(`SCAN_STATUS: \${{ needs.${outputName}.outputs.scan-status || 'failed' }}`));
   assert(workflow.includes('if [ "${SCAN_STATUS}" != "ok" ]; then'));
+  assert(workflow.includes('if [ "${BLOCKING_SEVERITY}" = "off" ]; then'));
+  assert(workflow.includes('blocking-severity=off, so scanner status does not fail the workflow'));
   assert(workflow.includes('Security scan did not complete successfully.'));
 }
 
-function assertImagePolicyFailsOnAnyFindingButOnlyBlocksOnBlockingFindings(workflowPath) {
+function assertImagePolicyFailsOnlyOnBlockingFindings(workflowPath) {
   const workflow = fs.readFileSync(workflowPath, 'utf8');
-  assert(workflow.includes("continue-on-error: ${{ inputs.blocking-severity == 'off' || (needs.security-image-scan.outputs.blocking-count == '0' && needs.security-image-scan.outputs.secret-blocking-count == '0') }}"));
-  assert(workflow.includes('elif [ "${TOTAL:-0}" -gt 0 ] || [ "${SECRET_TOTAL:-0}" -gt 0 ]; then'));
-  assert(workflow.includes('Security finding(s) detected below blocking-severity=${BLOCKING_SEVERITY}; this policy job is allowed to fail without failing the workflow.'));
+  assert(!workflow.includes('continue-on-error: ${{ inputs.blocking-severity =='));
+  assert(workflow.includes('if [ "${BLOCKING:-0}" -gt 0 ] || [ "${SECRET_BLOCKING:-0}" -gt 0 ]; then'));
+  assert(!workflow.includes('elif [ "${TOTAL:-0}" -gt 0 ] || [ "${SECRET_TOTAL:-0}" -gt 0 ]; then'));
+  assert(!workflow.includes('Security finding(s) detected below blocking-severity=${BLOCKING_SEVERITY}; this policy job is allowed to fail without failing the workflow.'));
 }
 
 function assertLatestImageLookupDoesNotRequireCallerCheckout(workflowPath) {
@@ -1122,8 +1126,8 @@ async function runZeroScanTargetReport() {
   assert.deepStrictEqual(imageStatusSteps, [
     '      - name: "Output security risk: ${{ needs.security-image-scan.outputs.security-risk || \'unknown\' }}; scan: ${{ needs.security-image-scan.outputs.scan-status || \'failed\' }}"',
   ]);
-  assertWorkflowEnforcesScanStatus(path.resolve(__dirname, '../../workflows/p2p-workflow-image-scan.yaml'), 'security-image-scan');
-  assertImagePolicyFailsOnAnyFindingButOnlyBlocksOnBlockingFindings(path.resolve(__dirname, '../../workflows/p2p-workflow-image-scan.yaml'));
+  assertWorkflowEnforcesScanStatusWhenBlockingEnabled(path.resolve(__dirname, '../../workflows/p2p-workflow-image-scan.yaml'), 'security-image-scan');
+  assertImagePolicyFailsOnlyOnBlockingFindings(path.resolve(__dirname, '../../workflows/p2p-workflow-image-scan.yaml'));
   assertLatestImageLookupDoesNotRequireCallerCheckout(path.resolve(__dirname, '../../workflows/p2p-get-latest-image.yaml'));
   console.log('image security ignore report fixtures passed');
 })().catch(error => {

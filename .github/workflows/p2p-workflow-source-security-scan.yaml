@@ -306,10 +306,22 @@ jobs:
       - name: Enforce scanner execution status
         shell: bash
         env:
+          BLOCKING_SEVERITY: ${{ inputs.blocking-severity }}
           SCAN_STATUS: ${{ needs.security-source-report.outputs.scan-status || 'failed' }}
         run: |
           set -euo pipefail
+          case "${BLOCKING_SEVERITY}" in
+            off|low|medium|high|critical) ;;
+            *)
+              echo "::error::blocking-severity must be one of: off, low, medium, high, critical. Got: ${BLOCKING_SEVERITY}"
+              exit 1
+              ;;
+          esac
           if [ "${SCAN_STATUS}" != "ok" ]; then
+            if [ "${BLOCKING_SEVERITY}" = "off" ]; then
+              echo "::warning::Security scan did not complete successfully. blocking-severity=off, so scanner status does not fail the workflow. scan-status=${SCAN_STATUS}"
+              exit 0
+            fi
             echo "::error::Security scan did not complete successfully. scan-status=${SCAN_STATUS}"
             exit 1
           fi
@@ -319,7 +331,6 @@ jobs:
     runs-on: ubuntu-24.04
     needs: [security-source-report]
     if: ${{ always() && inputs.dry-run == false }}
-    continue-on-error: ${{ inputs.blocking-severity == 'off' || (needs.security-source-report.outputs.vulnerability-blocking == '0' && needs.security-source-report.outputs.secret-blocking == '0') }}
     timeout-minutes: 1
     steps:
       - name: "Output security risk: ${{ needs.security-source-report.outputs.security-risk || 'unknown' }}; scan: ${{ needs.security-source-report.outputs.scan-status || 'failed' }}"
@@ -347,15 +358,7 @@ jobs:
           echo "Trivy restricted/forbidden licenses: total=${LICENSE_TOTAL:-0}, blocking=0"
           echo "TruffleHog secrets: total=${SECRET_TOTAL:-0}, blocking=${SECRET_BLOCKING:-0}"
           echo "blocking-severity=${BLOCKING_SEVERITY}"
-          if [ "${BLOCKING_SEVERITY}" = "off" ]; then
-            if [ "${VULN_TOTAL:-0}" -gt 0 ] || [ "${SECRET_TOTAL:-0}" -gt 0 ]; then
-              echo "::error::Security finding(s) detected. blocking-severity=off, so this policy job is allowed to fail without failing the workflow."
-              exit 1
-            fi
-          elif [ "${VULN_BLOCKING:-0}" -gt 0 ] || [ "${SECRET_BLOCKING:-0}" -gt 0 ]; then
+          if [ "${VULN_BLOCKING:-0}" -gt 0 ] || [ "${SECRET_BLOCKING:-0}" -gt 0 ]; then
             echo "::error::Security finding(s) at or above blocking-severity=${BLOCKING_SEVERITY} detected."
-            exit 1
-          elif [ "${VULN_TOTAL:-0}" -gt 0 ] || [ "${SECRET_TOTAL:-0}" -gt 0 ]; then
-            echo "::error::Security finding(s) detected below blocking-severity=${BLOCKING_SEVERITY}; this policy job is allowed to fail without failing the workflow."
             exit 1
           fi

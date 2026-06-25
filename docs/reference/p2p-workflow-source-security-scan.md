@@ -1,6 +1,6 @@
 # p2p-workflow-source-security-scan
 
-> Scans repository source for committed secrets and dependency vulnerabilities. Produces a workflow summary, optionally posts a sticky PR comment on `pull_request` events when permissions allow, and uploads a `security-source-scan-findings` artifact. The `security-source-policy` job fails on active vulnerability or secret findings; the configured blocking severity controls whether that policy failure fails the workflow.
+> Scans repository source for committed secrets and dependency vulnerabilities. Produces a workflow summary, optionally posts a sticky PR comment on `pull_request` events when permissions allow, and uploads a `security-source-scan-findings` artifact. The `security-source-policy` job fails only on findings at or above the configured blocking severity.
 
 ## Usage
 
@@ -13,7 +13,7 @@ Internal workflow called from [`p2p-workflow-fastfeedback`](p2p-workflow-fastfee
 | `secret-scan-scope` | string | Yes | - | `changes` for PR/push scanning or `full-history` for scheduled monitoring. TruffleHog uses this to choose git history scope. Trivy scans the current checked-out source tree. |
 | `app-name` | string | No | `''` | Application name used to scope sticky PR comments in multi-app repositories. It does not select source scanner scope or security ignore files. Primary P2P workflow templates pass this through. When omitted by direct callers, comment scope falls back to `tenant-name`, then `vars.TENANT_NAME`. |
 | `tenant-name` | string | No | `''` | Tenant identifier used as the sticky comment scope fallback when `app-name` is omitted. |
-| `blocking-severity` | string | No | `off` | Minimum finding severity that blocks the workflow: `off`, `low`, `medium`, `high`, or `critical`. When blocking is enabled, verified secrets are treated as `critical`. The `security-source-policy` job fails on active vulnerability or secret findings, but the workflow continues when findings are below the blocking threshold. |
+| `blocking-severity` | string | No | `off` | Minimum finding severity that blocks the workflow: `off`, `low`, `medium`, `high`, or `critical`. `off` is report-only and does not fail the workflow for findings or incomplete scanner output. When blocking is enabled, scanner output must be complete and verified secrets are treated as `critical`. |
 | `ignore-unfixed` | boolean | No | `true` | Passed to Trivy vulnerability scanning. |
 | `dry-run` | boolean | No | `false` | When `true`, skips scanner installs, scans, sticky PR comments, artifact upload, and policy enforcement. The summary reports that the scan was skipped. Dry-run still parses discovered `.p2p-security-ignore.yaml` files, so a malformed ignore file can fail report generation. |
 | `checkout-version` | string | No | `''` | Git ref to check out before scanning. Ignored when `dry-run` is `true`; the workflow checks out the default ref. |
@@ -62,10 +62,11 @@ See [How to ignore security findings](../how-to/ignore-security-findings.md) for
 
 ## Blocking policy
 
-The workflow is visibility-first by default. Scanner setup or execution errors always fail the workflow. Finding policy is controlled by `blocking-severity`:
+The workflow is visibility-first by default. Finding and scanner-status policy is controlled by `blocking-severity`:
 
-- `off`: findings do not fail the workflow, but the `security-source-policy` job fails when vulnerabilities or secrets are found;
-- `low`, `medium`, `high`, or `critical`: reported Trivy vulnerability findings below that threshold fail only the `security-source-policy` job, while findings at or above that threshold fail the workflow;
+- `off`: findings and incomplete scanner output are reported but do not fail policy jobs or the workflow;
+- `low`, `medium`, `high`, or `critical`: scanner setup or execution errors fail the workflow because the policy cannot make a definite threshold decision;
+- reported Trivy vulnerability findings below the threshold are reported but do not fail the policy job, while findings at or above the threshold fail the workflow;
 - verified TruffleHog secrets are treated as `critical` findings and fail the workflow for any non-`off` threshold.
 
 ## See also
