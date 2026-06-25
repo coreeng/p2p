@@ -45,9 +45,11 @@ Each scheduled run starts these scans:
 
 The source scan uses TruffleHog for committed secrets and Trivy for source dependency vulnerabilities. In scheduled scans, `full-history` applies to TruffleHog git scanning; Trivy scans the current branch's checked-out source tree. The image scans use Trivy for image vulnerabilities and TruffleHog for embedded image secrets.
 
-Scheduled scans are report-only by default. The wrapper passes `security-scan-blocking-severity: 'off'`, so findings can fail the child policy jobs without failing the umbrella workflow. Scanner execution errors, authentication errors, and invalid configuration still fail the workflow.
+Scheduled scans are report-only by default. The wrapper passes `security-scan-blocking-severity: 'off'`, so findings are reported without failing child policy jobs or the umbrella workflow. Scanner execution errors, authentication errors, and invalid configuration still fail the workflow.
 
 To make scheduled scans block on findings, set `security-scan-blocking-severity` to `low`, `medium`, `high`, or `critical`. The value is passed to the full source scan and every image scan.
+
+To show red child policy jobs for non-blocking findings while allowing the umbrella workflow to continue, set `security-scan-fail-on-non-blocking-findings: true`.
 
 To temporarily disable scheduled security scanner execution and policy jobs, set `security-scan-enabled: false` on the wrapper call.
 
