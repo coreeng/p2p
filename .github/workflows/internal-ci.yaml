@@ -241,7 +241,7 @@ jobs:
           assert 'github.workspace' not in workflow
           assert 'json-file:' in workflow
           assert 'value: $' + '{{ jobs.security-image-scan.outputs.json-file }}' in workflow
-          assert 'json-file: $' + '{{ steps.report.outputs.json-file }}' in workflow
+          assert 'json-file: $' + '{{ steps.report.outputs.json-file || steps.disabled-report.outputs.json-file }}' in workflow
 
           report_module = Path('.github/scripts/image-security-report.js').read_text()
           assert '## Image scan (${code(env.PIPELINE_STAGE)}${envSuffix})' in report_module
