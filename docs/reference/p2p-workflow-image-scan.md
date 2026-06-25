@@ -4,7 +4,7 @@
 
 ## Usage
 
-Internal workflow called by [`p2p-workflow-fastfeedback`](p2p-workflow-fastfeedback.md), [`p2p-workflow-extended-test`](p2p-workflow-extended-test.md), [`p2p-workflow-prod`](p2p-workflow-prod.md), and the scheduled [`p2p-workflow-security-scan`](p2p-workflow-security-scan.md) umbrella. Application workflows should call those primary workflows instead; they expose `security-scan-blocking-severity` as the tenant-facing control.
+Internal workflow called by [`p2p-workflow-fastfeedback`](p2p-workflow-fastfeedback.md), [`p2p-workflow-extended-test`](p2p-workflow-extended-test.md), [`p2p-workflow-prod`](p2p-workflow-prod.md), and the scheduled [`p2p-workflow-security-scan`](p2p-workflow-security-scan.md) umbrella. Application workflows should call those primary workflows instead; they expose `security-scan-blocking-severity` and `security-scan-enabled` as tenant-facing controls.
 
 ## Inputs
 
@@ -21,6 +21,7 @@ Internal workflow called by [`p2p-workflow-fastfeedback`](p2p-workflow-fastfeedb
 | `dry-run` | boolean | No | `false` | When `true`, still checks out the repo and resolves image names from `image-names` or `make p2p-images`, then skips GCP auth, registry login, image pulls, scanner installs, scans, sticky PR comment, artifact upload, and policy step. The `Build report` step still runs and produces a "Scan skipped" summary. Dry-run still parses the repository-root and selected `working-directory` `.p2p-security-ignore.yaml` files, so a malformed selected ignore file can fail report generation. |
 | `checkout-version` | string | No | `''` | Git ref to check out before resolving image names. Ignored when `dry-run` is `true`; the workflow checks out the default ref. |
 | `blocking-severity` | string | No | `off` | Minimum finding severity that blocks the workflow: `off`, `low`, `medium`, `high`, or `critical`. When blocking is enabled, verified image secrets are treated as `critical`. The `security-image-policy` job fails on active vulnerability or secret findings, but the workflow continues when findings are below the blocking threshold. |
+| `security-scan-enabled` | boolean | No | `true` | Runs image security scanning and policy checks. Set to `false` as an escape hatch to skip image scanner auth, pulls, scanners, comments, artifacts, and policy enforcement while keeping dependent workflow jobs unblocked. |
 | `ignore-unfixed` | boolean | No | `true` | When `true`, passes `--ignore-unfixed` to Trivy — only vulnerabilities with a fixed version are reported. |
 | `timeout-minutes` | number | No | `20` | Job timeout. |
 

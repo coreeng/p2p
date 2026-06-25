@@ -50,6 +50,7 @@ This workflow runs image scanning before deployment. The image scan authenticate
 | `tenant-name` | `string` | No | `''` | Tenant name passed to the make target. |
 | `skip-subnamespaces-create` | `boolean` | No | `false` | Skips creating subnamespaces before running the make target. |
 | `security-scan-blocking-severity` | `string` | No | `off` | Minimum security-image-scan finding severity that blocks the workflow: `off`, `low`, `medium`, `high`, or `critical`. Verified image secrets are treated as `critical`. The policy job fails on active findings, but the workflow continues when findings are below the blocking threshold. |
+| `security-scan-enabled` | `boolean` | No | `true` | Runs managed image security scans. Set to `false` as an escape hatch to skip image security scanning and policy enforcement while keeping deployment dependencies unblocked. |
 
 ## Secrets
 
@@ -76,6 +77,8 @@ validate-version
                 checkout-version = version-prefix + version.
                 Blocks the workflow on findings at or above
                 security-scan-blocking-severity (default: off).
+                When security-scan-enabled=false, records a disabled summary
+                and does not run image scanner auth, pulls, or policy jobs.
 └── prod-deploy (needs: security-image-scan)
                 Runs p2p-prod make target.
                 Only runs on main-branch after security-image-scan succeeds.

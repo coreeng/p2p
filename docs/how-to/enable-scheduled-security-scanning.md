@@ -49,6 +49,8 @@ Scheduled scans are report-only by default. The wrapper passes `security-scan-bl
 
 To make scheduled scans block on findings, set `security-scan-blocking-severity` to `low`, `medium`, `high`, or `critical`. The value is passed to the full source scan and every image scan.
 
+To temporarily disable scheduled security scanner execution and policy jobs, set `security-scan-enabled: false` on the wrapper call.
+
 ## 3. Image discovery
 
 By default, the umbrella runs `make p2p-images` from `working-directory` and uses the first returned image name as the anchor for latest-version discovery. Each stage image scan then resolves its scan targets independently: it uses the explicit `image-names` input when provided, or runs `make p2p-images` from `working-directory` when `image-names` is empty.

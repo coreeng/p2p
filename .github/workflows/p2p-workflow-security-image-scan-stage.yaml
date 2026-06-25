@@ -57,9 +57,29 @@ on:
         required: false
         type: string
         default: 'off'
+      security-scan-enabled:
+        description: 'Run managed image security scans.'
+        required: false
+        type: boolean
+        default: true
 
 jobs:
+  security-image-scan-disabled:
+    name: security-image-scan-disabled (${{ inputs.pipeline-stage }}, ${{ inputs.github_env }})
+    if: ${{ inputs.security-scan-enabled == false }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 1
+    steps:
+      - name: Report disabled scan
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+          ## Image scan disabled
+
+          Managed image security scanning is disabled by security-scan-enabled=false.
+          EOF
+
   security-discover-version:
+    if: inputs.security-scan-enabled
     uses: ./.github/workflows/p2p-get-latest-image.yaml
     permissions:
       contents: read
@@ -99,3 +119,4 @@ jobs:
       dry-run: ${{ inputs.dry-run }}
       checkout-version: ${{ inputs.checkout-version }}
       blocking-severity: ${{ inputs.security-scan-blocking-severity }}
+      security-scan-enabled: ${{ inputs.security-scan-enabled }}

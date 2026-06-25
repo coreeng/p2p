@@ -56,6 +56,11 @@ on:
         required: false
         type: string
         default: 'off'
+      security-scan-enabled:
+        description: 'Run image security scanners and policy checks.'
+        required: false
+        type: boolean
+        default: true
       ignore-unfixed:
         required: false
         type: boolean
@@ -76,16 +81,16 @@ jobs:
   security-image-scan:
     name: security-image-scan (${{ inputs.github_env != '' && format('{0}, {1}', inputs.pipeline-stage, inputs.github_env) || inputs.pipeline-stage }})
     runs-on: ubuntu-24.04
-    environment: ${{ inputs.github_env }}
+    environment: ${{ inputs.security-scan-enabled && inputs.github_env || '' }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
     outputs:
-      json-file: ${{ steps.report.outputs.json-file }}
-      total-count: ${{ steps.report.outputs.total-count }}
-      blocking-count: ${{ steps.report.outputs.blocking-count }}
-      secret-total-count: ${{ steps.report.outputs.secret-total-count }}
-      secret-blocking-count: ${{ steps.report.outputs.secret-blocking-count }}
-      security-risk: ${{ steps.report.outputs.security-risk }}
-      scan-status: ${{ steps.report.outputs.scan-status }}
+      json-file: ${{ steps.report.outputs.json-file || steps.disabled-report.outputs.json-file }}
+      total-count: ${{ steps.report.outputs.total-count || steps.disabled-report.outputs.total-count }}
+      blocking-count: ${{ steps.report.outputs.blocking-count || steps.disabled-report.outputs.blocking-count }}
+      secret-total-count: ${{ steps.report.outputs.secret-total-count || steps.disabled-report.outputs.secret-total-count }}
+      secret-blocking-count: ${{ steps.report.outputs.secret-blocking-count || steps.disabled-report.outputs.secret-blocking-count }}
+      security-risk: ${{ steps.report.outputs.security-risk || steps.disabled-report.outputs.security-risk }}
+      scan-status: ${{ steps.report.outputs.scan-status || steps.disabled-report.outputs.scan-status }}
     env:
       PROJECT_ID: ${{ vars.PROJECT_ID }}
       PROJECT_NUMBER: ${{ vars.PROJECT_NUMBER }}
@@ -96,11 +101,13 @@ jobs:
       WORKLOAD_IDENTITY_PROVIDER: projects/${{ vars.PROJECT_NUMBER }}/locations/global/workloadIdentityPools/p2p-${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}/providers/p2p-${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}
     steps:
       - name: Checkout
+        if: inputs.security-scan-enabled
         uses: actions/checkout@v6
         with:
           ref: ${{ inputs.dry-run == false && inputs.checkout-version || '' }}
 
       - name: Checkout P2P workflow sources
+        if: inputs.security-scan-enabled
         uses: actions/checkout@v6
         with:
           repository: ${{ job.workflow_repository }}
@@ -108,6 +115,7 @@ jobs:
           path: .p2p-workflow-src
 
       - name: Move P2P workflow sources outside app workspace
+        if: inputs.security-scan-enabled
         shell: bash
         run: |
           set -euo pipefail
@@ -116,7 +124,7 @@ jobs:
 
       - name: Authenticate to Google Cloud
         id: auth
-        if: ${{ inputs.dry-run == false }}
+        if: ${{ inputs.security-scan-enabled && inputs.dry-run == false }}
         uses: google-github-actions/auth@v3
         with:
           workload_identity_provider: ${{ env.WORKLOAD_IDENTITY_PROVIDER }}
@@ -126,7 +134,7 @@ jobs:
           access_token_lifetime: 3600s
 
       - name: Login to Artifact Registry
-        if: ${{ inputs.dry-run == false }}
+        if: ${{ inputs.security-scan-enabled && inputs.dry-run == false }}
         uses: docker/login-action@v4
         with:
           registry: ${{ env.REGION }}-docker.pkg.dev
@@ -134,7 +142,7 @@ jobs:
           password: ${{ steps.auth.outputs.access_token }}
 
       - name: Login to tenant provided registry
-        if: ${{ inputs.dry-run == false }}
+        if: ${{ inputs.security-scan-enabled && inputs.dry-run == false }}
         env:
           REGISTRY_USER: ${{ secrets.container_registry_user }}
           REGISTRY_PAT: ${{ secrets.container_registry_pat }}
@@ -149,6 +157,7 @@ jobs:
 
       - id: resolve-images
         name: Resolve image references
+        if: inputs.security-scan-enabled
         uses: actions/github-script@v9
         env:
           PIPELINE_STAGE: ${{ inputs.pipeline-stage }}
@@ -162,7 +171,7 @@ jobs:
 
       - id: pull-images
         name: Pull images
-        if: ${{ inputs.dry-run == false }}
+        if: ${{ inputs.security-scan-enabled && inputs.dry-run == false }}
         uses: actions/github-script@v9
         env:
           IMAGE_REFS: ${{ steps.resolve-images.outputs.image-refs }}
@@ -173,14 +182,14 @@ jobs:
             await pullImages({ core });
 
       - name: Install Trivy
-        if: ${{ inputs.dry-run == false }}
+        if: ${{ inputs.security-scan-enabled && inputs.dry-run == false }}
         uses: aquasecurity/setup-trivy@v0.3.1
         with:
           version: v0.71.2
           cache: true
 
       - name: Install TruffleHog
-        if: ${{ inputs.dry-run == false }}
+        if: ${{ inputs.security-scan-enabled && inputs.dry-run == false }}
         shell: bash
         run: |
           curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/v3.95.6/scripts/install.sh \
@@ -189,7 +198,7 @@ jobs:
 
       - id: scan
         name: Scan images
-        if: ${{ inputs.dry-run == false }}
+        if: ${{ inputs.security-scan-enabled && inputs.dry-run == false }}
         uses: actions/github-script@v9
         env:
           PULLED_LIST: ${{ steps.pull-images.outputs.list-path }}
@@ -202,7 +211,7 @@ jobs:
 
       - id: security-secret-scan
         name: Scan images for secrets
-        if: ${{ inputs.dry-run == false }}
+        if: ${{ inputs.security-scan-enabled && inputs.dry-run == false }}
         uses: actions/github-script@v9
         env:
           PULLED_LIST: ${{ steps.pull-images.outputs.list-path }}
@@ -215,7 +224,7 @@ jobs:
 
       - id: manifest
         name: Build image scan manifest
-        if: ${{ inputs.dry-run == false }}
+        if: ${{ inputs.security-scan-enabled && inputs.dry-run == false }}
         uses: actions/github-script@v9
         env:
           PIPELINE_STAGE: ${{ inputs.pipeline-stage }}
@@ -232,7 +241,7 @@ jobs:
 
       - id: report
         name: Build report
-        if: always()
+        if: ${{ always() && inputs.security-scan-enabled }}
         uses: actions/github-script@v9
         env:
           REPORT_LIST: ${{ steps.scan.outputs.report-list }}
@@ -251,8 +260,33 @@ jobs:
             const { buildImageSecurityReport } = require(process.env.P2P_IMAGE_SECURITY_REPORT);
             await buildImageSecurityReport({ core, env: process.env });
 
+      - id: disabled-report
+        name: Build disabled image security report
+        if: ${{ inputs.security-scan-enabled == false }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          report="$RUNNER_TEMP/trivy-report.md"
+          json="$RUNNER_TEMP/image-security-findings.json"
+          printf '## Image scan (%s)\n\n_Scan disabled by security-scan-enabled=false._\n' "${PIPELINE_STAGE}" > "$report"
+          printf '{"vulnerabilities":[],"secrets":[]}\n' > "$json"
+          {
+            echo "report-path=$report"
+            echo "comment-path=$report"
+            echo "json-file=$json"
+            echo "total-count=0"
+            echo "blocking-count=0"
+            echo "secret-total-count=0"
+            echo "secret-blocking-count=0"
+            echo "security-risk=ok"
+            echo "scan-status=ok"
+          } >> "$GITHUB_OUTPUT"
+          cat "$report" >> "$GITHUB_STEP_SUMMARY"
+        env:
+          PIPELINE_STAGE: ${{ inputs.pipeline-stage }}
+
       - name: Post sticky PR comment
-        if: ${{ always() && github.event_name == 'pull_request' && inputs.dry-run == false }}
+        if: ${{ always() && inputs.security-scan-enabled && github.event_name == 'pull_request' && inputs.dry-run == false }}
         continue-on-error: true
         uses: marocchino/sticky-pull-request-comment@v3
         with:
@@ -261,7 +295,7 @@ jobs:
           recreate: true
 
       - name: Upload security-image-scan reports
-        if: ${{ inputs.dry-run == false && steps.manifest.outputs.artifact-dir != '' }}
+        if: ${{ inputs.security-scan-enabled && inputs.dry-run == false && steps.manifest.outputs.artifact-dir != '' }}
         uses: actions/upload-artifact@v7
         with:
           name: security-image-scan-reports-${{ inputs.pipeline-stage }}-${{ inputs.github_env || 'local' }}
@@ -273,7 +307,7 @@ jobs:
     name: security-image-scan-status-policy (${{ inputs.github_env != '' && format('{0}, {1}', inputs.pipeline-stage, inputs.github_env) || inputs.pipeline-stage }})
     runs-on: ubuntu-24.04
     needs: [security-image-scan]
-    if: ${{ always() && inputs.dry-run == false }}
+    if: ${{ always() && inputs.security-scan-enabled && inputs.dry-run == false }}
     timeout-minutes: 1
     steps:
       - name: Enforce scanner execution status
@@ -291,7 +325,7 @@ jobs:
     name: security-image-policy (${{ inputs.github_env != '' && format('{0}, {1}', inputs.pipeline-stage, inputs.github_env) || inputs.pipeline-stage }})
     runs-on: ubuntu-24.04
     needs: [security-image-scan]
-    if: ${{ always() && inputs.dry-run == false }}
+    if: ${{ always() && inputs.security-scan-enabled && inputs.dry-run == false }}
     continue-on-error: ${{ inputs.blocking-severity == 'off' || (needs.security-image-scan.outputs.blocking-count == '0' && needs.security-image-scan.outputs.secret-blocking-count == '0') }}
     timeout-minutes: 1
     steps:

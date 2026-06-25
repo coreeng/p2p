@@ -16,6 +16,11 @@ on:
         required: false
         type: string
         default: 'off'
+      security-scan-enabled:
+        description: 'Run source security scanners and policy checks.'
+        required: false
+        type: boolean
+        default: true
       ignore-unfixed:
         required: false
         type: boolean
@@ -55,6 +60,7 @@ on:
 jobs:
   security-secret-scan:
     name: security-secret-scan
+    if: inputs.security-scan-enabled
     runs-on: ubuntu-24.04
     timeout-minutes: ${{ inputs.timeout-minutes }}
     outputs:
@@ -161,6 +167,7 @@ jobs:
 
   security-sca-scan:
     name: security-sca-scan
+    if: inputs.security-scan-enabled
     runs-on: ubuntu-24.04
     timeout-minutes: ${{ inputs.timeout-minutes }}
     steps:
@@ -211,22 +218,24 @@ jobs:
     needs: [security-secret-scan, security-sca-scan]
     if: always()
     outputs:
-      report-file: ${{ steps.report.outputs.report-file }}
-      json-file: ${{ steps.report.outputs.json-file }}
-      vulnerability-total: ${{ steps.report.outputs.vulnerability-total }}
-      vulnerability-blocking: ${{ steps.report.outputs.vulnerability-blocking }}
-      license-total: ${{ steps.report.outputs.license-total }}
-      secret-total: ${{ steps.report.outputs.secret-total }}
-      secret-blocking: ${{ steps.report.outputs.secret-blocking }}
-      security-risk: ${{ steps.report.outputs.security-risk }}
-      scan-status: ${{ steps.report.outputs.scan-status }}
+      report-file: ${{ steps.report.outputs.report-file || steps.disabled-report.outputs.report-file }}
+      json-file: ${{ steps.report.outputs.json-file || steps.disabled-report.outputs.json-file }}
+      vulnerability-total: ${{ steps.report.outputs.vulnerability-total || steps.disabled-report.outputs.vulnerability-total }}
+      vulnerability-blocking: ${{ steps.report.outputs.vulnerability-blocking || steps.disabled-report.outputs.vulnerability-blocking }}
+      license-total: ${{ steps.report.outputs.license-total || steps.disabled-report.outputs.license-total }}
+      secret-total: ${{ steps.report.outputs.secret-total || steps.disabled-report.outputs.secret-total }}
+      secret-blocking: ${{ steps.report.outputs.secret-blocking || steps.disabled-report.outputs.secret-blocking }}
+      security-risk: ${{ steps.report.outputs.security-risk || steps.disabled-report.outputs.security-risk }}
+      scan-status: ${{ steps.report.outputs.scan-status || steps.disabled-report.outputs.scan-status }}
     steps:
       - name: Checkout code
+        if: inputs.security-scan-enabled
         uses: actions/checkout@v6
         with:
           ref: ${{ inputs.dry-run == false && inputs.checkout-version || '' }}
 
       - name: Checkout P2P workflow sources
+        if: inputs.security-scan-enabled
         uses: actions/checkout@v6
         with:
           repository: ${{ job.workflow_repository }}
@@ -234,6 +243,7 @@ jobs:
           path: .p2p-workflow-src
 
       - name: Move P2P workflow sources outside app workspace
+        if: inputs.security-scan-enabled
         shell: bash
         run: |
           set -euo pipefail
@@ -241,7 +251,7 @@ jobs:
           mv .p2p-workflow-src "$RUNNER_TEMP/p2p-workflow-src"
 
       - name: Download secret findings
-        if: ${{ inputs.dry-run == false }}
+        if: ${{ inputs.security-scan-enabled && inputs.dry-run == false }}
         continue-on-error: true
         uses: actions/download-artifact@v8
         with:
@@ -249,7 +259,7 @@ jobs:
           path: ${{ runner.temp }}/source-security/trufflehog
 
       - name: Download Trivy findings
-        if: ${{ inputs.dry-run == false }}
+        if: ${{ inputs.security-scan-enabled && inputs.dry-run == false }}
         continue-on-error: true
         uses: actions/download-artifact@v8
         with:
@@ -258,6 +268,7 @@ jobs:
 
       - id: report
         name: Build source security report
+        if: inputs.security-scan-enabled
         uses: actions/github-script@v9
         env:
           SCOPE: ${{ inputs.secret-scan-scope }}
@@ -275,8 +286,33 @@ jobs:
             const { buildSourceSecurityReport } = require(reportModule);
             await buildSourceSecurityReport({ core });
 
+      - id: disabled-report
+        name: Build disabled source security report
+        if: ${{ inputs.security-scan-enabled == false }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/source-security"
+          mkdir -p "$root"
+          report="$root/source-security-report.md"
+          json="$root/source-security-findings.json"
+          printf '## Source security scan\n\n_Scan disabled by security-scan-enabled=false._\n' > "$report"
+          printf '{"vulnerabilities":[],"licenses":[],"secrets":[]}\n' > "$json"
+          {
+            echo "report-file=$report"
+            echo "json-file=$json"
+            echo "vulnerability-total=0"
+            echo "vulnerability-blocking=0"
+            echo "license-total=0"
+            echo "secret-total=0"
+            echo "secret-blocking=0"
+            echo "security-risk=ok"
+            echo "scan-status=ok"
+          } >> "$GITHUB_OUTPUT"
+          cat "$report" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Upsert sticky PR comment
-        if: ${{ always() && github.event_name == 'pull_request' && inputs.dry-run == false }}
+        if: ${{ always() && inputs.security-scan-enabled && github.event_name == 'pull_request' && inputs.dry-run == false }}
         continue-on-error: true
         uses: marocchino/sticky-pull-request-comment@v3
         with:
@@ -285,7 +321,7 @@ jobs:
           recreate: true
 
       - name: Upload source security artifact
-        if: ${{ always() && inputs.dry-run == false }}
+        if: ${{ always() && inputs.security-scan-enabled && inputs.dry-run == false }}
         uses: actions/upload-artifact@v7
         with:
           name: security-source-scan-findings
@@ -300,7 +336,7 @@ jobs:
     name: security-source-scan-status-policy
     runs-on: ubuntu-24.04
     needs: [security-source-report]
-    if: ${{ always() && inputs.dry-run == false }}
+    if: ${{ always() && inputs.security-scan-enabled && inputs.dry-run == false }}
     timeout-minutes: 1
     steps:
       - name: Enforce scanner execution status
@@ -318,7 +354,7 @@ jobs:
     name: security-source-policy
     runs-on: ubuntu-24.04
     needs: [security-source-report]
-    if: ${{ always() && inputs.dry-run == false }}
+    if: ${{ always() && inputs.security-scan-enabled && inputs.dry-run == false }}
     continue-on-error: ${{ inputs.blocking-severity == 'off' || (needs.security-source-report.outputs.vulnerability-blocking == '0' && needs.security-source-report.outputs.secret-blocking == '0') }}
     timeout-minutes: 1
     steps:

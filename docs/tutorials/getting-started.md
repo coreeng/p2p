@@ -123,6 +123,8 @@ See [Pipeline model](../explanation/pipeline-model.md) for the full picture of h
 
 Fast-feedback also calls source security scanning and image scanning automatically on each pull request and push. Source security scanning covers source dependency vulnerabilities and git-tree secrets. Image scanning covers both known CVEs and embedded secrets. At this level, `security-scan-blocking-severity` defaults to `off`, so the scans report findings without blocking the workflow by default.
 
+If the managed scanners need to be temporarily bypassed, set `security-scan-enabled: false` on the P2P workflow call. This skips security scanner execution and policy jobs while leaving the rest of the pipeline unblocked.
+
 Look in the workflow summary and uploaded artifact for the details, and on pull requests you'll also get a sticky comment with the latest results.
 See [Image scanning](../explanation/image-scanning.md), [Secrets scanning](../explanation/secrets-scanning.md), and [Triage security findings](../how-to/triage-security-findings.md) for what each scan checks and how to respond.
 
