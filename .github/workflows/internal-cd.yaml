@@ -27,5 +27,5 @@ jobs:
         run: |
           curl -v -X POST https://api.github.com/repos/coreeng/p2p-testing/dispatches \
           -H 'Accept: application/vnd.github.everest-preview+json' \
-          -u ${ACCESS_TOKEN} \
+          -u "${ACCESS_TOKEN}" \
           --data '{"event_type": "trigger", "client_payload": { "action": "trigger" }}'
