@@ -67,8 +67,9 @@ jobs:
       shell: bash
       env:
         VERSION_PREFIX: ${{ inputs.version-prefix }}
+        PREVIOUS_TAG: ${{ steps.previoustag.outputs.tag }}
       run: |
-        echo "version=$(echo ${{ steps.previoustag.outputs.tag }} | awk -F ${VERSION_PREFIX} '{print $2}')" >> "$GITHUB_OUTPUT"
+        echo "version=${PREVIOUS_TAG#"$VERSION_PREFIX"}" >> "$GITHUB_OUTPUT"
 
     - name: Get next patch version
       id: semvers
@@ -81,14 +82,14 @@ jobs:
       shell: bash
       env:
         VERSION_PREFIX: ${{ inputs.version-prefix }}
+        PREVIOUS_VERSION: ${{ steps.previousversion.outputs.version }}
       run: |
         GIT_REF="HEAD"
-        PREVIOUS_TAG=${{ steps.previousversion.outputs.version }}
         if [ -n "$GITHUB_HEAD_REF" ]; then
             GIT_REF="origin/$GITHUB_HEAD_REF"
         fi
-        HASH=$(git rev-parse ${GIT_REF})
-        LAST_TAG_HASH=$(git rev-list -n 1 ${VERSION_PREFIX}${PREVIOUS_TAG} || echo "does-not-exist" )
+        HASH=$(git rev-parse "${GIT_REF}")
+        LAST_TAG_HASH=$(git rev-list -n 1 "${VERSION_PREFIX}${PREVIOUS_VERSION}" || echo "does-not-exist" )
 
         echo "current_hash=${HASH}" >> "$GITHUB_OUTPUT"
         echo "previous_tag_hash=${LAST_TAG_HASH}" >> "$GITHUB_OUTPUT"

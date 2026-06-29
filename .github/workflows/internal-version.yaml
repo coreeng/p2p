@@ -64,9 +64,11 @@ jobs:
       id: setversion
       shell: bash
       run: |
-        echo "patch=${{ steps.semvers.outputs.patch }}" >> "$GITHUB_OUTPUT"
-        echo "minor=${{ steps.semvers.outputs.patch }}" | cut -d. -f1,2 >> "$GITHUB_OUTPUT"
-        echo "major=${{ steps.semvers.outputs.patch }}" | cut -d. -f1 >> "$GITHUB_OUTPUT"
+        {
+          echo "patch=${{ steps.semvers.outputs.patch }}"
+          echo "minor=${{ steps.semvers.outputs.patch }}" | cut -d. -f1,2
+          echo "major=${{ steps.semvers.outputs.patch }}" | cut -d. -f1
+        } >> "$GITHUB_OUTPUT"
 
     - name: Show the tags
       shell: bash
