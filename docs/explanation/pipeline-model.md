@@ -108,7 +108,7 @@ The three stages run as separate workflows, connected by the image registry:
 
 Each stage serves a distinct purpose and runs on its own schedule:
 
-- **Fast-feedback validates every change.** It runs on every pull request and every merge to `main`, keeping the development loop short. Promotion to the integration registry is configurable: restrict it to merges to `main` for a stable integration environment, or allow it on PR pushes too for faster integrated testing at the cost of more churn. See `skip-fastfeedback-integration-on-prs` in the [fast-feedback reference](../reference/p2p-workflow-fastfeedback.md).
+- **Fast-feedback validates every change.** It runs on every pull request and every merge to `main`, keeping the development loop short. Promotion to the integration registry is restricted to merges to `main` and tag pushes. Integration testing on PR pushes is configurable for faster integrated testing at the cost of more churn. See `run-fastfeedback-integration-on-prs` in the [fast-feedback reference](../reference/p2p-workflow-fastfeedback.md).
 - **Extended-test exercises expensive or long-running behaviour.** These tests run on a schedule (typically overnight) against the latest version that passed fast-feedback. Running them once per day for a known-good version controls cost and cluster load while still catching deeper issues.
 - **Prod deploys on a predictable cadence.** A daily morning schedule takes the most recent well-tested version — from extended-test if configured, or from fast-feedback otherwise — and deploys it. A predictable deployment window means issues surface when the team is available to respond.
 
@@ -122,7 +122,7 @@ Promotions only occur when:
 - For fast-feedback: the workflow is running on the `main` branch or a tag push.
 - For extended-test and prod: the workflow is running on `main` (enforced by the workflow's own trigger — cron and `workflow_dispatch` always run against the default branch).
 
-On PR branches, fast-feedback runs `p2p-build`, `p2p-functional`, `p2p-nft`, and optionally `p2p-integration` (skippable via `skip-fastfeedback-integration-on-prs`), but never promotes.
+On PR branches, fast-feedback runs `p2p-build`, `p2p-functional`, `p2p-nft`, and optionally `p2p-integration` (enabled via `run-fastfeedback-integration-on-prs`), but never promotes.
 
 ## Concurrency behaviour
 

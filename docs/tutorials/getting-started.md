@@ -108,12 +108,12 @@ In the GitHub Actions UI you'll see:
    - `security-source-scan` runs independently of `build`.
    - `security-image-scan` runs once `build` succeeds.
    - `functional-test` and `nft-test` run in parallel once build succeeds.
-   - `integration-test` runs after both `functional-test` and `nft-test` succeed.
+   - `integration-test` runs after both `functional-test` and `nft-test` succeed on `main`, tags, or PRs that opt in.
    - `promote` runs last (on `main` only), after `integration-test`, `security-image-scan`, and `security-source-scan` have all succeeded, and copies the image into the `EXTENDED_TEST` registry path.
 
 ## What happens next
 
-On a pull request, the pipeline runs build, functional, nft, and integration tests but skips promote. On a push to `main`, promote runs and the next pipeline stage can pull the image.
+On a pull request, the pipeline runs build, functional, and nft tests, skips integration tests by default, and skips promote. On a push to `main`, integration tests and promote run, and the next pipeline stage can pull the image.
 
 The `p2p-nft` and `p2p-integration` targets are optional. Define them only when you need them; the pipeline exits those steps successfully and continues when they are absent.
 
