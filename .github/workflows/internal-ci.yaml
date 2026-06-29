@@ -184,6 +184,9 @@ jobs:
           tenant_name = 'tenant-name: $' + '{{ inputs.tenant-name }}'
           tenant_name_count = workflow.count(tenant_name)
           assert tenant_name_count == 4, f'expected source plus 3 scheduled tenant-name pass-throughs, got {tenant_name_count}'
+          assert 'P2P_TENANT_NAME: $' + '{{ inputs.tenant-name != ' in workflow
+          assert 'P2P_APP_NAME: $' + '{{ inputs.app-name }}' in workflow
+          assert 'unset P2P_APP_NAME' in workflow
 
           stage_workflow = Path('.github/workflows/p2p-workflow-security-image-scan-stage.yaml').read_text()
           assert 'blocking-severity: $' + '{{ inputs.security-scan-blocking-severity }}' in stage_workflow
@@ -232,6 +235,9 @@ jobs:
           assert "name: security-image-scan ($" + "{{ inputs.github_env != '' && format('{0}, {1}', inputs.pipeline-stage, inputs.github_env) || inputs.pipeline-stage }})" in workflow
           assert 'name: ' + "'security-image-scan ($" + '{{ inputs.github_env }})' not in workflow
           assert 'PIPELINE_STAGE: $' + '{{ inputs.pipeline-stage }}' in workflow
+          assert 'P2P_TENANT_NAME: $' + '{{ env.TENANT_NAME }}' in workflow
+          assert 'P2P_APP_NAME: $' + '{{ inputs.app-name }}' in workflow
+          assert 'P2P_VERSION: $' + '{{ inputs.version }}' in workflow
           assert 'header: security-image-scan-findings-$' + '{{ inputs.app-name || inputs.tenant-name || vars.TENANT_NAME }}-$' + '{{ inputs.pipeline-stage }}-$' + '{{ inputs.github_env || ' in workflow
           assert 'name: security-image-scan-reports-$' + '{{ inputs.pipeline-stage }}-$' + '{{ inputs.github_env || ' in workflow
           assert 'path: .p2p-workflow-src' in workflow
