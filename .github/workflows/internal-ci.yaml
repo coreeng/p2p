@@ -56,6 +56,7 @@ jobs:
         TEST_VARIABLE=value
     with:
       dry-run: true
+      run-fastfeedback-integration-on-prs: true
       version: ${{ needs.test_version.outputs.version }}
 
   test_source_security_scan:
