@@ -43,7 +43,7 @@ Grant `pull-requests: write` when the workflow runs on pull requests so source a
 | `source` | `string` | No | `${{ vars.FAST_FEEDBACK }}` | JSON matrix of deploy environments for the fast-feedback stage. |
 | `destination` | `string` | No | `${{ vars.EXTENDED_TEST }}` | JSON matrix of deploy environments to promote to after integration tests pass. |
 | `working-directory` | `string` | No | `.` | Repository path from which make targets are executed. |
-| `skip-fastfeedback-integration-on-prs` | `boolean` | No | `false` | When `true`, skips the `integration-test` job on pull requests (runs unconditionally on main or tags). |
+| `run-fastfeedback-integration-on-prs` | `boolean` | No | `false` | When `true`, runs the `integration-test` job on pull requests. Integration tests always run on main or tags. |
 | `skip-subnamespaces-create` | `boolean` | No | `false` | Skips creating subnamespaces before running make targets. |
 | `artifacts` | `string` | No | `''` | YAML-formatted map of make target names to artifact paths. Paths matching each active command are uploaded after that command runs. |
 | `security-scan-blocking-severity` | `string` | No | `off` | Minimum security finding severity that blocks the workflow: `off`, `low`, `medium`, `high`, or `critical`. When blocking is enabled, verified secrets are treated as `critical`. Policy jobs fail only for blocking findings unless `security-scan-fail-on-non-blocking-findings` is enabled. |
@@ -73,8 +73,9 @@ build
 ├── functional-test   (needs: build)
 └── nft-test          (needs: build)
     └── integration-test  (needs: functional-test, nft-test)
-                          Skipped when skip-fastfeedback-integration-on-prs=true
-                          AND ref is not main-branch AND ref_type is not tag.
+                          Skipped on pull requests unless
+                          run-fastfeedback-integration-on-prs=true.
+                          Always runs on main-branch or tag pushes.
         └── promote       (needs: integration-test, security-image-scan, security-source-scan)
                           Runs only on main-branch or tag pushes.
 

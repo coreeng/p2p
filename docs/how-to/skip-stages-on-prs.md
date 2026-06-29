@@ -1,6 +1,6 @@
 # How to Skip Stages on Pull Requests
 
-Two inputs let you reduce what runs on pull requests: `dry-run` skips cloud authentication and build tool invocation entirely, and `skip-fastfeedback-integration-on-prs` skips integration tests on PRs while keeping them on `main` and tag pushes.
+Two inputs control what runs on pull requests: `dry-run` skips cloud authentication and build tool invocation entirely, and `run-fastfeedback-integration-on-prs` opts pull requests into integration tests. Integration tests always run on `main` and tag pushes.
 
 ## 1. Use `dry-run` for syntax testing
 
@@ -14,21 +14,21 @@ fastfeedback:
     dry-run: true
 ```
 
-## 2. Skip integration tests on PRs
+## 2. Enable integration tests on PRs
 
-Set `skip-fastfeedback-integration-on-prs: true` to skip integration tests when the workflow runs on a pull request. Integration tests still run on pushes to `main` and on tag pushes.
+Integration tests are skipped on pull requests by default. Set `run-fastfeedback-integration-on-prs: true` to run integration tests when the workflow runs on a pull request.
 
 ```yaml
 fastfeedback:
   uses: coreeng/p2p/.github/workflows/p2p-workflow-fastfeedback.yaml@v1
   with:
     version: ${{ needs.version.outputs.version }}
-    skip-fastfeedback-integration-on-prs: true
+    run-fastfeedback-integration-on-prs: true
 ```
 
-## 3. Combine both inputs
+## 3. Skip cloud work and integration tests on PRs
 
-Use `dry-run` and `skip-fastfeedback-integration-on-prs` together. A common pattern is to enable `dry-run` only on PRs using a conditional expression while also skipping integration tests:
+Use `dry-run` by itself when you want fast PR syntax feedback without cloud access or integration tests:
 
 ```yaml
 fastfeedback:
@@ -36,7 +36,6 @@ fastfeedback:
   with:
     version: ${{ needs.version.outputs.version }}
     dry-run: ${{ github.event_name == 'pull_request' }}
-    skip-fastfeedback-integration-on-prs: true
 ```
 
 This gives fast PR feedback without requiring cloud access, while still running the full pipeline on `main`.
