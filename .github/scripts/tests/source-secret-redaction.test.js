@@ -56,6 +56,26 @@ fs.writeFileSync(input, [
     RawV2: rawV2OnlySecretB,
     SourceMetadata: { Data: { Git: {} } },
   }),
+  JSON.stringify({
+    DetectorName: 'FlatIO',
+    Raw: 'a'.repeat(128),
+    SourceMetadata: { Data: { Git: { file: 'web/yarn.lock' } } },
+  }),
+  JSON.stringify({
+    DetectorName: 'FlatIO',
+    Raw: 'z'.repeat(128),
+    SourceMetadata: { Data: { Git: { file: 'web/yarn.lock' } } },
+  }),
+  JSON.stringify({
+    DetectorName: 'FlatIO',
+    Raw: 'b'.repeat(128),
+    SourceMetadata: { Data: { Git: { file: 'web/package-lock.json' } } },
+  }),
+  JSON.stringify({
+    DetectorName: 'Generic',
+    Raw: 'c'.repeat(128),
+    SourceMetadata: { Data: { Git: { file: 'web/yarn.lock' } } },
+  }),
   '',
 ].join('\n'));
 
@@ -76,7 +96,7 @@ assert(!redactedText.includes(rawV2OnlySecretA));
 assert(!redactedText.includes(rawV2OnlySecretB));
 
 const findings = redactedText.trim().split('\n').map(line => JSON.parse(line));
-assert.strictEqual(findings.length, 5);
+assert.strictEqual(findings.length, 8);
 
 const expectedId = crypto.createHash('sha256').update(`Github\0${rawSecret}`).digest('hex');
 assert.deepStrictEqual(findings[0], {
@@ -89,7 +109,7 @@ assert.deepStrictEqual(findings[0], {
   url: 'https://github.example/org/repo/blob/abcdef1234567890/docs/secrets%20file%2Bname.env#L7',
 });
 
-const rawV2Ids = findings.slice(3).map(finding => finding.id);
+const rawV2Ids = findings.slice(3, 5).map(finding => finding.id);
 assert.strictEqual(new Set(rawV2Ids).size, 2);
 assert.deepStrictEqual(rawV2Ids, [
   crypto.createHash('sha256').update(`Generic\0${rawV2OnlySecretA}`).digest('hex'),
@@ -99,5 +119,10 @@ assert.strictEqual(findings[1].status, 'unknown');
 assert.strictEqual(findings[1].detector, 'Slack');
 assert.strictEqual(findings[1].url, null);
 assert.strictEqual(findings[2].status, 'unverified');
+assert.deepStrictEqual(findings.slice(5).map(finding => finding.detector), [
+  'FlatIO',
+  'FlatIO',
+  'Generic',
+]);
 
 console.log('source secret redaction fixtures passed');

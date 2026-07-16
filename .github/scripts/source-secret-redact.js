@@ -12,6 +12,16 @@ const pathToUrlPath = file => String(file || '')
   .map(segment => encodeURIComponent(segment))
   .join('/');
 
+const isYarnChecksumFalsePositive = finding => {
+  const detector = finding.DetectorName || finding.DetectorType;
+  const raw = finding.RawV2 || finding.Raw || '';
+  const file = finding.SourceMetadata?.Data?.Git?.file || '';
+
+  return detector === 'FlatIO'
+    && /(^|\/)yarn\.lock$/.test(file)
+    && /^[0-9a-f]{128}$/.test(raw);
+};
+
 const redactFinding = (finding, { serverUrl, repository }) => {
   const detector = finding.DetectorName || finding.DetectorType || 'unknown';
   const git = finding.SourceMetadata?.Data?.Git || {};
@@ -50,6 +60,7 @@ const redactSourceSecrets = ({ inputPath, outputPath, serverUrl, repository }) =
     } catch (error) {
       throw new Error(`Failed to process TruffleHog source finding ${inputPath}: ${error.message}`);
     }
+    if (isYarnChecksumFalsePositive(finding)) continue;
     fs.appendFileSync(outputPath, `${JSON.stringify(redactFinding(finding, { serverUrl, repository }))}\n`);
   }
 };
