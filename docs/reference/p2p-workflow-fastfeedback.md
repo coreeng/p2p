@@ -43,6 +43,8 @@ Grant `pull-requests: write` when the workflow runs on pull requests so source a
 | `source` | `string` | No | `${{ vars.FAST_FEEDBACK }}` | JSON matrix of deploy environments for the fast-feedback stage. |
 | `destination` | `string` | No | `${{ vars.EXTENDED_TEST }}` | JSON matrix of deploy environments to promote to after integration tests pass. |
 | `working-directory` | `string` | No | `.` | Repository path from which make targets are executed. |
+| `runner-label` | `string` | No | `ubuntu-24.04` | GitHub Actions runner label for build, functional, NFT, and integration command jobs. Security scans, promotion, and notifications keep their existing runners. |
+| `repository-runner-setup` | `boolean` | No | `false` | When `true`, each command job runs the caller repository's `.github/actions/p2p-runner-setup` composite action after checkout and lets that action own Docker builder setup. |
 | `run-fastfeedback-integration-on-prs` | `boolean` | No | `false` | When `true`, runs the `integration-test` job on pull requests. Integration tests always run on main or tags. |
 | `skip-subnamespaces-create` | `boolean` | No | `false` | Skips creating subnamespaces before running make targets. |
 | `artifacts` | `string` | No | `''` | YAML-formatted map of make target names to artifact paths. Paths matching each active command are uploaded after that command runs. |
@@ -103,6 +105,8 @@ notify-failure       (needs: all jobs; runs on main-branch when any job fails)
 ```
 
 All jobs use a matrix derived from `source`. The `promote` job uses a matrix derived from `destination`. The `security-source-scan` job is not part of the matrix; it runs once per workflow. Security PR comments are scoped to `app-name`.
+
+`runner-label` and `repository-runner-setup` are forwarded only to the command-execution jobs (`build`, `functional-test`, `nft-test`, and `integration-test`). When repository setup is enabled, the caller repository must provide `.github/actions/p2p-runner-setup/action.yaml` or `.github/actions/p2p-runner-setup/action.yml`; the action receives no inputs.
 
 ## See also
 
