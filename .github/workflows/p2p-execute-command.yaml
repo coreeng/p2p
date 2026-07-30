@@ -124,6 +124,8 @@ jobs:
       - name: Setup repository runner
         if: ${{ inputs.repository-runner-setup }}
         uses: ./.github/actions/p2p-runner-setup
+        with:
+          command: ${{ inputs.command }}
 
       - name: Authenticate to Google Cloud
         id: auth
