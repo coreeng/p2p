@@ -61,7 +61,7 @@ jobs:
       pull-requests: write
 
     container:
-      image:  ghcr.io/coreeng/core-platform:${{ inputs.release }}
+      image:  ghcr.io/coreeng/core-platform-infra:${{ inputs.release }}
       credentials:
         username: ${{ secrets.cecg-registry-username }}
         password: ${{ secrets.cecg-registry-secret }}
