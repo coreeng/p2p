@@ -87,6 +87,13 @@ jobs:
           set -euo pipefail
           node .github/scripts/tests/security-ignore-helper.test.js
 
+  test_pinniped_auth:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: Test Pinniped GitHub OIDC credential helper
+        run: .github/scripts/tests/github-oidc-credential.test.sh
+
   test_source_security_ignore_report:
     runs-on: ubuntu-24.04
     steps:
