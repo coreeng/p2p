@@ -89,6 +89,8 @@ jobs:
 
   test_pinniped_auth:
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v6
       - name: Test Pinniped GitHub OIDC credential helper
