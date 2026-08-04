@@ -31,6 +31,7 @@ class PinnipedAuthEvidenceWorkflowTest(unittest.TestCase):
         self.assertRegex(
             workflow,
             r"(?ms)^  wrong-repository:\n"
+            r"    if: \$\{\{ github\.ref == 'refs/heads/spike/pinniped-sandbox' \}\}\n"
             r"    runs-on: ubuntu-24\.04\n"
             r"    environment: sandbox-3-gcp\n"
             r"    timeout-minutes: 10\n",

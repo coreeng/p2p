@@ -12,6 +12,7 @@ permissions:
 
 jobs:
   wrong-repository:
+    if: ${{ github.ref == 'refs/heads/spike/pinniped-sandbox' }}
     runs-on: ubuntu-24.04
     environment: sandbox-3-gcp
     timeout-minutes: 10
