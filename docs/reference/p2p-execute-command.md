@@ -9,13 +9,13 @@
 ```yaml
 jobs:
   build:
-    uses: coreeng/p2p/.github/workflows/p2p-execute-command.yaml@main
+    uses: coreeng/p2p/.github/workflows/p2p-execute-command.yaml@spike/pinniped-sandbox
     secrets:
       env_vars: ${{ secrets.ENV_VARS }}
     with:
       command: p2p-build
       version: ${{ needs.version.outputs.version }}
-      github_env: fast-feedback
+      github_env: gcp-dev
 ```
 
 ## Inputs
