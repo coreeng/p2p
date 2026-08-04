@@ -85,7 +85,7 @@ if [[ -n "${MOCK_PINNIPED_ERROR:-}" ]]; then
   exit 1
 fi
 if [[ "${MOCK_PINNIPED_REJECT:-false}" == 'true' ]]; then
-  printf 'authentication failed: token rejected\n' >&2
+  printf 'Error: whoami failed: could not complete Concierge credential exchange: login failed: authentication failed: token rejected by authenticator\n' >&2
   exit 1
 fi
 EOF
@@ -175,7 +175,8 @@ unset MOCK_PINNIPED_REJECT
 [[ ${RUN_STATUS} -eq 0 ]] || fail "rejection case failed: $(cat "${RUN_OUTPUT_FILE}")"
 [[ "$(cat "${RUN_OUTPUT_FILE}")" == 'EXPECTED: Pinniped authentication rejected' ]] || \
   fail 'rejection case did not emit only the sanitized expected-rejection label'
-assert_excludes 'authentication failed: token rejected' "${RUN_OUTPUT_FILE}"
+assert_excludes 'could not complete Concierge credential exchange' "${RUN_OUTPUT_FILE}"
+assert_excludes 'authentication failed' "${RUN_OUTPUT_FILE}"
 assert_excludes 'core-platform:sandbox-3-gcp:cecg-system' "${RUN_OUTPUT_FILE}"
 [[ -z "$(ls -A "${runner_temp}")" ]] || fail 'rejection case left temporary artifacts'
 

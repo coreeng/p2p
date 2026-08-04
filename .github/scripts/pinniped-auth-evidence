@@ -181,7 +181,7 @@ if [[ "${expected_authentication}" == 'rejected' ]]; then
   if pinniped whoami --kubeconfig "${kubeconfig}" > /dev/null 2> "${error_file}"; then
     fail 'authentication unexpectedly succeeded'
   fi
-  if ! grep -Eiq '^authentication failed: token rejected[[:space:]]*$' "${error_file}"; then
+  if ! grep -Eiq 'could not complete Concierge credential exchange: login failed:.*authentication failed' "${error_file}"; then
     fail 'authentication failed for an unrecognized reason'
   fi
   printf 'EXPECTED: Pinniped authentication rejected\n'
