@@ -1,0 +1,40 @@
+name: Pinniped Authentication Evidence
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - spike/pinniped-sandbox
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  wrong-repository:
+    runs-on: ubuntu-24.04
+    environment: sandbox-3-gcp
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Pinniped CLI
+        run: |
+          set -euo pipefail
+          curl --fail --location --silent --show-error \
+            --output "$RUNNER_TEMP/pinniped" \
+            https://get.pinniped.dev/v0.47.0/pinniped-cli-linux-amd64
+          printf '%s  %s\n' \
+            '43538ad0c9c9ad67fb121f3d1e8d174324b9fea63f07ec88936182889df752a6' \
+            "$RUNNER_TEMP/pinniped" | sha256sum --check
+          sudo install -m 0755 "$RUNNER_TEMP/pinniped" /usr/local/bin/pinniped
+
+      - name: Verify wrong repository rejection
+        env:
+          PINNIPED_ENDPOINT: ${{ vars.PINNIPED_ENDPOINT }}
+          PINNIPED_CA_BUNDLE: ${{ vars.PINNIPED_CA_BUNDLE }}
+        run: |
+          .github/scripts/pinniped-auth-evidence \
+            --audience=core-platform:sandbox-3-gcp:auth-test-2 \
+            --authenticator=github-actions-auth-test-2 \
+            --expect-authentication=rejected

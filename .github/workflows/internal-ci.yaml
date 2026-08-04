@@ -96,7 +96,9 @@ jobs:
       - name: Test Pinniped authentication
         run: |
           .github/scripts/tests/github-oidc-credential.test.sh
+          .github/scripts/tests/pinniped-auth-evidence.test.sh
           python3 .github/scripts/tests/pinniped-workflow.test.py
+          python3 .github/scripts/tests/pinniped-auth-evidence-workflow.test.py
 
   test_source_security_ignore_report:
     runs-on: ubuntu-24.04
