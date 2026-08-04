@@ -13,7 +13,7 @@ Create one GitHub environment per deployment target. Common examples:
 | `gcp-dev` | Fast-feedback and extended-test workloads |
 | `gcp-prod` | Production workloads |
 
-GitHub environment protection rules (required reviewers, deployment branches) apply normally; P2P workflows reference environments by name through the matrix variables described below. The GitHub environment name must exactly equal its `DPLATFORM` value. The configuration source of truth creates both from `env.Environment`; a matrix entry such as `gcp-dev` therefore selects the `gcp-dev` GitHub environment with `DPLATFORM=gcp-dev`.
+GitHub environment protection rules (required reviewers, deployment branches) apply normally; P2P workflows reference environments by name through the matrix variables described below.
 
 ## Repository variables
 
@@ -59,7 +59,7 @@ TENANT_NAME=my-app
 
 ## Per-environment variables
 
-Each GitHub environment carries variables that describe the target cloud project and cluster. The `p2p-execute-command` workflow reads these automatically.
+Each GitHub environment carries variables that describe the target cloud project and cluster. Stable `@v1` workflows read these automatically.
 
 | Variable | Description |
 |----------|-------------|
@@ -69,10 +69,20 @@ Each GitHub environment carries variables that describe the target cloud project
 | `PROJECT_ID` | GCP project ID for the Core Platform environment (e.g., `core-platform-dev-1a2b`) |
 | `PROJECT_NUMBER` | GCP project number (e.g., `123456789012`) |
 | `REGION` | GCP region (e.g., `europe-west2`); overrides the workflow's `region` input |
-| `PINNIPED_ENDPOINT` | Complete HTTPS endpoint from `CredentialIssuer.status.strategies[type=ImpersonationProxy].frontend.impersonationProxyInfo.endpoint` |
-| `PINNIPED_CA_BUNDLE` | Base64-encoded PEM from the adjacent `impersonationProxyInfo.certificateAuthorityData` field |
 
-For this branch-only spike, an operator must read the endpoint and CA from the cluster's `CredentialIssuer` and publish them manually to the matching GitHub environment. Automating publication through the portal is future work and is out of scope.
+### `spike/pinniped-sandbox` only
+
+Stable `@v1` neither enforces `github_env == DPLATFORM` nor consumes `PINNIPED_ENDPOINT` or `PINNIPED_CA_BUNDLE`. On the `spike/pinniped-sandbox` branch:
+
+- The GitHub environment passed as `github_env` must exactly equal its `DPLATFORM` value. The configuration source of truth creates both from `env.Environment`.
+- The matching GitHub environment must also define:
+
+  | Variable | Description |
+  |----------|-------------|
+  | `PINNIPED_ENDPOINT` | Complete HTTPS endpoint from `CredentialIssuer.status.strategies[type=ImpersonationProxy].frontend.impersonationProxyInfo.endpoint` |
+  | `PINNIPED_CA_BUNDLE` | Base64-encoded PEM from the adjacent `impersonationProxyInfo.certificateAuthorityData` field |
+
+For this spike, an operator must read the endpoint and CA from the cluster's `CredentialIssuer` and publish them manually. Automating publication through the portal is future work and is out of scope.
 
 ## Cloud provider auth variables
 
