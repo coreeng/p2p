@@ -1,0 +1,185 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+fail() {
+  printf 'pinniped-auth-evidence: %s\n' "$1" >&2
+  exit 1
+}
+
+audience=''
+authenticator=''
+expected_authentication=''
+allow_checks=()
+deny_checks=()
+
+while (($# > 0)); do
+  case "$1" in
+    --audience=*)
+      [[ -z "${audience}" ]] || fail '--audience may only be specified once'
+      audience="${1#--audience=}"
+      ;;
+    --authenticator=*)
+      [[ -z "${authenticator}" ]] || fail '--authenticator may only be specified once'
+      authenticator="${1#--authenticator=}"
+      ;;
+    --expect-authentication=*)
+      [[ -z "${expected_authentication}" ]] || fail '--expect-authentication may only be specified once'
+      expected_authentication="${1#--expect-authentication=}"
+      ;;
+    --allow=*)
+      allow_checks+=("${1#--allow=}")
+      ;;
+    --deny=*)
+      deny_checks+=("${1#--deny=}")
+      ;;
+    *)
+      fail 'unknown or malformed argument'
+      ;;
+  esac
+  shift
+done
+
+[[ -n "${audience}" ]] || fail '--audience is required'
+[[ -n "${authenticator}" ]] || fail '--authenticator is required'
+case "${expected_authentication}" in
+  success|rejected) ;;
+  *) fail '--expect-authentication must be success or rejected' ;;
+esac
+
+validate_check() {
+  local check="$1"
+  local verb resource namespace extra
+  IFS=',' read -r verb resource namespace extra <<< "${check}"
+  [[ -n "${verb}" && -n "${resource}" && -n "${namespace}" && -z "${extra:-}" ]] || \
+    fail 'authorization expectations must be verb,resource,namespace'
+  [[ "${verb}" =~ ^[A-Za-z0-9*._:/-]+$ ]] || fail 'authorization expectation contains unsupported characters'
+  [[ "${resource}" =~ ^[A-Za-z0-9*._:/-]+$ ]] || fail 'authorization expectation contains unsupported characters'
+  [[ "${namespace}" =~ ^[A-Za-z0-9*._:/-]+$ ]] || fail 'authorization expectation contains unsupported characters'
+}
+
+if [[ -n "${allow_checks[0]+present}" ]]; then
+  for check in "${allow_checks[@]}"; do
+    validate_check "${check}"
+  done
+fi
+if [[ -n "${deny_checks[0]+present}" ]]; then
+  for check in "${deny_checks[@]}"; do
+    validate_check "${check}"
+  done
+fi
+
+[[ -n "${RUNNER_TEMP:-}" ]] || fail 'RUNNER_TEMP is required'
+[[ -d "${RUNNER_TEMP}" ]] || fail 'RUNNER_TEMP must be a directory'
+[[ -n "${PINNIPED_ENDPOINT:-}" ]] || fail 'PINNIPED_ENDPOINT is required'
+[[ -n "${PINNIPED_CA_BUNDLE:-}" ]] || fail 'PINNIPED_CA_BUNDLE is required'
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+credential_helper="${script_dir}/github-oidc-credential"
+[[ -x "${credential_helper}" ]] || fail 'github-oidc-credential sibling is not executable'
+
+ca_file=''
+kubeconfig=''
+error_file=''
+cleanup() {
+  [[ -z "${ca_file}" ]] || rm -f "${ca_file}"
+  [[ -z "${kubeconfig}" ]] || rm -f "${kubeconfig}"
+  [[ -z "${error_file}" ]] || rm -f "${error_file}"
+}
+trap cleanup EXIT
+
+ca_file="$(mktemp "${RUNNER_TEMP%/}/pinniped-ca.XXXXXX")"
+kubeconfig="$(mktemp "${RUNNER_TEMP%/}/pinniped-kubeconfig.XXXXXX")"
+error_file="$(mktemp "${RUNNER_TEMP%/}/pinniped-error.XXXXXX")"
+rm -f "${kubeconfig}"
+
+if ! printf '%s' "${PINNIPED_CA_BUNDLE}" | base64 --decode > "${ca_file}" 2>/dev/null; then
+  : > "${ca_file}"
+  if ! printf '%s' "${PINNIPED_CA_BUNDLE}" | base64 -D > "${ca_file}" 2>/dev/null; then
+    fail 'PINNIPED_CA_BUNDLE is not valid base64'
+  fi
+fi
+[[ -s "${ca_file}" ]] || fail 'PINNIPED_CA_BUNDLE decoded to an empty CA bundle'
+chmod 0600 "${ca_file}"
+
+if ! curl --disable --silent --show-error \
+  --cacert "${ca_file}" \
+  --output /dev/null \
+  "${PINNIPED_ENDPOINT}" 2> "${error_file}"; then
+  fail 'Pinniped endpoint TLS verification failed'
+fi
+
+if ! kubectl config set-cluster pinniped \
+  --server="${PINNIPED_ENDPOINT}" \
+  --certificate-authority="${ca_file}" \
+  --embed-certs=true \
+  --kubeconfig="${kubeconfig}" > /dev/null 2> "${error_file}"; then
+  fail 'could not configure the Pinniped cluster'
+fi
+if ! kubectl config set-credentials pinniped \
+  --exec-command="${credential_helper}" \
+  --exec-api-version=client.authentication.k8s.io/v1beta1 \
+  --exec-interactive-mode=Never \
+  --exec-arg="--audience=${audience}" \
+  --exec-arg=--enable-concierge \
+  --exec-arg=--concierge-api-group-suffix=pinniped.dev \
+  --exec-arg="--concierge-authenticator-name=${authenticator}" \
+  --exec-arg=--concierge-authenticator-type=jwt \
+  --exec-arg="--concierge-endpoint=${PINNIPED_ENDPOINT}" \
+  --exec-arg="--concierge-ca-bundle-data=${PINNIPED_CA_BUNDLE}" \
+  --exec-arg=--credential-cache= \
+  --kubeconfig="${kubeconfig}" > /dev/null 2> "${error_file}"; then
+  fail 'could not configure the Pinniped credential helper'
+fi
+if ! kubectl config set-context pinniped \
+  --cluster=pinniped \
+  --user=pinniped \
+  --kubeconfig="${kubeconfig}" > /dev/null 2> "${error_file}"; then
+  fail 'could not configure the Pinniped context'
+fi
+if ! kubectl config use-context pinniped --kubeconfig="${kubeconfig}" > /dev/null 2> "${error_file}"; then
+  fail 'could not select the Pinniped context'
+fi
+
+if [[ "${expected_authentication}" == 'rejected' ]]; then
+  if pinniped whoami --kubeconfig "${kubeconfig}" > /dev/null 2> "${error_file}"; then
+    fail 'authentication unexpectedly succeeded'
+  fi
+  if ! grep -Eiq 'authentication failed|unauthenticated|unauthorized|token.*rejected' "${error_file}"; then
+    fail 'authentication failed for an unrecognized reason'
+  fi
+  printf 'EXPECTED: Pinniped authentication rejected\n'
+  exit 0
+fi
+
+if ! pinniped whoami --kubeconfig "${kubeconfig}" > /dev/null 2> "${error_file}"; then
+  fail 'Pinniped authentication failed'
+fi
+printf 'Pinniped authentication succeeded\n'
+
+run_check() {
+  local expectation="$1"
+  local check="$2"
+  local verb resource namespace extra actual
+  IFS=',' read -r verb resource namespace extra <<< "${check}"
+  if ! actual="$(kubectl --kubeconfig "${kubeconfig}" auth can-i "${verb}" "${resource}" --namespace "${namespace}" 2> "${error_file}")"; then
+    fail 'authorization check failed'
+  fi
+
+  case "${expectation}:${actual}" in
+    ALLOW:yes|DENY:no) ;;
+    *) fail 'authorization result did not match expectation' ;;
+  esac
+  printf '%s %s %s in %s: %s\n' "${expectation}" "${verb}" "${resource}" "${namespace}" "${actual}"
+}
+
+if [[ -n "${allow_checks[0]+present}" ]]; then
+  for check in "${allow_checks[@]}"; do
+    run_check ALLOW "${check}"
+  done
+fi
+if [[ -n "${deny_checks[0]+present}" ]]; then
+  for check in "${deny_checks[@]}"; do
+    run_check DENY "${check}"
+  done
+fi
