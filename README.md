@@ -62,9 +62,11 @@ The primary workflows call these. Call them only through the primary workflows.
 
 ## Prerequisites
 
-Before calling the workflows, set up the following:
+### Stable `@v1`
 
-- **GitHub environments** — at least one for fast-feedback (e.g., `gcp-dev`). The GitHub environment name must exactly equal its `DPLATFORM` value. See [Environment Configuration](docs/explanation/environment-configuration.md) for details.
+Before calling the stable `@v1` workflows shown in [Quick Start](#quick-start), set up the following:
+
+- **GitHub environments** — at least one for fast-feedback (e.g., `gcp-dev`). See [Environment Configuration](docs/explanation/environment-configuration.md) for details.
 - **Repository variables:**
 
   | Variable | Format | Example |
@@ -84,14 +86,22 @@ Before calling the workflows, set up the following:
   | `PROJECT_ID` | Core Platform GCP project ID, e.g. `core-platform-dev-1a2b3c` |
   | `PROJECT_NUMBER` | GCP project number for the project above |
   | `REGION` | GCP region, e.g. `europe-west2` |
-  | `PINNIPED_ENDPOINT` | Complete HTTPS endpoint from the `CredentialIssuer` `impersonationProxyInfo.endpoint` field |
-  | `PINNIPED_CA_BUNDLE` | Base64-encoded PEM from the same `impersonationProxyInfo.certificateAuthorityData` field |
 
 See [Environment Configuration](docs/explanation/environment-configuration.md) for details.
 
-## Pinniped spike status
+### Sandbox Pinniped spike
 
-Pinniped authentication is available only on the `spike/pinniped-sandbox` branch for sandbox evaluation. It has not been published as a P2P `v2` or any other major version, and these docs do not represent live sandbox evidence. The spike requires operators to publish `PINNIPED_ENDPOINT` and `PINNIPED_CA_BUNDLE` to each GitHub environment manually; portal automation is future work and is out of scope.
+Pinniped authentication is available only on the `spike/pinniped-sandbox` branch for sandbox evaluation. It has not been published as a P2P `v2` or any other major version, and these docs do not represent live sandbox evidence. The following requirements apply only when evaluating that branch; they do not apply to stable `@v1`:
+
+- Use a sandbox GitHub environment such as `sandbox-3-gcp`. Its name must exactly equal its `DPLATFORM` value.
+- Manually publish these variables to that GitHub environment:
+
+  | Variable | Description |
+  |----------|-------------|
+  | `PINNIPED_ENDPOINT` | Complete HTTPS endpoint from the `CredentialIssuer` `impersonationProxyInfo.endpoint` field |
+  | `PINNIPED_CA_BUNDLE` | Base64-encoded PEM from the same `impersonationProxyInfo.certificateAuthorityData` field |
+
+Portal automation for publishing these variables is future work and is out of scope.
 
 ## Documentation
 

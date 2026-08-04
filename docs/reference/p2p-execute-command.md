@@ -15,7 +15,7 @@ jobs:
     with:
       command: p2p-build
       version: ${{ needs.version.outputs.version }}
-      github_env: gcp-dev
+      github_env: sandbox-3-gcp
 ```
 
 ## Inputs
