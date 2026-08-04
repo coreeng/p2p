@@ -57,7 +57,7 @@ This workflow has no outputs.
 
 ## Authentication
 
-The spike uses two independent GitHub OIDC exchanges:
+The spike uses two independent OIDC authentication paths:
 
 - GitHub OIDC through Pinniped authenticates Kubernetes API requests. P2P requests audience `core-platform:<DPLATFORM>:<TENANT_NAME>` and uses the `JWTAuthenticator` named `github-actions-<TENANT_NAME>`.
 - Google Workload Identity Federation remains responsible for Artifact Registry access and for the credentials file exposed to the application make target as `GOOGLE_APPLICATION_CREDENTIALS`.
@@ -66,9 +66,9 @@ The platform-side `JWTAuthenticator` accepts only the configured environment and
 
 `PINNIPED_ENDPOINT` must be the complete HTTPS endpoint reported at `CredentialIssuer.status.strategies[type=ImpersonationProxy].frontend.impersonationProxyInfo.endpoint`. `PINNIPED_CA_BUNDLE` must be the base64-encoded PEM reported by the adjacent `certificateAuthorityData` field. For this spike, operators manually publish both values as GitHub environment variables; portal automation is out of scope.
 
-P2P creates the kubeconfig under `RUNNER_TEMP`. It embeds only the endpoint, CA, context, namespace, and exec-plugin configuration; it stores no bearer token or client credential certificate. The exec plugin requests a fresh GitHub OIDC token and disables the Pinniped credential cache.
+P2P creates the kubeconfig under `RUNNER_TEMP`. It embeds only the endpoint, CA, context, namespace, and exec-plugin configuration; it stores no bearer token or client credential certificate. Whenever the Kubernetes client invokes the Pinniped exec helper, it requests a fresh GitHub OIDC token as needed; the Pinniped credential cache is disabled.
 
-The credential helper is checked out from the reusable workflow's own repository and exact workflow SHA, then moved outside the application workspace before use. The Pinniped CLI download is pinned to `v0.47.0` and verified with its SHA-256 checksum. P2P fails early when configuration is incomplete or `github_env` differs from `DPLATFORM`, verifies the identity with `pinniped whoami`, and checks authorization at each operation boundary: subnamespace-anchor creation before creating a subnamespace and deployment creation after resolving the target namespace.
+The credential helper is checked out from the reusable workflow's own repository and exact workflow SHA, then moved outside the application workspace before use. The Pinniped CLI download is pinned to `v0.47.0` and verified with its SHA-256 checksum. P2P fails early when configuration is incomplete or `github_env` differs from `DPLATFORM` and verifies the identity with `pinniped whoami`. It performs two preflight capability checks: `SubnamespaceAnchor` creation and `Deployment` creation. Make targets can require additional permissions enforced by Kubernetes.
 
 ## Environment Variables
 

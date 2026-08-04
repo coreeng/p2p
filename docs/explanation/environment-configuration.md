@@ -94,7 +94,7 @@ GitHub OIDC through Pinniped authenticates Kubernetes requests. P2P derives:
 
 The platform authenticator also requires the GitHub OIDC token's `environment` claim to equal `DPLATFORM` and its normalized `repository` claim to equal the tenant configuration's GitHub repository `owner/name`. This limits Kubernetes access to the configured tenant repository and environment.
 
-P2P writes an ephemeral kubeconfig under `RUNNER_TEMP` containing the endpoint, embedded CA, namespace, context, and trusted exec-plugin configuration. It does not store a bearer token or client credential certificate. The helper comes from the reusable workflow's exact repository and SHA; the Pinniped CLI is pinned and checksum-verified. Configuration validation and `pinniped whoami` run before Kubernetes work, followed by authorization checks immediately before subnamespace creation and target-namespace deployment.
+P2P writes an ephemeral kubeconfig under `RUNNER_TEMP` containing the endpoint, embedded CA, namespace, context, and trusted exec-plugin configuration. It does not store a bearer token or client credential certificate. The helper comes from the reusable workflow's exact repository and SHA, requests fresh GitHub OIDC tokens as needed, and disables the Pinniped credential cache; the Pinniped CLI is pinned and checksum-verified. Configuration validation and `pinniped whoami` run before Kubernetes work. P2P performs two preflight capability checks: `SubnamespaceAnchor` creation and `Deployment` creation. Make targets can require additional permissions enforced by Kubernetes.
 
 This behavior exists only on `spike/pinniped-sandbox`; no P2P `v2` or other major version has been published, and live sandbox evidence is not yet claimed.
 
@@ -131,54 +131,38 @@ The fast-feedback, extended-test, and prod workflow inputs accept `source` and `
 
 A single repository can therefore run the same pipeline against different environment sets — such as multi-region deployments — by passing explicit JSON matrices at call time.
 
-## Complete GCP example
+## Sandbox spike example
 
-The following shows a typical variable set for a `gcp-dev` GitHub environment.
+The following hypothetical configuration is limited to the `sandbox-3-gcp` spike environment. It does not configure or support production use.
 
 **Repository variables:**
 
 ```
-FAST_FEEDBACK={"include": [{"deploy_env": "gcp-dev"}]}
-EXTENDED_TEST={"include": [{"deploy_env": "gcp-dev"}]}
-PROD={"include": [{"deploy_env": "gcp-prod"}]}
+FAST_FEEDBACK={"include": [{"deploy_env": "sandbox-3-gcp"}]}
+EXTENDED_TEST={"include": [{"deploy_env": "sandbox-3-gcp"}]}
 TENANT_NAME=my-app
 ```
 
-**`gcp-dev` environment variables:**
+**`sandbox-3-gcp` environment variables:**
 
 ```
-BASE_DOMAIN=dev.example.com
-INTERNAL_SERVICES_DOMAIN=internal.dev.example.com
-DPLATFORM=gcp-dev
-PROJECT_ID=core-platform-dev-1a2b3c
-PROJECT_NUMBER=123456789012
+BASE_DOMAIN=sandbox-3-gcp.sandboxes.example.com
+INTERNAL_SERVICES_DOMAIN=sandbox-3-gcp-internal.sandboxes.example.com
+DPLATFORM=sandbox-3-gcp
+PROJECT_ID=sandbox-3-a1b2c3d4
+PROJECT_NUMBER=<sandbox-project-number>
 REGION=europe-west2
-PINNIPED_ENDPOINT=https://pinniped.gcp-dev.example.com
+PINNIPED_ENDPOINT=<complete-HTTPS-endpoint-from-CredentialIssuer>
 PINNIPED_CA_BUNDLE=<base64-encoded-PEM-from-CredentialIssuer>
 ```
 
-**`gcp-prod` environment variables:**
+With this hypothetical configuration, the pipeline authenticates to Google Cloud as:
 
-```
-BASE_DOMAIN=prod.example.com
-INTERNAL_SERVICES_DOMAIN=internal.prod.example.com
-DPLATFORM=gcp-prod
-PROJECT_ID=core-platform-prod-4d5e6f
-PROJECT_NUMBER=987654321098
-REGION=europe-west2
-PINNIPED_ENDPOINT=https://pinniped.gcp-prod.example.com
-PINNIPED_CA_BUNDLE=<base64-encoded-PEM-from-CredentialIssuer>
-```
-
-With this configuration, the pipeline authenticates as:
-
-- Dev: `p2p-my-app@core-platform-dev-1a2b3c.iam.gserviceaccount.com`
-- Prod: `p2p-my-app@core-platform-prod-4d5e6f.iam.gserviceaccount.com`
+- Sandbox: `p2p-my-app@sandbox-3-a1b2c3d4.iam.gserviceaccount.com`
 
 Images are stored at:
 
-- Dev fast-feedback: `europe-west2-docker.pkg.dev/core-platform-dev-1a2b3c/tenant/my-app/fast-feedback/<image>:<version>`
-- Prod: `europe-west2-docker.pkg.dev/core-platform-prod-4d5e6f/tenant/my-app/prod/<image>:<version>`
+- Sandbox fast-feedback: `europe-west2-docker.pkg.dev/sandbox-3-a1b2c3d4/tenant/my-app/fast-feedback/<image>:<version>`
 
 ## See also
 
