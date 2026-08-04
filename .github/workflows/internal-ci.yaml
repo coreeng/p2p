@@ -114,6 +114,13 @@ jobs:
           assert 'github.workspace' not in workflow
           PY
 
+  test_promotion_failure_handling:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: Test multi-image promotion failure handling
+        run: bash .github/scripts/tests/promotion-fail-fast.test.sh
+
   test_image_scan:
     needs: [test_version]
     strategy:
