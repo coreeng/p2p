@@ -138,27 +138,76 @@ class PinnipedWorkflowTest(unittest.TestCase):
         )
         self.assertIn('echo "Pinniped authentication succeeded"', preflight)
 
-    def test_preflights_stage_authorization_for_both_required_resources(self) -> None:
-        preflight = step(self.workflow, "Preflight tenant authorization")
+    def test_resolves_target_namespace_once_for_setup_and_authorization(self) -> None:
+        resolver = step(self.workflow, "Resolve target namespace")
         self.assertIn(
-            "if: ${{ inputs.dry-run == false && inputs.subnamespace != '' }}",
-            preflight,
+            "if: ${{ inputs.dry-run == false && inputs.app-name != '' && inputs.subnamespace != '' }}",
+            resolver,
         )
-        for resource in (
-            "deployments.apps",
-            "subnamespaceanchors.hnc.x-k8s.io",
-        ):
-            self.assertIn(
-                f'if ! kubectl auth can-i create {resource} '
-                '--namespace "$TENANT_NAME" --quiet; then',
-                preflight,
-            )
-        self.assertEqual(preflight.count("if ! kubectl auth can-i create"), 2)
+        self.assertIn('if [[ "$TENANT_NAME" == "$APP_NAME" ]]; then', resolver)
+        self.assertIn('target_namespace="${TENANT_NAME}-${SUBNAMESPACE}"', resolver)
+        self.assertIn(
+            'target_namespace="${TENANT_NAME}-${APP_NAME}-${SUBNAMESPACE}"', resolver
+        )
+        self.assertIn(
+            'echo "target-namespace=${target_namespace}" >> "$GITHUB_OUTPUT"', resolver
+        )
+
+    def test_authorizes_hnc_creation_at_the_setup_boundary(self) -> None:
+        authorization = step(self.workflow, "Authorize subnamespace creation")
+        setup_condition = (
+            "if: ${{ inputs.dry-run == false && "
+            "inputs.skip-subnamespaces-create == false && "
+            "inputs.app-name != '' && inputs.subnamespace != '' }}"
+        )
+        self.assertIn(setup_condition, authorization)
+        self.assertIn(
+            "if ! kubectl auth can-i create subnamespaceanchors.hnc.x-k8s.io "
+            '--namespace "$TENANT_NAME" --quiet; then',
+            authorization,
+        )
+        self.assertNotIn("deployments.apps", authorization)
+
+        setup = step(
+            self.workflow,
+            "Setup subnamespace ${{ steps.resolve-target-namespace.outputs.target-namespace }}",
+        )
+        self.assertIn(setup_condition, setup)
+        self.assertIn(
+            "TARGET_NAMESPACE: ${{ steps.resolve-target-namespace.outputs.target-namespace }}",
+            setup,
+        )
+        self.assertIn("name: ${TARGET_NAMESPACE}", setup)
+        self.assertIn('get subnamespaceanchor "${TARGET_NAMESPACE}"', setup)
+        self.assertIn('--namespace="${TARGET_NAMESPACE}"', setup)
+
+    def test_authorizes_deployments_in_target_namespace_after_setup(self) -> None:
+        authorization = step(self.workflow, "Authorize target namespace deployment")
+        self.assertIn(
+            "if: ${{ inputs.dry-run == false && inputs.app-name != '' && inputs.subnamespace != '' }}",
+            authorization,
+        )
+        self.assertIn(
+            "TARGET_NAMESPACE: ${{ steps.resolve-target-namespace.outputs.target-namespace }}",
+            authorization,
+        )
+        self.assertIn(
+            "if ! kubectl auth can-i create deployments.apps "
+            '--namespace "$TARGET_NAMESPACE" --quiet; then',
+            authorization,
+        )
+        self.assertNotIn(
+            'create deployments.apps --namespace "$TENANT_NAME"', self.workflow
+        )
+        self.assertLess(
+            self.workflow.index("id: setup-subnamespace"),
+            self.workflow.index("- name: Authorize target namespace deployment"),
+        )
 
     def test_preserves_existing_kubernetes_and_registry_behavior(self) -> None:
         workflow = self.workflow
         self.assertIn("kind: SubnamespaceAnchor", workflow)
-        self.assertIn('kubectl config set-context --current --namespace="${SUBNAMESPACE}"', workflow)
+        self.assertIn('kubectl config set-context --current --namespace="${TARGET_NAMESPACE}"', workflow)
         self.assertIn("- name: Login to Artifact Registry", workflow)
         self.assertIn("- name: Login to tenant provided registry", workflow)
 

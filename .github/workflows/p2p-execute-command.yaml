@@ -228,20 +228,6 @@ jobs:
           pinniped whoami --kubeconfig "$KUBECONFIG" >/dev/null
           echo "Pinniped authentication succeeded"
 
-      - name: Preflight tenant authorization
-        if: ${{ inputs.dry-run == false && inputs.subnamespace != '' }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          if ! kubectl auth can-i create deployments.apps --namespace "$TENANT_NAME" --quiet; then
-            echo "Pinniped identity cannot create namespaced deployments" >&2
-            exit 1
-          fi
-          if ! kubectl auth can-i create subnamespaceanchors.hnc.x-k8s.io --namespace "$TENANT_NAME" --quiet; then
-            echo "Pinniped identity cannot create tenant subnamespace anchors" >&2
-            exit 1
-          fi
-
       - name: Setup Docker Buildx
         id: setup-docker-buildx
         uses: docker/setup-buildx-action@v4
@@ -278,29 +264,64 @@ jobs:
         run: |
           echo ${{ env.REGISTRY_PAT }} | docker login ${{ env.REGISTRY_URL }} -u ${{ env.REGISTRY_USER }} --password-stdin
 
-      - name: ${{ inputs.subnamespace == '' && 'Setup subnamespace' || format('Setup subnamespace {0}', inputs.app-name != env.TENANT_NAME && format('{0}-{1}-{2}', env.TENANT_NAME, inputs.app-name, inputs.subnamespace) || format('{0}-{1}', env.TENANT_NAME, inputs.subnamespace)) }}
+      - name: Resolve target namespace
+        id: resolve-target-namespace
+        if: ${{ inputs.dry-run == false && inputs.app-name != '' && inputs.subnamespace != '' }}
+        shell: bash
+        env:
+          APP_NAME: ${{ inputs.app-name }}
+          SUBNAMESPACE: ${{ inputs.subnamespace }}
+        run: |
+          set -euo pipefail
+          if [[ "$TENANT_NAME" == "$APP_NAME" ]]; then
+            target_namespace="${TENANT_NAME}-${SUBNAMESPACE}"
+          else
+            target_namespace="${TENANT_NAME}-${APP_NAME}-${SUBNAMESPACE}"
+          fi
+          echo "target-namespace=${target_namespace}" >> "$GITHUB_OUTPUT"
+
+      - name: Authorize subnamespace creation
+        if: ${{ inputs.dry-run == false && inputs.skip-subnamespaces-create == false && inputs.app-name != '' && inputs.subnamespace != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! kubectl auth can-i create subnamespaceanchors.hnc.x-k8s.io --namespace "$TENANT_NAME" --quiet; then
+            echo "Pinniped identity cannot create tenant subnamespace anchors" >&2
+            exit 1
+          fi
+
+      - name: Setup subnamespace ${{ steps.resolve-target-namespace.outputs.target-namespace }}
         id: setup-subnamespace
         if: ${{ inputs.dry-run == false && inputs.skip-subnamespaces-create == false && inputs.app-name != '' && inputs.subnamespace != '' }}
+        env:
+          TARGET_NAMESPACE: ${{ steps.resolve-target-namespace.outputs.target-namespace }}
         run: |
-          if [[ "${{ env.TENANT_NAME }}" == "${{ inputs.app-name }}" ]]; then
-            SUBNAMESPACE="${{ env.TENANT_NAME }}-${{ inputs.subnamespace }}"
-          else
-            SUBNAMESPACE="${{ env.TENANT_NAME }}-${{ inputs.app-name }}-${{ inputs.subnamespace }}"
-          fi
           set -euo pipefail
           cat <<EOF | kubectl apply -n "${{ env.TENANT_NAME }}" -f -
           apiVersion: hnc.x-k8s.io/v1alpha2
           kind: SubnamespaceAnchor
           metadata:
-            name: ${SUBNAMESPACE}
+            name: ${TARGET_NAMESPACE}
           EOF
-          until [ "$(kubectl -n "${{ env.TENANT_NAME }}" get subnamespaceanchor "${SUBNAMESPACE}" -o jsonpath='{.status.status}' 2>/dev/null)" = "Ok" ]; do
-            echo "Waiting for subnamespace ${SUBNAMESPACE} to be ready..."
+          until [ "$(kubectl -n "${{ env.TENANT_NAME }}" get subnamespaceanchor "${TARGET_NAMESPACE}" -o jsonpath='{.status.status}' 2>/dev/null)" = "Ok" ]; do
+            echo "Waiting for subnamespace ${TARGET_NAMESPACE} to be ready..."
             sleep 2
           done
-          kubectl config set-context --current --namespace="${SUBNAMESPACE}"
+          kubectl config set-context --current --namespace="${TARGET_NAMESPACE}"
           echo ""
-          kubectl get ns "${SUBNAMESPACE}"
+          kubectl get ns "${TARGET_NAMESPACE}"
+
+      - name: Authorize target namespace deployment
+        if: ${{ inputs.dry-run == false && inputs.app-name != '' && inputs.subnamespace != '' }}
+        shell: bash
+        env:
+          TARGET_NAMESPACE: ${{ steps.resolve-target-namespace.outputs.target-namespace }}
+        run: |
+          set -euo pipefail
+          if ! kubectl auth can-i create deployments.apps --namespace "$TARGET_NAMESPACE" --quiet; then
+            echo "Pinniped identity cannot create deployments in the target namespace" >&2
+            exit 1
+          fi
 
       - name: Decode environment variables
         shell: bash
