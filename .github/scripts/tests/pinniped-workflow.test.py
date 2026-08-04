@@ -153,7 +153,7 @@ class PinnipedWorkflowTest(unittest.TestCase):
             'echo "target-namespace=${target_namespace}" >> "$GITHUB_OUTPUT"', resolver
         )
 
-    def test_authorizes_hnc_creation_at_the_setup_boundary(self) -> None:
+    def test_authorizes_required_hnc_operation_at_the_setup_boundary(self) -> None:
         authorization = step(self.workflow, "Authorize subnamespace creation")
         setup_condition = (
             "if: ${{ inputs.dry-run == false && "
@@ -162,7 +162,18 @@ class PinnipedWorkflowTest(unittest.TestCase):
         )
         self.assertIn(setup_condition, authorization)
         self.assertIn(
-            "if ! kubectl auth can-i create subnamespaceanchors.hnc.x-k8s.io "
+            'TARGET_NAMESPACE: ${{ steps.resolve-target-namespace.outputs.target-namespace }}',
+            authorization,
+        )
+        self.assertIn(
+            'kubectl get subnamespaceanchor "$TARGET_NAMESPACE" '
+            '--namespace "$TENANT_NAME" --ignore-not-found -o name',
+            authorization,
+        )
+        self.assertIn('operation="patch"', authorization)
+        self.assertIn('operation="create"', authorization)
+        self.assertIn(
+            'if ! kubectl auth can-i "$operation" subnamespaceanchors.hnc.x-k8s.io '
             '--namespace "$TENANT_NAME" --quiet; then',
             authorization,
         )

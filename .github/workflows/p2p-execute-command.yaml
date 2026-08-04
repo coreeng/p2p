@@ -283,10 +283,17 @@ jobs:
       - name: Authorize subnamespace creation
         if: ${{ inputs.dry-run == false && inputs.skip-subnamespaces-create == false && inputs.app-name != '' && inputs.subnamespace != '' }}
         shell: bash
+        env:
+          TARGET_NAMESPACE: ${{ steps.resolve-target-namespace.outputs.target-namespace }}
         run: |
           set -euo pipefail
-          if ! kubectl auth can-i create subnamespaceanchors.hnc.x-k8s.io --namespace "$TENANT_NAME" --quiet; then
-            echo "Pinniped identity cannot create tenant subnamespace anchors" >&2
+          if [[ -n "$(kubectl get subnamespaceanchor "$TARGET_NAMESPACE" --namespace "$TENANT_NAME" --ignore-not-found -o name)" ]]; then
+            operation="patch"
+          else
+            operation="create"
+          fi
+          if ! kubectl auth can-i "$operation" subnamespaceanchors.hnc.x-k8s.io --namespace "$TENANT_NAME" --quiet; then
+            echo "Pinniped identity cannot ${operation} tenant subnamespace anchors" >&2
             exit 1
           fi
 
