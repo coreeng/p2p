@@ -10,21 +10,27 @@ fail() {
 audience=''
 authenticator=''
 expected_authentication=''
+audience_seen=false
+authenticator_seen=false
+expected_authentication_seen=false
 allow_checks=()
 deny_checks=()
 
 while (($# > 0)); do
   case "$1" in
     --audience=*)
-      [[ -z "${audience}" ]] || fail '--audience may only be specified once'
+      [[ "${audience_seen}" == false ]] || fail '--audience may only be specified once'
+      audience_seen=true
       audience="${1#--audience=}"
       ;;
     --authenticator=*)
-      [[ -z "${authenticator}" ]] || fail '--authenticator may only be specified once'
+      [[ "${authenticator_seen}" == false ]] || fail '--authenticator may only be specified once'
+      authenticator_seen=true
       authenticator="${1#--authenticator=}"
       ;;
     --expect-authentication=*)
-      [[ -z "${expected_authentication}" ]] || fail '--expect-authentication may only be specified once'
+      [[ "${expected_authentication_seen}" == false ]] || fail '--expect-authentication may only be specified once'
+      expected_authentication_seen=true
       expected_authentication="${1#--expect-authentication=}"
       ;;
     --allow=*)
@@ -50,6 +56,8 @@ esac
 validate_check() {
   local check="$1"
   local verb resource namespace extra
+  [[ "${check}" == *,*,* && "${check}" != *,*,*,* ]] || \
+    fail 'authorization expectations must be verb,resource,namespace'
   IFS=',' read -r verb resource namespace extra <<< "${check}"
   [[ -n "${verb}" && -n "${resource}" && -n "${namespace}" && -z "${extra:-}" ]] || \
     fail 'authorization expectations must be verb,resource,namespace'
@@ -68,6 +76,10 @@ if [[ -n "${deny_checks[0]+present}" ]]; then
     validate_check "${check}"
   done
 fi
+if [[ "${expected_authentication}" == 'rejected' ]] && \
+  { [[ -n "${allow_checks[0]+present}" ]] || [[ -n "${deny_checks[0]+present}" ]]; }; then
+  fail 'authorization expectations require successful authentication'
+fi
 
 [[ -n "${RUNNER_TEMP:-}" ]] || fail 'RUNNER_TEMP is required'
 [[ -d "${RUNNER_TEMP}" ]] || fail 'RUNNER_TEMP must be a directory'
@@ -81,16 +93,19 @@ credential_helper="${script_dir}/github-oidc-credential"
 ca_file=''
 kubeconfig=''
 error_file=''
+response_file=''
 cleanup() {
   [[ -z "${ca_file}" ]] || rm -f "${ca_file}"
   [[ -z "${kubeconfig}" ]] || rm -f "${kubeconfig}"
   [[ -z "${error_file}" ]] || rm -f "${error_file}"
+  [[ -z "${response_file}" ]] || rm -f "${response_file}"
 }
 trap cleanup EXIT
 
 ca_file="$(mktemp "${RUNNER_TEMP%/}/pinniped-ca.XXXXXX")"
 kubeconfig="$(mktemp "${RUNNER_TEMP%/}/pinniped-kubeconfig.XXXXXX")"
 error_file="$(mktemp "${RUNNER_TEMP%/}/pinniped-error.XXXXXX")"
+response_file="$(mktemp "${RUNNER_TEMP%/}/pinniped-response.XXXXXX")"
 rm -f "${kubeconfig}"
 
 if ! printf '%s' "${PINNIPED_CA_BUNDLE}" | base64 --decode > "${ca_file}" 2>/dev/null; then
@@ -102,11 +117,32 @@ fi
 [[ -s "${ca_file}" ]] || fail 'PINNIPED_CA_BUNDLE decoded to an empty CA bundle'
 chmod 0600 "${ca_file}"
 
-if ! curl --disable --silent --show-error \
+http_status=''
+if ! http_status="$(curl --disable --silent --show-error \
   --cacert "${ca_file}" \
-  --output /dev/null \
-  "${PINNIPED_ENDPOINT}" 2> "${error_file}"; then
+  --output "${response_file}" \
+  --write-out '%{http_code}' \
+  "${PINNIPED_ENDPOINT}" 2> "${error_file}")"; then
   fail 'Pinniped endpoint TLS verification failed'
+fi
+if ! python3 - "${http_status}" "${response_file}" > /dev/null 2>&1 <<'PY'
+import json
+import sys
+
+with open(sys.argv[2], encoding="utf-8") as response:
+    payload = json.load(response)
+
+if not (
+    sys.argv[1] == "401"
+    and isinstance(payload, dict)
+    and payload.get("kind") == "Status"
+    and payload.get("reason") == "Unauthorized"
+    and payload.get("code") == 401
+):
+    raise SystemExit(1)
+PY
+then
+  fail 'endpoint did not return the expected Kubernetes API authentication challenge'
 fi
 
 if ! kubectl config set-cluster pinniped \
@@ -145,7 +181,7 @@ if [[ "${expected_authentication}" == 'rejected' ]]; then
   if pinniped whoami --kubeconfig "${kubeconfig}" > /dev/null 2> "${error_file}"; then
     fail 'authentication unexpectedly succeeded'
   fi
-  if ! grep -Eiq 'authentication failed|unauthenticated|unauthorized|token.*rejected' "${error_file}"; then
+  if ! grep -Eiq '^authentication failed: token rejected[[:space:]]*$' "${error_file}"; then
     fail 'authentication failed for an unrecognized reason'
   fi
   printf 'EXPECTED: Pinniped authentication rejected\n'

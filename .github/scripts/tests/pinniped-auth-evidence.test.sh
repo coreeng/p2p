@@ -26,6 +26,26 @@ set -euo pipefail
   printf '%s\n' "$@"
   printf 'END\n'
 } >> "${MOCK_CURL_ARGS_FILE}"
+
+output_file=''
+write_out=''
+while (($# > 0)); do
+  case "$1" in
+    --output)
+      output_file="$2"
+      shift 2
+      ;;
+    --write-out)
+      write_out="$2"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+[[ -z "${output_file}" ]] || printf '%s' "${MOCK_CURL_RESPONSE_BODY}" > "${output_file}"
+[[ -z "${write_out}" ]] || printf '%s' "${MOCK_CURL_HTTP_STATUS}"
 EOF
 
 cat > "${mock_bin}/kubectl" <<'EOF'
@@ -60,6 +80,10 @@ set -euo pipefail
   printf '%s\n' "$@"
   printf 'END\n'
 } >> "${MOCK_PINNIPED_ARGS_FILE}"
+if [[ -n "${MOCK_PINNIPED_ERROR:-}" ]]; then
+  printf '%s\n' "${MOCK_PINNIPED_ERROR}" >&2
+  exit 1
+fi
 if [[ "${MOCK_PINNIPED_REJECT:-false}" == 'true' ]]; then
   printf 'authentication failed: token rejected\n' >&2
   exit 1
@@ -102,6 +126,8 @@ run_runner() {
     RUNNER_TEMP="${runner_temp}" \
     PINNIPED_ENDPOINT='https://pinniped.example.test' \
     PINNIPED_CA_BUNDLE='Y2VydA==' \
+    MOCK_CURL_RESPONSE_BODY="${MOCK_CURL_RESPONSE_BODY:-{\"kind\":\"Status\",\"reason\":\"Unauthorized\",\"code\":401}}" \
+    MOCK_CURL_HTTP_STATUS="${MOCK_CURL_HTTP_STATUS:-401}" \
     "${runner}" "$@" > "${RUN_OUTPUT_FILE}" 2>&1
   RUN_STATUS=$?
   set -e
@@ -120,9 +146,11 @@ assert_contains_line 'ALLOW create deployments.apps in auth-test-2: yes' "${RUN_
 assert_contains_line 'DENY get pods in kube-system: no' "${RUN_OUTPUT_FILE}"
 assert_contains_line 'DENY get pods in cecg-system: no' "${RUN_OUTPUT_FILE}"
 assert_contains_line '--output' "${MOCK_CURL_ARGS_FILE}"
-assert_contains_line '/dev/null' "${MOCK_CURL_ARGS_FILE}"
+assert_contains_line '--write-out' "${MOCK_CURL_ARGS_FILE}"
+assert_contains_line '%{http_code}' "${MOCK_CURL_ARGS_FILE}"
 assert_contains_line '--cacert' "${MOCK_CURL_ARGS_FILE}"
 assert_excludes '--fail' "${MOCK_CURL_ARGS_FILE}"
+assert_excludes '/dev/null' "${MOCK_CURL_ARGS_FILE}"
 assert_contains_line '--exec-api-version=client.authentication.k8s.io/v1beta1' "${MOCK_KUBECTL_ARGS_FILE}"
 assert_contains_line '--exec-interactive-mode=Never' "${MOCK_KUBECTL_ARGS_FILE}"
 assert_contains_line '--exec-arg=--audience=core-platform:sandbox-3-gcp:auth-test-2' "${MOCK_KUBECTL_ARGS_FILE}"
@@ -150,6 +178,76 @@ unset MOCK_PINNIPED_REJECT
 assert_excludes 'authentication failed: token rejected' "${RUN_OUTPUT_FILE}"
 assert_excludes 'core-platform:sandbox-3-gcp:cecg-system' "${RUN_OUTPUT_FILE}"
 [[ -z "$(ls -A "${runner_temp}")" ]] || fail 'rejection case left temporary artifacts'
+
+export MOCK_CURL_RESPONSE_BODY='arbitrary TLS-valid service'
+export MOCK_CURL_HTTP_STATUS=200
+export MOCK_PINNIPED_REJECT=true
+run_runner non-kubernetes-endpoint \
+  --audience=core-platform:sandbox-3-gcp:cecg-system \
+  --authenticator=github-actions-cecg-system \
+  --expect-authentication=rejected
+unset MOCK_CURL_RESPONSE_BODY MOCK_CURL_HTTP_STATUS MOCK_PINNIPED_REJECT
+[[ ${RUN_STATUS} -ne 0 ]] || fail 'non-Kubernetes endpoint unexpectedly accepted'
+[[ ! -s "${MOCK_PINNIPED_ARGS_FILE}" ]] || fail 'non-Kubernetes endpoint invoked pinniped'
+assert_excludes 'arbitrary TLS-valid service' "${RUN_OUTPUT_FILE}"
+[[ -z "$(ls -A "${runner_temp}")" ]] || fail 'non-Kubernetes endpoint left temporary artifacts'
+
+export MOCK_PINNIPED_ERROR='Unauthorized'
+run_runner generic-unauthorized \
+  --audience=core-platform:sandbox-3-gcp:cecg-system \
+  --authenticator=github-actions-cecg-system \
+  --expect-authentication=rejected
+unset MOCK_PINNIPED_ERROR
+[[ ${RUN_STATUS} -ne 0 ]] || fail 'generic Unauthorized whoami failure unexpectedly accepted'
+assert_excludes 'Unauthorized' "${RUN_OUTPUT_FILE}"
+
+expect_preflight_failure() {
+  local case_name="$1"
+  shift
+  run_runner "${case_name}" "$@"
+  [[ ${RUN_STATUS} -ne 0 ]] || fail "${case_name} unexpectedly succeeded"
+  [[ ! -s "${MOCK_CURL_ARGS_FILE}" ]] || fail "${case_name} invoked curl"
+  [[ ! -s "${MOCK_KUBECTL_ARGS_FILE}" ]] || fail "${case_name} invoked kubectl"
+  [[ ! -s "${MOCK_PINNIPED_ARGS_FILE}" ]] || fail "${case_name} invoked pinniped"
+}
+
+expect_preflight_failure duplicate-empty-audience \
+  --audience= --audience=audience \
+  --authenticator=authenticator \
+  --expect-authentication=success
+expect_preflight_failure duplicate-empty-authenticator \
+  --audience=audience \
+  --authenticator= --authenticator=authenticator \
+  --expect-authentication=success
+expect_preflight_failure duplicate-empty-expectation \
+  --audience=audience \
+  --authenticator=authenticator \
+  --expect-authentication= --expect-authentication=success
+expect_preflight_failure trailing-authorization-field \
+  --audience=audience \
+  --authenticator=authenticator \
+  --expect-authentication=success \
+  --allow=create,deployments.apps,namespace,
+expect_preflight_failure missing-authorization-field \
+  --audience=audience \
+  --authenticator=authenticator \
+  --expect-authentication=success \
+  --allow=create,deployments.apps
+expect_preflight_failure empty-authorization-field \
+  --audience=audience \
+  --authenticator=authenticator \
+  --expect-authentication=success \
+  --allow=create,,namespace
+expect_preflight_failure rejected-with-allow \
+  --audience=audience \
+  --authenticator=authenticator \
+  --expect-authentication=rejected \
+  --allow=create,deployments.apps,namespace
+expect_preflight_failure rejected-with-deny \
+  --audience=audience \
+  --authenticator=authenticator \
+  --expect-authentication=rejected \
+  --deny=get,pods,namespace
 
 run_runner invalid-expectation \
   --audience=audience \
