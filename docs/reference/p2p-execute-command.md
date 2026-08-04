@@ -68,7 +68,7 @@ The platform-side `JWTAuthenticator` accepts only the configured environment and
 
 P2P creates the kubeconfig under `RUNNER_TEMP`. It embeds only the endpoint, CA, context, namespace, and exec-plugin configuration; it stores no bearer token or client credential certificate. Whenever the Kubernetes client invokes the Pinniped exec helper, it requests a fresh GitHub OIDC token as needed; the Pinniped credential cache is disabled.
 
-The credential helper is checked out from the reusable workflow's own repository and exact workflow SHA, then moved outside the application workspace before use. The Pinniped CLI download is pinned to `v0.47.0` and verified with its SHA-256 checksum. P2P fails early when configuration is incomplete or `github_env` differs from `DPLATFORM` and verifies the identity with `pinniped whoami`. It performs two preflight capability checks: `SubnamespaceAnchor` creation and `Deployment` creation. Make targets can require additional permissions enforced by Kubernetes.
+The credential helper is checked out from the reusable workflow's own repository and exact workflow SHA, then moved outside the application workspace before use. The Pinniped CLI download is pinned to `v0.47.0` and verified with its SHA-256 checksum. P2P fails early when configuration is incomplete or `github_env` differs from `DPLATFORM` and verifies the identity with `pinniped whoami`. Before applying a `SubnamespaceAnchor`, it checks `create` authorization when the anchor is absent and `patch` authorization when it already exists. It also checks `Deployment` creation in the target namespace. Make targets can require additional permissions enforced by Kubernetes.
 
 ## Environment Variables
 

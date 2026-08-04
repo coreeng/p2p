@@ -287,7 +287,8 @@ jobs:
           TARGET_NAMESPACE: ${{ steps.resolve-target-namespace.outputs.target-namespace }}
         run: |
           set -euo pipefail
-          if [[ -n "$(kubectl get subnamespaceanchor "$TARGET_NAMESPACE" --namespace "$TENANT_NAME" --ignore-not-found -o name)" ]]; then
+          anchor="$(kubectl get subnamespaceanchor "$TARGET_NAMESPACE" --namespace "$TENANT_NAME" --ignore-not-found -o name)"
+          if [[ -n "$anchor" ]]; then
             operation="patch"
           else
             operation="create"

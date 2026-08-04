@@ -165,19 +165,20 @@ class PinnipedWorkflowTest(unittest.TestCase):
             'TARGET_NAMESPACE: ${{ steps.resolve-target-namespace.outputs.target-namespace }}',
             authorization,
         )
-        self.assertIn(
-            'kubectl get subnamespaceanchor "$TARGET_NAMESPACE" '
-            '--namespace "$TENANT_NAME" --ignore-not-found -o name',
-            authorization,
-        )
-        self.assertIn(
-            '''then
+        probe_contract = '''anchor="$(kubectl get subnamespaceanchor "$TARGET_NAMESPACE" --namespace "$TENANT_NAME" --ignore-not-found -o name)"
+          if [[ -n "$anchor" ]]; then
             operation="patch"
           else
             operation="create"
-          fi''',
-            authorization,
+          fi'''
+        self.assertIn(probe_contract, authorization)
+        conditional_probe = authorization.replace(
+            '''anchor="$(kubectl get subnamespaceanchor "$TARGET_NAMESPACE" --namespace "$TENANT_NAME" --ignore-not-found -o name)"
+          if [[ -n "$anchor" ]]; then''',
+            '''if [[ -n "$(kubectl get subnamespaceanchor "$TARGET_NAMESPACE" --namespace "$TENANT_NAME" --ignore-not-found -o name)" ]]; then''',
         )
+        with self.assertRaises(AssertionError):
+            self.assertIn(probe_contract, conditional_probe)
         self.assertIn(
             'if ! kubectl auth can-i "$operation" subnamespaceanchors.hnc.x-k8s.io '
             '--namespace "$TENANT_NAME" --quiet; then',
