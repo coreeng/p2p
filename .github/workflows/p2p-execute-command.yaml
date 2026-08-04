@@ -78,6 +78,9 @@ jobs:
   exec:
     name: '${{ inputs.command }} (${{ inputs.github_env }})'
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
     environment: ${{ inputs.github_env }}
     concurrency:
       group: ${{ inputs.github_env }}/${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}-${{ inputs.app-name }}-${{ inputs.subnamespace }}
@@ -108,6 +111,42 @@ jobs:
         with:
           ref: ${{ inputs.dry-run == false && inputs.checkout-version || '' }}
 
+      - name: Checkout P2P workflow sources
+        if: ${{ inputs.dry-run == false }}
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .p2p-workflow-src
+
+      - name: Move P2P workflow sources outside app workspace
+        if: ${{ inputs.dry-run == false }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "$RUNNER_TEMP/p2p-workflow-src"
+          mv .p2p-workflow-src "$RUNNER_TEMP/p2p-workflow-src"
+
+      - name: Validate Pinniped configuration
+        if: ${{ inputs.dry-run == false }}
+        shell: bash
+        env:
+          DPLATFORM: ${{ vars.DPLATFORM }}
+          TENANT_NAME: ${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}
+          GITHUB_ENVIRONMENT: ${{ inputs.github_env }}
+          PINNIPED_ENDPOINT: ${{ vars.PINNIPED_ENDPOINT }}
+          PINNIPED_CA_BUNDLE: ${{ vars.PINNIPED_CA_BUNDLE }}
+        run: |
+          set -euo pipefail
+          : "${DPLATFORM:?DPLATFORM is required}"
+          : "${TENANT_NAME:?TENANT_NAME is required}"
+          : "${PINNIPED_ENDPOINT:?PINNIPED_ENDPOINT is required}"
+          : "${PINNIPED_CA_BUNDLE:?PINNIPED_CA_BUNDLE is required}"
+          if ! [[ "$GITHUB_ENVIRONMENT" == "$DPLATFORM" ]]; then
+            echo "github_env must exactly match DPLATFORM" >&2
+            exit 1
+          fi
+
       - name: Authenticate to Google Cloud
         id: auth
         if: ${{ inputs.dry-run == false }}
@@ -126,22 +165,71 @@ jobs:
         with:
           skip_install: true
 
-      - name: Setup kubeconfig
-        id: setup-kubeconfig
+      - name: Install Pinniped CLI
         if: ${{ inputs.dry-run == false }}
-        uses: google-github-actions/get-gke-credentials@v3
-        with:
-          context_name: gke_${{ env.PROJECT_ID }}_${{ env.REGION }}_${{ env.DPLATFORM }}
-          cluster_name: ${{ env.DPLATFORM }}
-          location: ${{ env.REGION }}
-          project_id: ${{ env.PROJECT_ID }}
-          use_dns_based_endpoint: true
-
-      - name: Test kubeconfig
-        id: test-kubeconfig
-        if: ${{ inputs.dry-run == false }}
+        shell: bash
         run: |
-          kubectl cluster-info
+          set -euo pipefail
+          pinniped_binary="$RUNNER_TEMP/pinniped-cli-linux-amd64"
+          curl --disable --fail --silent --show-error --location \
+            "https://get.pinniped.dev/v0.47.0/pinniped-cli-linux-amd64" \
+            --output "$pinniped_binary"
+          printf '%s  %s\n' \
+            '43538ad0c9c9ad67fb121f3d1e8d174324b9fea63f07ec88936182889df752a6' \
+            "$pinniped_binary" | sha256sum --check
+          sudo install -m 0755 "$pinniped_binary" /usr/local/bin/pinniped
+
+      - name: Configure Pinniped kubeconfig
+        if: ${{ inputs.dry-run == false }}
+        shell: bash
+        env:
+          PINNIPED_ENDPOINT: ${{ vars.PINNIPED_ENDPOINT }}
+          PINNIPED_CA_BUNDLE: ${{ vars.PINNIPED_CA_BUNDLE }}
+        run: |
+          set -euo pipefail
+          ca_file="$(mktemp "$RUNNER_TEMP/pinniped-ca.XXXXXX")"
+          kubeconfig="$RUNNER_TEMP/pinniped-kubeconfig"
+          audience="core-platform:${DPLATFORM}:${TENANT_NAME}"
+          authenticator="github-actions-${TENANT_NAME}"
+          printf '%s' "$PINNIPED_CA_BUNDLE" | base64 --decode > "$ca_file"
+          chmod 0600 "$ca_file"
+          rm -f "$kubeconfig"
+          kubectl config set-cluster "$DPLATFORM" \
+            --server="$PINNIPED_ENDPOINT" \
+            --certificate-authority="$ca_file" \
+            --embed-certs=true \
+            --kubeconfig="$kubeconfig"
+          kubectl config set-credentials pinniped \
+            --exec-command="$RUNNER_TEMP/p2p-workflow-src/.github/scripts/github-oidc-credential" \
+            --exec-api-version=client.authentication.k8s.io/v1beta1 \
+            --exec-interactive-mode=Never \
+            --exec-arg="--audience=${audience}" \
+            --exec-arg=--enable-concierge \
+            --exec-arg=--concierge-api-group-suffix=pinniped.dev \
+            --exec-arg="--concierge-authenticator-name=${authenticator}" \
+            --exec-arg=--concierge-authenticator-type=jwt \
+            --exec-arg="--concierge-endpoint=${PINNIPED_ENDPOINT}" \
+            --exec-arg="--concierge-ca-bundle-data=${PINNIPED_CA_BUNDLE}" \
+            --exec-arg=--credential-cache= \
+            --kubeconfig="$kubeconfig"
+          kubectl config set-context "$DPLATFORM" \
+            --cluster="$DPLATFORM" \
+            --user=pinniped \
+            --namespace="$TENANT_NAME" \
+            --kubeconfig="$kubeconfig"
+          kubectl config use-context "$DPLATFORM" --kubeconfig="$kubeconfig"
+          echo "KUBECONFIG=${kubeconfig}" >> "$GITHUB_ENV"
+
+      - name: Preflight Pinniped access
+        if: ${{ inputs.dry-run == false }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          pinniped whoami --kubeconfig "$KUBECONFIG"
+          if ! kubectl auth can-i create deployments.apps --namespace "$TENANT_NAME" --quiet; then
+            echo "Pinniped identity cannot create namespaced deployments" >&2
+            exit 1
+          fi
 
       - name: Setup Docker Buildx
         id: setup-docker-buildx
