@@ -130,14 +130,30 @@ class PinnipedWorkflowTest(unittest.TestCase):
         self.assertNotIn("cat $KUBECONFIG", configure)
         self.assertNotIn("cat \"$KUBECONFIG\"", configure)
 
-    def test_preflights_identity_and_namespaced_deployment_access(self) -> None:
-        preflight = step(self.workflow, "Preflight Pinniped access")
-        self.assertIn('pinniped whoami --kubeconfig "$KUBECONFIG"', preflight)
+    def test_preflights_identity_without_logging_repository_claims(self) -> None:
+        preflight = step(self.workflow, "Preflight Pinniped authentication")
+        self.assertIn("if: ${{ inputs.dry-run == false }}", preflight)
         self.assertIn(
-            'kubectl auth can-i create deployments.apps --namespace "$TENANT_NAME"',
+            'pinniped whoami --kubeconfig "$KUBECONFIG" >/dev/null', preflight
+        )
+        self.assertIn('echo "Pinniped authentication succeeded"', preflight)
+
+    def test_preflights_stage_authorization_for_both_required_resources(self) -> None:
+        preflight = step(self.workflow, "Preflight tenant authorization")
+        self.assertIn(
+            "if: ${{ inputs.dry-run == false && inputs.subnamespace != '' }}",
             preflight,
         )
-        self.assertRegex(preflight, r"if ! .*kubectl auth can-i")
+        for resource in (
+            "deployments.apps",
+            "subnamespaceanchors.hnc.x-k8s.io",
+        ):
+            self.assertIn(
+                f'if ! kubectl auth can-i create {resource} '
+                '--namespace "$TENANT_NAME" --quiet; then',
+                preflight,
+            )
+        self.assertEqual(preflight.count("if ! kubectl auth can-i create"), 2)
 
     def test_preserves_existing_kubernetes_and_registry_behavior(self) -> None:
         workflow = self.workflow

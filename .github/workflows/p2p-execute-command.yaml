@@ -220,14 +220,25 @@ jobs:
           kubectl config use-context "$DPLATFORM" --kubeconfig="$kubeconfig"
           echo "KUBECONFIG=${kubeconfig}" >> "$GITHUB_ENV"
 
-      - name: Preflight Pinniped access
+      - name: Preflight Pinniped authentication
         if: ${{ inputs.dry-run == false }}
         shell: bash
         run: |
           set -euo pipefail
-          pinniped whoami --kubeconfig "$KUBECONFIG"
+          pinniped whoami --kubeconfig "$KUBECONFIG" >/dev/null
+          echo "Pinniped authentication succeeded"
+
+      - name: Preflight tenant authorization
+        if: ${{ inputs.dry-run == false && inputs.subnamespace != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
           if ! kubectl auth can-i create deployments.apps --namespace "$TENANT_NAME" --quiet; then
             echo "Pinniped identity cannot create namespaced deployments" >&2
+            exit 1
+          fi
+          if ! kubectl auth can-i create subnamespaceanchors.hnc.x-k8s.io --namespace "$TENANT_NAME" --quiet; then
+            echo "Pinniped identity cannot create tenant subnamespace anchors" >&2
             exit 1
           fi
 
