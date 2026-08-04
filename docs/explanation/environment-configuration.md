@@ -13,7 +13,7 @@ Create one GitHub environment per deployment target. Common examples:
 | `gcp-dev` | Fast-feedback and extended-test workloads |
 | `gcp-prod` | Production workloads |
 
-GitHub environment protection rules (required reviewers, deployment branches) apply normally; P2P workflows reference environments by name through the matrix variables described below.
+GitHub environment protection rules (required reviewers, deployment branches) apply normally; P2P workflows reference environments by name through the matrix variables described below. The GitHub environment name must exactly equal its `DPLATFORM` value. The configuration source of truth creates both from `env.Environment`; a matrix entry such as `gcp-dev` therefore selects the `gcp-dev` GitHub environment with `DPLATFORM=gcp-dev`.
 
 ## Repository variables
 
@@ -69,15 +69,34 @@ Each GitHub environment carries variables that describe the target cloud project
 | `PROJECT_ID` | GCP project ID for the Core Platform environment (e.g., `core-platform-dev-1a2b`) |
 | `PROJECT_NUMBER` | GCP project number (e.g., `123456789012`) |
 | `REGION` | GCP region (e.g., `europe-west2`); overrides the workflow's `region` input |
+| `PINNIPED_ENDPOINT` | Complete HTTPS endpoint from `CredentialIssuer.status.strategies[type=ImpersonationProxy].frontend.impersonationProxyInfo.endpoint` |
+| `PINNIPED_CA_BUNDLE` | Base64-encoded PEM from the adjacent `impersonationProxyInfo.certificateAuthorityData` field |
+
+For this branch-only spike, an operator must read the endpoint and CA from the cluster's `CredentialIssuer` and publish them manually to the matching GitHub environment. Automating publication through the portal is future work and is out of scope.
 
 ## Cloud provider auth variables
 
 ### GCP (used by P2P)
 
-P2P derives authentication from `TENANT_NAME`, `PROJECT_ID`, and `PROJECT_NUMBER`. No additional auth variables are needed in GitHub environments for GCP. The workflow constructs:
+P2P derives Google authentication from `TENANT_NAME`, `PROJECT_ID`, and `PROJECT_NUMBER`. The workflow constructs:
 
 - Service account: `p2p-<TENANT_NAME>@<PROJECT_ID>.iam.gserviceaccount.com`
 - Workload identity provider: `projects/<PROJECT_NUMBER>/locations/global/workloadIdentityPools/p2p-<TENANT_NAME>/providers/p2p-<TENANT_NAME>`
+
+Google Workload Identity Federation continues to authenticate Artifact Registry and supplies the application make target's `GOOGLE_APPLICATION_CREDENTIALS`. It no longer authenticates Kubernetes on the spike branch.
+
+### Kubernetes (Pinniped spike)
+
+GitHub OIDC through Pinniped authenticates Kubernetes requests. P2P derives:
+
+- Audience: `core-platform:<DPLATFORM>:<TENANT_NAME>`
+- Authenticator: `github-actions-<TENANT_NAME>`
+
+The platform authenticator also requires the GitHub OIDC token's `environment` claim to equal `DPLATFORM` and its normalized `repository` claim to equal the tenant configuration's GitHub repository `owner/name`. This limits Kubernetes access to the configured tenant repository and environment.
+
+P2P writes an ephemeral kubeconfig under `RUNNER_TEMP` containing the endpoint, embedded CA, namespace, context, and trusted exec-plugin configuration. It does not store a bearer token or client credential certificate. The helper comes from the reusable workflow's exact repository and SHA; the Pinniped CLI is pinned and checksum-verified. Configuration validation and `pinniped whoami` run before Kubernetes work, followed by authorization checks immediately before subnamespace creation and target-namespace deployment.
+
+This behavior exists only on `spike/pinniped-sandbox`; no P2P `v2` or other major version has been published, and live sandbox evidence is not yet claimed.
 
 ### AWS (platform workflows)
 
@@ -130,10 +149,12 @@ TENANT_NAME=my-app
 ```
 BASE_DOMAIN=dev.example.com
 INTERNAL_SERVICES_DOMAIN=internal.dev.example.com
-DPLATFORM=platform-dev
+DPLATFORM=gcp-dev
 PROJECT_ID=core-platform-dev-1a2b3c
 PROJECT_NUMBER=123456789012
 REGION=europe-west2
+PINNIPED_ENDPOINT=https://pinniped.gcp-dev.example.com
+PINNIPED_CA_BUNDLE=<base64-encoded-PEM-from-CredentialIssuer>
 ```
 
 **`gcp-prod` environment variables:**
@@ -141,10 +162,12 @@ REGION=europe-west2
 ```
 BASE_DOMAIN=prod.example.com
 INTERNAL_SERVICES_DOMAIN=internal.prod.example.com
-DPLATFORM=platform-prod
+DPLATFORM=gcp-prod
 PROJECT_ID=core-platform-prod-4d5e6f
 PROJECT_NUMBER=987654321098
 REGION=europe-west2
+PINNIPED_ENDPOINT=https://pinniped.gcp-prod.example.com
+PINNIPED_CA_BUNDLE=<base64-encoded-PEM-from-CredentialIssuer>
 ```
 
 With this configuration, the pipeline authenticates as:

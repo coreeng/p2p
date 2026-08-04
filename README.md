@@ -64,7 +64,7 @@ The primary workflows call these. Call them only through the primary workflows.
 
 Before calling the workflows, set up the following:
 
-- **GitHub environments** — at least one for fast-feedback (e.g., `gcp-dev`). See [Environment Configuration](docs/explanation/environment-configuration.md) for details.
+- **GitHub environments** — at least one for fast-feedback (e.g., `gcp-dev`). The GitHub environment name must exactly equal its `DPLATFORM` value. See [Environment Configuration](docs/explanation/environment-configuration.md) for details.
 - **Repository variables:**
 
   | Variable | Format | Example |
@@ -84,8 +84,14 @@ Before calling the workflows, set up the following:
   | `PROJECT_ID` | Core Platform GCP project ID, e.g. `core-platform-dev-1a2b3c` |
   | `PROJECT_NUMBER` | GCP project number for the project above |
   | `REGION` | GCP region, e.g. `europe-west2` |
+  | `PINNIPED_ENDPOINT` | Complete HTTPS endpoint from the `CredentialIssuer` `impersonationProxyInfo.endpoint` field |
+  | `PINNIPED_CA_BUNDLE` | Base64-encoded PEM from the same `impersonationProxyInfo.certificateAuthorityData` field |
 
 See [Environment Configuration](docs/explanation/environment-configuration.md) for details.
+
+## Pinniped spike status
+
+Pinniped authentication is available only on the `spike/pinniped-sandbox` branch for sandbox evaluation. It has not been published as a P2P `v2` or any other major version, and these docs do not represent live sandbox evidence. The spike requires operators to publish `PINNIPED_ENDPOINT` and `PINNIPED_CA_BUNDLE` to each GitHub environment manually; portal automation is future work and is out of scope.
 
 ## Documentation
 

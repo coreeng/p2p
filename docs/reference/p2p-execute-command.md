@@ -1,6 +1,8 @@
 # p2p-execute-command.yaml
 
-> Authenticates to GCP and a Kubernetes cluster, sets up the P2P environment variables, and runs a `make` target.
+> Authenticates to Google Cloud with Workload Identity Federation and to Kubernetes with GitHub OIDC through Pinniped, sets up the P2P environment variables, and runs a `make` target.
+
+> **Spike status:** Pinniped support exists only on `spike/pinniped-sandbox`. No P2P `v2` or other major version containing this behavior has been published, and sandbox validation evidence is not yet claimed.
 
 ## Usage
 
@@ -21,7 +23,7 @@ jobs:
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `command` | string | Yes | — | The `make` target to run (e.g. `p2p-build`). |
-| `github_env` | string | No | `''` | GitHub environment name used for deployment protection rules and concurrency grouping. |
+| `github_env` | string | No | `''` | GitHub environment name used for deployment protection rules and concurrency grouping. For non-dry runs it is required in practice and must exactly equal that environment's `DPLATFORM` value. |
 | `dry-run` | boolean | No | `false` | When `true`, skips GCP authentication, cluster setup, and the `make` invocation. |
 | `region` | string | No | `europe-west2` | GCP region. Overridden by the `REGION` repository/environment variable when set. |
 | `subnamespace` | string | No | `''` | Kubernetes subnamespace suffix to create and switch context to before running the command. |
@@ -51,7 +53,22 @@ This workflow has no outputs.
 
 ## Job Graph
 
-1. `exec` — Single job that performs all steps: checkout, GCP auth, cluster setup, Docker Buildx setup, skopeo setup, environment variable decoding, P2P variable export, and the `make` invocation.
+1. `exec` — Single job that performs all steps: checkout, Google WIF auth, Pinniped Kubernetes auth, cluster setup, Docker Buildx setup, skopeo setup, environment variable decoding, P2P variable export, and the `make` invocation.
+
+## Authentication
+
+The spike uses two independent GitHub OIDC exchanges:
+
+- GitHub OIDC through Pinniped authenticates Kubernetes API requests. P2P requests audience `core-platform:<DPLATFORM>:<TENANT_NAME>` and uses the `JWTAuthenticator` named `github-actions-<TENANT_NAME>`.
+- Google Workload Identity Federation remains responsible for Artifact Registry access and for the credentials file exposed to the application make target as `GOOGLE_APPLICATION_CREDENTIALS`.
+
+The platform-side `JWTAuthenticator` accepts only the configured environment and the tenant configuration's GitHub repository `owner/name`. The token's `environment` claim must equal `DPLATFORM`, and its normalized `repository` claim must equal that configured tenant repository. P2P cannot widen this boundary.
+
+`PINNIPED_ENDPOINT` must be the complete HTTPS endpoint reported at `CredentialIssuer.status.strategies[type=ImpersonationProxy].frontend.impersonationProxyInfo.endpoint`. `PINNIPED_CA_BUNDLE` must be the base64-encoded PEM reported by the adjacent `certificateAuthorityData` field. For this spike, operators manually publish both values as GitHub environment variables; portal automation is out of scope.
+
+P2P creates the kubeconfig under `RUNNER_TEMP`. It embeds only the endpoint, CA, context, namespace, and exec-plugin configuration; it stores no bearer token or client credential certificate. The exec plugin requests a fresh GitHub OIDC token and disables the Pinniped credential cache.
+
+The credential helper is checked out from the reusable workflow's own repository and exact workflow SHA, then moved outside the application workspace before use. The Pinniped CLI download is pinned to `v0.47.0` and verified with its SHA-256 checksum. P2P fails early when configuration is incomplete or `github_env` differs from `DPLATFORM`, verifies the identity with `pinniped whoami`, and checks authorization at each operation boundary: subnamespace-anchor creation before creating a subnamespace and deployment creation after resolving the target namespace.
 
 ## Environment Variables
 
