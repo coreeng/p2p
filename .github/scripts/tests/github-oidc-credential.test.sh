@@ -103,7 +103,7 @@ unset MOCK_CURL_EXIT
 
 run_helper separate-audience --concierge-endpoint https://concierge.test --audience 'api://cluster name?x=y&z=/+' --skip-browser
 [[ ${RUN_STATUS} -eq 0 ]] || fail "separate --audience invocation failed: $(cat "${RUN_OUTPUT_FILE}")"
-assert_file_equals $'--config\n-' "${MOCK_CURL_ARGS_FILE}"
+assert_file_equals $'--disable\n--config\n-' "${MOCK_CURL_ARGS_FILE}"
 assert_file_excludes 'request-token' "${MOCK_CURL_ARGS_FILE}"
 assert_file_contains_line 'fail' "${MOCK_CURL_STDIN_FILE}"
 assert_file_contains_line 'silent' "${MOCK_CURL_STDIN_FILE}"
