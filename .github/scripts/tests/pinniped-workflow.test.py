@@ -170,8 +170,14 @@ class PinnipedWorkflowTest(unittest.TestCase):
             '--namespace "$TENANT_NAME" --ignore-not-found -o name',
             authorization,
         )
-        self.assertIn('operation="patch"', authorization)
-        self.assertIn('operation="create"', authorization)
+        self.assertIn(
+            '''then
+            operation="patch"
+          else
+            operation="create"
+          fi''',
+            authorization,
+        )
         self.assertIn(
             'if ! kubectl auth can-i "$operation" subnamespaceanchors.hnc.x-k8s.io '
             '--namespace "$TENANT_NAME" --quiet; then',
