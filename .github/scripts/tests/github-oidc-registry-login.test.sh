@@ -25,6 +25,8 @@ set -euo pipefail
 printf '%s\n' "$@" > "${MOCK_DOCKER_ARGS_FILE}"
 cat > "${MOCK_DOCKER_STDIN_FILE}"
 env | LC_ALL=C sort > "${MOCK_DOCKER_ENV_FILE}"
+printf 'docker\n' >> "${MOCK_LOGIN_ORDER_FILE}"
+exit "${MOCK_DOCKER_EXIT:-0}"
 EOF
 
 cat > "${mock_bin}/skopeo" <<'EOF'
@@ -33,6 +35,8 @@ set -euo pipefail
 printf '%s\n' "$@" > "${MOCK_SKOPEO_ARGS_FILE}"
 cat > "${MOCK_SKOPEO_STDIN_FILE}"
 env | LC_ALL=C sort > "${MOCK_SKOPEO_ENV_FILE}"
+printf 'skopeo\n' >> "${MOCK_LOGIN_ORDER_FILE}"
+exit "${MOCK_SKOPEO_EXIT:-0}"
 EOF
 
 chmod +x "${mock_bin}/curl" "${mock_bin}/docker" "${mock_bin}/skopeo"
@@ -79,6 +83,7 @@ run_helper() {
   export MOCK_SKOPEO_ARGS_FILE="${tmp_dir}/${case_name}.skopeo-args"
   export MOCK_SKOPEO_STDIN_FILE="${tmp_dir}/${case_name}.skopeo-stdin"
   export MOCK_SKOPEO_ENV_FILE="${tmp_dir}/${case_name}.skopeo-env"
+  export MOCK_LOGIN_ORDER_FILE="${tmp_dir}/${case_name}.login-order"
   RUN_OUTPUT_FILE="${tmp_dir}/${case_name}.output"
 
   set +e
@@ -96,6 +101,18 @@ expect_failure() {
   [[ ! -e "${MOCK_SKOPEO_ARGS_FILE}" ]] || fail "${case_name} invoked skopeo"
 }
 
+assert_login_token_confined() {
+  local token="$1"
+  assert_file_equals "::add-mask::${token}" "${RUN_OUTPUT_FILE}"
+  assert_file_excludes "${token}" "${MOCK_CURL_ARGS_FILE}"
+  assert_file_excludes "${token}" "${MOCK_DOCKER_ARGS_FILE}"
+  assert_file_excludes "${token}" "${MOCK_SKOPEO_ARGS_FILE}"
+  assert_file_excludes "${token}" "${MOCK_DOCKER_ENV_FILE}"
+  assert_file_excludes "${token}" "${MOCK_SKOPEO_ENV_FILE}"
+  assert_file_equals 'existing-env=value' "${GITHUB_ENV}"
+  assert_file_equals 'existing-output=value' "${GITHUB_OUTPUT}"
+}
+
 export ACTIONS_ID_TOKEN_REQUEST_URL='https://tokens.example.test/oidc'
 export ACTIONS_ID_TOKEN_REQUEST_TOKEN='request-token'
 export MOCK_CURL_RESPONSE_FILE="${tmp_dir}/curl-response"
@@ -103,8 +120,8 @@ export GITHUB_ENV="${tmp_dir}/github-env"
 export GITHUB_OUTPUT="${tmp_dir}/github-output"
 printf '%s' 'existing-env=value' > "${GITHUB_ENV}"
 printf '%s' 'existing-output=value' > "${GITHUB_OUTPUT}"
-printf '%s' '{"value":"header.payload.signature"}' > "${MOCK_CURL_RESPONSE_FILE}"
-unset MOCK_CURL_EXIT
+printf '%s' '{"value":"raw-zot-oidc-token"}' > "${MOCK_CURL_RESPONSE_FILE}"
+unset MOCK_CURL_EXIT MOCK_DOCKER_EXIT MOCK_SKOPEO_EXIT
 
 run_helper separate-args \
   --audience 'api://registry name?x=y&z=/+' \
@@ -117,18 +134,13 @@ assert_file_excludes 'location' "${MOCK_CURL_ARGS_FILE}"
 assert_file_contains_line 'header = "Authorization: Bearer request-token"' "${MOCK_CURL_STDIN_FILE}"
 assert_file_contains_line 'url = "https://tokens.example.test/oidc?audience=api%3A%2F%2Fregistry%20name%3Fx%3Dy%26z%3D%2F%2B"' "${MOCK_CURL_STDIN_FILE}"
 assert_file_equals $'login\nregistry.example.test:8443\n--username\noauth\n--password-stdin' "${MOCK_DOCKER_ARGS_FILE}"
-assert_file_equals 'header.payload.signature' "${MOCK_DOCKER_STDIN_FILE}"
+assert_file_equals 'raw-zot-oidc-token' "${MOCK_DOCKER_STDIN_FILE}"
 assert_file_equals $'login\n--authfile\n'"${tmp_dir}"$'/containers/auth.json\n--username\noauth\n--password-stdin\nregistry.example.test:8443' "${MOCK_SKOPEO_ARGS_FILE}"
-assert_file_equals 'header.payload.signature' "${MOCK_SKOPEO_STDIN_FILE}"
-assert_file_equals '::add-mask::header.payload.signature' "${RUN_OUTPUT_FILE}"
-assert_file_excludes 'header.payload.signature' "${MOCK_DOCKER_ARGS_FILE}"
-assert_file_excludes 'header.payload.signature' "${MOCK_SKOPEO_ARGS_FILE}"
-assert_file_excludes 'header.payload.signature' "${MOCK_DOCKER_ENV_FILE}"
-assert_file_excludes 'header.payload.signature' "${MOCK_SKOPEO_ENV_FILE}"
+assert_file_equals 'raw-zot-oidc-token' "${MOCK_SKOPEO_STDIN_FILE}"
+assert_login_token_confined 'raw-zot-oidc-token'
 assert_file_excludes 'request-token' "${MOCK_DOCKER_ENV_FILE}"
 assert_file_excludes 'request-token' "${MOCK_SKOPEO_ENV_FILE}"
-assert_file_equals 'existing-env=value' "${GITHUB_ENV}"
-assert_file_equals 'existing-output=value' "${GITHUB_OUTPUT}"
+assert_file_equals $'docker\nskopeo' "${MOCK_LOGIN_ORDER_FILE}"
 
 export ACTIONS_ID_TOKEN_REQUEST_URL='https://tokens.example.test/oidc?api-version=1'
 run_helper equals-args \
@@ -137,6 +149,21 @@ run_helper equals-args \
   "--skopeo-auth-file=${tmp_dir}/auth.json"
 [[ ${RUN_STATUS} -eq 0 ]] || fail "equals argument invocation failed: $(cat "${RUN_OUTPUT_FILE}")"
 assert_file_contains_line 'url = "https://tokens.example.test/oidc?api-version=1&audience=workload%20identity"' "${MOCK_CURL_STDIN_FILE}"
+
+export MOCK_DOCKER_EXIT=1
+run_helper docker-login-failure --audience workload --registry registry.test --skopeo-auth-file /tmp/auth.json
+[[ ${RUN_STATUS} -ne 0 ]] || fail "Docker login failure unexpectedly succeeded"
+assert_file_equals 'docker' "${MOCK_LOGIN_ORDER_FILE}"
+[[ ! -e "${MOCK_SKOPEO_ARGS_FILE}" ]] || fail "Docker login failure invoked skopeo"
+assert_login_token_confined 'raw-zot-oidc-token'
+unset MOCK_DOCKER_EXIT
+
+export MOCK_SKOPEO_EXIT=1
+run_helper skopeo-login-failure --audience workload --registry registry.test --skopeo-auth-file /tmp/auth.json
+[[ ${RUN_STATUS} -ne 0 ]] || fail "Skopeo login failure unexpectedly succeeded"
+assert_file_equals $'docker\nskopeo' "${MOCK_LOGIN_ORDER_FILE}"
+assert_login_token_confined 'raw-zot-oidc-token'
+unset MOCK_SKOPEO_EXIT
 
 expect_failure missing-audience --registry registry.test --skopeo-auth-file /tmp/auth.json
 expect_failure empty-audience --audience= --registry registry.test --skopeo-auth-file /tmp/auth.json
