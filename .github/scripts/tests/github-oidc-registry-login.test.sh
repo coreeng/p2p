@@ -101,6 +101,16 @@ expect_failure() {
   [[ ! -e "${MOCK_SKOPEO_ARGS_FILE}" ]] || fail "${case_name} invoked skopeo"
 }
 
+expect_invalid_registry() {
+  local case_name="$1"
+  local registry="$2"
+  run_helper "${case_name}" --audience workload --registry "${registry}" --skopeo-auth-file /tmp/auth.json
+  [[ ${RUN_STATUS} -ne 0 ]] || fail "${case_name} unexpectedly succeeded"
+  [[ ! -e "${MOCK_CURL_ARGS_FILE}" ]] || fail "${case_name} invoked curl"
+  [[ ! -e "${MOCK_DOCKER_ARGS_FILE}" ]] || fail "${case_name} invoked docker"
+  [[ ! -e "${MOCK_SKOPEO_ARGS_FILE}" ]] || fail "${case_name} invoked skopeo"
+}
+
 assert_login_token_confined() {
   local token="$1"
   assert_file_equals "::add-mask::${token}" "${RUN_OUTPUT_FILE}"
@@ -122,6 +132,19 @@ printf '%s' 'existing-env=value' > "${GITHUB_ENV}"
 printf '%s' 'existing-output=value' > "${GITHUB_OUTPUT}"
 printf '%s' '{"value":"raw-zot-oidc-token"}' > "${MOCK_CURL_RESPONSE_FILE}"
 unset MOCK_CURL_EXIT MOCK_DOCKER_EXIT MOCK_SKOPEO_EXIT
+
+expect_invalid_registry leading-dash --help
+expect_invalid_registry scheme https://registry.example
+expect_invalid_registry path registry.example/path
+expect_invalid_registry whitespace 'registry .example'
+expect_invalid_registry query 'registry.example?scope=test'
+expect_invalid_registry fragment 'registry.example#test'
+expect_invalid_registry userinfo user@registry.example
+expect_invalid_registry empty-label registry..example
+expect_invalid_registry leading-label-dash -registry.example
+expect_invalid_registry nonnumeric-port registry.example:https
+expect_invalid_registry zero-port registry.example:0
+expect_invalid_registry overflow-port registry.example:65536
 
 run_helper separate-args \
   --audience 'api://registry name?x=y&z=/+' \

@@ -12,6 +12,38 @@ curl_config_escape() {
   printf '%s' "${value}"
 }
 
+registry_is_valid() {
+  local value="$1"
+  local host="${value}"
+  local port=''
+  local normalized_port label
+  local labels=()
+
+  if [[ "${value}" == *:* ]]; then
+    [[ "${value}" != *:*:* ]] || return 1
+    host="${value%:*}"
+    port="${value##*:}"
+    [[ "${port}" =~ ^[0-9]+$ ]] || return 1
+
+    normalized_port="${port}"
+    while [[ ${#normalized_port} -gt 1 && "${normalized_port}" == 0* ]]; do
+      normalized_port="${normalized_port#0}"
+    done
+    [[ ${#normalized_port} -le 5 ]] || return 1
+    ((10#${normalized_port} >= 1 && 10#${normalized_port} <= 65535)) || return 1
+  fi
+
+  [[ -n "${host}" && ${#host} -le 253 ]] || return 1
+  [[ "${host}" =~ ^[A-Za-z0-9.-]+$ ]] || return 1
+  [[ "${host}" != .* && "${host}" != *. && "${host}" != *..* ]] || return 1
+
+  IFS='.' read -r -a labels <<< "${host}"
+  for label in "${labels[@]}"; do
+    [[ ${#label} -le 63 ]] || return 1
+    [[ "${label}" =~ ^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?$ ]] || return 1
+  done
+}
+
 cleanup() {
   unset token request_url encoded_audience
   unset ACTIONS_ID_TOKEN_REQUEST_TOKEN ACTIONS_ID_TOKEN_REQUEST_URL
@@ -61,6 +93,10 @@ done
 }
 [[ -n "${registry}" ]] || {
   printf 'github-oidc-registry-login: --registry is required\n' >&2
+  exit 1
+}
+registry_is_valid "${registry}" || {
+  printf 'github-oidc-registry-login: --registry must be a DNS hostname with an optional TCP port\n' >&2
   exit 1
 }
 [[ -n "${skopeo_auth_file}" ]] || {
