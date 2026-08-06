@@ -294,7 +294,6 @@ jobs:
 
       - name: Install Skopeo from Ubuntu packages
         id: setup-skopeo
-        if: ${{ inputs.dry-run == false && env.REGISTRY_MODE == 'zot' }}
         shell: bash
         run: |
           set -euo pipefail

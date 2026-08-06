@@ -213,6 +213,20 @@ class ZotWorkflowTests(unittest.TestCase):
             )
             self.assertNotIn("github.com/lework/skopeo-binary", setup["run"])
 
+    def test_execute_skopeo_install_is_available_in_default_and_zot_modes(self):
+        job = parsed_job(ROOT / ".github/workflows/p2p-execute-command.yaml", "exec")
+        setup = parsed_step(job, "Install Skopeo from Ubuntu packages")
+        zot_login = parsed_step(job, "Login to Zot registry")
+        public_read = parsed_step(job, "Verify Zot public image read")
+
+        self.assertNotIn("if", setup)
+        self.assertIn("sudo apt-get install --yes skopeo", setup["run"])
+        self.assertEqual(zot_login["if"], "${{ inputs.dry-run == false && env.REGISTRY_MODE == 'zot' }}")
+        self.assertEqual(
+            public_read["if"],
+            "${{ inputs.dry-run == false && env.REGISTRY_MODE == 'zot' && inputs.command == 'p2p-build' && steps.run-command.outcome == 'success' }}",
+        )
+
     def test_zot_credentials_are_prepared_before_login_and_cleaned_after_last_use(self):
         cases = (
             (
