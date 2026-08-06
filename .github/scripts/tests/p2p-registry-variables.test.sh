@@ -56,6 +56,15 @@ run_make() {
     -u P2P_APP_NAME
     -u P2P_TENANT_NAME
     -u P2P_VERSION
+    -u p2p_registry
+    -u p2p_image
+    -u p2p_image_tag
+    -u p2p_image_cache
+    -u p2p_namespace
+    -u p2p_app_name
+    -u p2p_tenant_name
+    -u p2p_version
+    -u p2p_app_url_suffix
   )
 
   env "${unset_args[@]}" make "$@"
@@ -125,5 +134,20 @@ integration|deployment.fast.example/custom|public.registry.example/fast-feedback
 extended-test|deployment.extended.example/custom|public.registry.example/extended-test/auth-test-2-extended|public.registry.example/extended-test/auth-test-2-extended:v-test
 prod|deployment.prod.example/custom||'
 assert_equals "${deployment_override_expected}" "${deployment_override_output}"
+
+if [[ "${P2P_REGISTRY_VARIABLES_ISOLATION_RUN-}" != "1" ]]; then
+  env \
+    P2P_REGISTRY_VARIABLES_ISOLATION_RUN=1 \
+    p2p_registry=ambient-registry \
+    p2p_image=ambient-image \
+    p2p_image_tag=ambient-image-tag \
+    p2p_image_cache=ambient-image-cache \
+    p2p_namespace=ambient-namespace \
+    p2p_app_name=ambient-app \
+    p2p_tenant_name=ambient-tenant \
+    p2p_version=ambient-version \
+    p2p_app_url_suffix=ambient-url-suffix \
+    "$0" >/dev/null
+fi
 
 printf 'PASS: p2p-registry-variables\n'
