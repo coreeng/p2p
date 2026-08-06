@@ -100,6 +100,15 @@ jobs:
           python3 .github/scripts/tests/pinniped-workflow.test.py
           python3 .github/scripts/tests/pinniped-auth-evidence-workflow.test.py
 
+  test_github_oidc_registry_login:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - name: Test GitHub OIDC registry login
+        run: .github/scripts/tests/github-oidc-registry-login.test.sh
+
   test_source_security_ignore_report:
     runs-on: ubuntu-24.04
     steps:

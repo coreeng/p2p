@@ -1,0 +1,98 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+curl_config_escape() {
+  local value="$1"
+  value="${value//\\/\\\\}"
+  value="${value//\"/\\\"}"
+  value="${value//$'\t'/\\t}"
+  value="${value//$'\n'/\\n}"
+  value="${value//$'\r'/\\r}"
+  printf '%s' "${value}"
+}
+
+cleanup() {
+  unset token request_url encoded_audience
+  unset ACTIONS_ID_TOKEN_REQUEST_TOKEN ACTIONS_ID_TOKEN_REQUEST_URL
+}
+trap cleanup EXIT
+
+audience=''
+registry=''
+skopeo_auth_file=''
+
+while (($# > 0)); do
+  case "$1" in
+    --audience|--registry|--skopeo-auth-file)
+      (($# > 1)) || {
+        printf 'github-oidc-registry-login: %s requires a value\n' "$1" >&2
+        exit 1
+      }
+      case "$1" in
+        --audience) audience="$2" ;;
+        --registry) registry="$2" ;;
+        --skopeo-auth-file) skopeo_auth_file="$2" ;;
+      esac
+      shift 2
+      ;;
+    --audience=*)
+      audience="${1#--audience=}"
+      shift
+      ;;
+    --registry=*)
+      registry="${1#--registry=}"
+      shift
+      ;;
+    --skopeo-auth-file=*)
+      skopeo_auth_file="${1#--skopeo-auth-file=}"
+      shift
+      ;;
+    *)
+      printf 'github-oidc-registry-login: unknown argument: %s\n' "$1" >&2
+      exit 1
+      ;;
+  esac
+done
+
+[[ -n "${audience}" ]] || {
+  printf 'github-oidc-registry-login: --audience is required\n' >&2
+  exit 1
+}
+[[ -n "${registry}" ]] || {
+  printf 'github-oidc-registry-login: --registry is required\n' >&2
+  exit 1
+}
+[[ -n "${skopeo_auth_file}" ]] || {
+  printf 'github-oidc-registry-login: --skopeo-auth-file is required\n' >&2
+  exit 1
+}
+[[ -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]] || {
+  printf 'github-oidc-registry-login: ACTIONS_ID_TOKEN_REQUEST_URL is required\n' >&2
+  exit 1
+}
+[[ -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]] || {
+  printf 'github-oidc-registry-login: ACTIONS_ID_TOKEN_REQUEST_TOKEN is required\n' >&2
+  exit 1
+}
+
+encoded_audience="$(jq -rn --arg audience "${audience}" '$audience | @uri')"
+separator='?'
+[[ "${ACTIONS_ID_TOKEN_REQUEST_URL}" == *'?'* ]] && separator='&'
+request_url="${ACTIONS_ID_TOKEN_REQUEST_URL}${separator}audience=${encoded_audience}"
+
+token="$(
+  {
+    printf 'header = "Authorization: Bearer %s"\n' "$(curl_config_escape "${ACTIONS_ID_TOKEN_REQUEST_TOKEN}")"
+    printf 'url = "%s"\n' "$(curl_config_escape "${request_url}")"
+  } | curl --disable --fail --silent --show-error --config - \
+    | jq -er '.value | select(type == "string" and length > 0)'
+)"
+
+unset ACTIONS_ID_TOKEN_REQUEST_TOKEN ACTIONS_ID_TOKEN_REQUEST_URL request_url encoded_audience
+printf '::add-mask::%s\n' "${token}"
+printf '%s' "${token}" | docker login "${registry}" --username oauth --password-stdin
+printf '%s' "${token}" | skopeo login --authfile "${skopeo_auth_file}" --username oauth --password-stdin "${registry}"
+
+unset token
+trap - EXIT
