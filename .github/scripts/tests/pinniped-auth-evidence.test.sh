@@ -64,6 +64,14 @@ case "$*" in
   "--kubeconfig ${RUNNER_TEMP}/pinniped-kubeconfig."*" auth can-i get pods --namespace kube-system"|\
   "--kubeconfig ${RUNNER_TEMP}/pinniped-kubeconfig."*" auth can-i get pods --namespace cecg-system")
     printf 'no\n'
+    exit 1
+    ;;
+  "--kubeconfig ${RUNNER_TEMP}/pinniped-kubeconfig."*" auth can-i get pods --namespace status-2")
+    printf 'no\n'
+    exit 2
+    ;;
+  "--kubeconfig ${RUNNER_TEMP}/pinniped-kubeconfig."*" auth can-i get pods --namespace malformed-output")
+    printf 'unknown\n'
     ;;
   *" auth can-i "*)
     printf 'unexpected auth can-i invocation: %s\n' "$*" >&2
@@ -165,6 +173,22 @@ assert_excludes 'core-platform:sandbox-3-gcp:auth-test-2' "${RUN_OUTPUT_FILE}"
 assert_excludes 'github-actions-auth-test-2' "${RUN_OUTPUT_FILE}"
 assert_excludes 'Y2VydA==' "${RUN_OUTPUT_FILE}"
 [[ -z "$(ls -A "${runner_temp}")" ]] || fail 'success case left temporary artifacts'
+
+run_runner invalid-authorization-status \
+  --audience=audience \
+  --authenticator=authenticator \
+  --expect-authentication=success \
+  --deny=get,pods,status-2
+[[ ${RUN_STATUS} -ne 0 ]] || fail 'authorization status 2 unexpectedly produced evidence'
+assert_excludes 'DENY get pods in status-2' "${RUN_OUTPUT_FILE}"
+
+run_runner malformed-authorization-output \
+  --audience=audience \
+  --authenticator=authenticator \
+  --expect-authentication=success \
+  --deny=get,pods,malformed-output
+[[ ${RUN_STATUS} -ne 0 ]] || fail 'malformed authorization output unexpectedly produced evidence'
+assert_excludes 'DENY get pods in malformed-output' "${RUN_OUTPUT_FILE}"
 
 export MOCK_PINNIPED_REJECT=true
 run_runner rejected \

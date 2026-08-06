@@ -196,11 +196,17 @@ printf 'Pinniped authentication succeeded\n'
 run_check() {
   local expectation="$1"
   local check="$2"
-  local verb resource namespace extra actual
+  local verb resource namespace extra actual status
   IFS=',' read -r verb resource namespace extra <<< "${check}"
-  if ! actual="$(kubectl --kubeconfig "${kubeconfig}" auth can-i "${verb}" "${resource}" --namespace "${namespace}" 2> "${error_file}")"; then
-    fail 'authorization check failed'
+  if actual="$(kubectl --kubeconfig "${kubeconfig}" auth can-i "${verb}" "${resource}" --namespace "${namespace}" 2> "${error_file}")"; then
+    status=0
+  else
+    status=$?
   fi
+  case "${status}:${actual}" in
+    0:yes|1:no) ;;
+    *) fail 'authorization check failed' ;;
+  esac
 
   case "${expectation}:${actual}" in
     ALLOW:yes|DENY:no) ;;
