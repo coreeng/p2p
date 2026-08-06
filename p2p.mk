@@ -35,12 +35,16 @@ P2P_TENANT_NAME ?= default-tenant
 P2P_APP_NAME ?= default-app
 P2P_VERSION ?= 0.0.0-$(shell git rev-parse --short HEAD)
 P2P_REGISTRY ?= localhost/local
+P2P_DEPLOYMENT_REGISTRY ?= $(P2P_REGISTRY)
 P2P_REGISTRY_FAST_FEEDBACK_PATH ?= fast-feedback
 P2P_REGISTRY_EXTENDED_TEST_PATH ?= extended-test
 P2P_REGISTRY_PROD_PATH ?= prod
 P2P_REGISTRY_FAST_FEEDBACK ?= $(P2P_REGISTRY)/$(P2P_REGISTRY_FAST_FEEDBACK_PATH)
 P2P_REGISTRY_EXTENDED_TEST ?= $(P2P_REGISTRY)/$(P2P_REGISTRY_EXTENDED_TEST_PATH)
 P2P_REGISTRY_PROD ?= $(P2P_REGISTRY)/$(P2P_REGISTRY_PROD_PATH)
+P2P_DEPLOYMENT_REGISTRY_FAST_FEEDBACK ?= $(P2P_DEPLOYMENT_REGISTRY)/$(P2P_REGISTRY_FAST_FEEDBACK_PATH)
+P2P_DEPLOYMENT_REGISTRY_EXTENDED_TEST ?= $(P2P_DEPLOYMENT_REGISTRY)/$(P2P_REGISTRY_EXTENDED_TEST_PATH)
+P2P_DEPLOYMENT_REGISTRY_PROD ?= $(P2P_DEPLOYMENT_REGISTRY)/$(P2P_REGISTRY_PROD_PATH)
 ifeq ($(P2P_TENANT_NAME),$(P2P_APP_NAME))
 P2P_NAMESPACE := $(P2P_APP_NAME)
 else
@@ -81,7 +85,7 @@ p2p-images:
 .PHONY: p2p-functional ## Run functional tests
 %-functional: p2p_app_url_suffix=-functional
 %-functional: p2p_namespace=$(P2P_NAMESPACE_FUNCTIONAL)
-%-functional: p2p_registry=$(P2P_REGISTRY_FAST_FEEDBACK)
+%-functional: p2p_registry=$(P2P_DEPLOYMENT_REGISTRY_FAST_FEEDBACK)
 %-functional: p2p_image=$(P2P_REGISTRY_FAST_FEEDBACK)/$(if $(filter-out undefined,$(origin 1)),$(1),$(P2P_APP_NAME))-functional
 %-functional: p2p_image_tag=$(P2P_REGISTRY_FAST_FEEDBACK)/$(if $(filter-out undefined,$(origin 1)),$(1),$(P2P_APP_NAME))-functional:$(P2P_VERSION)
 %-functional: p2p_image_cache=--cache-from=type=gha,scope=$(if $(filter-out undefined,$(origin 1)),$(1),$(P2P_APP_NAME))-functional --cache-to=type=gha,scope=$(if $(filter-out undefined,$(origin 1)),$(1),$(P2P_APP_NAME))-functional,mode=max
@@ -89,7 +93,7 @@ p2p-images:
 .PHONY: p2p-nft ## Run NFT tests
 %-nft: p2p_app_url_suffix=-nft
 %-nft: p2p_namespace=$(P2P_NAMESPACE_NFT)
-%-nft: p2p_registry=$(P2P_REGISTRY_FAST_FEEDBACK)
+%-nft: p2p_registry=$(P2P_DEPLOYMENT_REGISTRY_FAST_FEEDBACK)
 %-nft: p2p_image=$(P2P_REGISTRY_FAST_FEEDBACK)/$(if $(filter-out undefined,$(origin 1)),$(1),$(P2P_APP_NAME))-nft
 %-nft: p2p_image_tag=$(P2P_REGISTRY_FAST_FEEDBACK)/$(if $(filter-out undefined,$(origin 1)),$(1),$(P2P_APP_NAME))-nft:$(P2P_VERSION)
 %-nft: p2p_image_cache=--cache-from=type=gha,scope=$(if $(filter-out undefined,$(origin 1)),$(1),$(P2P_APP_NAME))-nft --cache-to=type=gha,scope=$(if $(filter-out undefined,$(origin 1)),$(1),$(P2P_APP_NAME))-nft,mode=max
@@ -97,7 +101,7 @@ p2p-images:
 .PHONY: p2p-integration ## Run integration tests
 %-integration: p2p_app_url_suffix=-integration
 %-integration: p2p_namespace=$(P2P_NAMESPACE_INTEGRATION)
-%-integration: p2p_registry=$(P2P_REGISTRY_FAST_FEEDBACK)
+%-integration: p2p_registry=$(P2P_DEPLOYMENT_REGISTRY_FAST_FEEDBACK)
 %-integration: p2p_image=$(P2P_REGISTRY_FAST_FEEDBACK)/$(if $(filter-out undefined,$(origin 1)),$(1),$(P2P_APP_NAME))-integration
 %-integration: p2p_image_tag=$(P2P_REGISTRY_FAST_FEEDBACK)/$(if $(filter-out undefined,$(origin 1)),$(1),$(P2P_APP_NAME))-integration:$(P2P_VERSION)
 %-integration: p2p_image_cache=--cache-from=type=gha,scope=$(if $(filter-out undefined,$(origin 1)),$(1),$(P2P_APP_NAME))-integration --cache-to=type=gha,scope=$(if $(filter-out undefined,$(origin 1)),$(1),$(P2P_APP_NAME))-integration,mode=max
@@ -113,7 +117,7 @@ p2p-promote-to-extended-test:
 .PHONY: p2p-extended-test ## Run extended tests
 %-extended-test: p2p_app_url_suffix=-extended
 %-extended-test: p2p_namespace=$(P2P_NAMESPACE_EXTENDED)
-%-extended-test: p2p_registry=$(P2P_REGISTRY_EXTENDED_TEST)
+%-extended-test: p2p_registry=$(P2P_DEPLOYMENT_REGISTRY_EXTENDED_TEST)
 %-extended-test: p2p_image=$(P2P_REGISTRY_EXTENDED_TEST)/$(if $(filter-out undefined,$(origin 1)),$(1),$(P2P_APP_NAME))-extended
 %-extended-test: p2p_image_tag=$(P2P_REGISTRY_EXTENDED_TEST)/$(if $(filter-out undefined,$(origin 1)),$(1),$(P2P_APP_NAME))-extended:$(P2P_VERSION)
 %-extended-test: p2p_image_cache=--cache-from=type=gha,scope=$(if $(filter-out undefined,$(origin 1)),$(1),$(P2P_APP_NAME))-extended --cache-to=type=gha,scope=$(if $(filter-out undefined,$(origin 1)),$(1),$(P2P_APP_NAME))-extended,mode=max
@@ -129,4 +133,4 @@ p2p-promote-to-prod:
 .PHONY: p2p-prod ## Deploy to prod
 %-prod: p2p_app_url_suffix=
 %-prod: p2p_namespace=$(P2P_NAMESPACE_PROD)
-%-prod: p2p_registry=$(P2P_REGISTRY_PROD)
+%-prod: p2p_registry=$(P2P_DEPLOYMENT_REGISTRY_PROD)
