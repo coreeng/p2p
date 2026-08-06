@@ -196,24 +196,36 @@ jobs:
           username: oauth2accesstoken
           password: ${{ steps.auth.outputs.access_token }}
 
-      - name: Setup skopeo for Zot authentication
+      - name: Prepare Zot registry credentials
+        if: ${{ inputs.security-scan-enabled && inputs.dry-run == false && env.REGISTRY_MODE == 'zot' }}
+        shell: bash
+        env:
+          DOCKER_CONFIG: ${{ runner.temp }}/p2p-image-scan-docker-config
+        run: |
+          set -euo pipefail
+          install -d -m 0700 "$DOCKER_CONFIG"
+          printf 'DOCKER_CONFIG=%s\n' "$DOCKER_CONFIG" >> "$GITHUB_ENV"
+
+      - name: Install Skopeo from Ubuntu packages
         if: ${{ inputs.security-scan-enabled && inputs.dry-run == false && env.REGISTRY_MODE == 'zot' }}
         shell: bash
         run: |
           set -euo pipefail
-          curl -fsSL "https://github.com/lework/skopeo-binary/releases/download/v1.22.0/skopeo-linux-amd64" -o /usr/local/bin/skopeo
-          chmod +x /usr/local/bin/skopeo
+          sudo apt-get update
+          sudo apt-get install --yes skopeo
           skopeo --version
 
       - name: Login to Zot registry
         if: ${{ inputs.security-scan-enabled && inputs.dry-run == false && env.REGISTRY_MODE == 'zot' }}
         shell: bash
+        env:
+          DOCKER_CONFIG: ${{ runner.temp }}/p2p-image-scan-docker-config
         run: |
           set -euo pipefail
           "$RUNNER_TEMP/p2p-workflow-src/.github/scripts/github-oidc-registry-login" \
             --audience "$ZOT_OIDC_AUDIENCE" \
             --registry "$P2P_REGISTRY_CONFIGURED" \
-            --skopeo-auth-file "$RUNNER_TEMP/zot-containers-auth.json"
+            --skopeo-auth-file "$RUNNER_TEMP/p2p-image-scan-zot-auth.json"
 
       - name: Login to tenant provided registry
         if: ${{ inputs.security-scan-enabled && inputs.dry-run == false }}
@@ -378,6 +390,13 @@ jobs:
           path: ${{ steps.manifest.outputs.artifact-dir }}
           if-no-files-found: error
           retention-days: 30
+
+      - name: Clean up Zot registry credentials
+        if: ${{ always() && env.REGISTRY_MODE == 'zot' }}
+        shell: bash
+        run: |
+          rm -rf "$RUNNER_TEMP/p2p-image-scan-docker-config"
+          rm -f "$RUNNER_TEMP/p2p-image-scan-zot-auth.json"
 
   security-image-scan-status-policy:
     name: security-image-scan-status-policy (${{ inputs.github_env != '' && format('{0}, {1}', inputs.pipeline-stage, inputs.github_env) || inputs.pipeline-stage }})

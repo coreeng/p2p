@@ -55,6 +55,9 @@ jobs:
       PROJECT_ID: ${{ vars.PROJECT_ID }}
       PROJECT_NUMBER: ${{ vars.PROJECT_NUMBER }}
       REGION: ${{ vars.REGION || inputs.region }}
+      REGISTRY_MODE: ${{ vars.REGISTRY_MODE || 'artifact-registry' }}
+      P2P_REGISTRY_CONFIGURED: ${{ vars.P2P_REGISTRY }}
+      ZOT_OIDC_AUDIENCE: ${{ vars.ZOT_OIDC_AUDIENCE }}
       REGISTRY: ${{ vars.REGION || inputs.region }}-docker.pkg.dev/${{ vars.PROJECT_ID }}/tenant/${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}
       SERVICE_ACCOUNT: p2p-${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}@${{ vars.PROJECT_ID }}.iam.gserviceaccount.com
       ENV_NAME: ${{ inputs.github_env }}
@@ -75,7 +78,7 @@ jobs:
 
       - name: Authenticate to Google Cloud
         id: auth
-        if: inputs.dry-run == false
+        if: inputs.dry-run == false && env.REGISTRY_MODE != 'zot'
         uses: google-github-actions/auth@v3
         with:
           export_environment_variables: true
@@ -99,23 +102,70 @@ jobs:
           rm -rf "$RUNNER_TEMP/p2p-workflow-src"
           mv .p2p-workflow-src "$RUNNER_TEMP/p2p-workflow-src"
 
+      - name: Validate Zot registry configuration
+        if: ${{ inputs.dry-run == false && env.REGISTRY_MODE == 'zot' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${P2P_REGISTRY_CONFIGURED:?P2P_REGISTRY is required in Zot mode}"
+          : "${ZOT_OIDC_AUDIENCE:?ZOT_OIDC_AUDIENCE is required in Zot mode}"
+          if [[ ! "$P2P_REGISTRY_CONFIGURED" =~ ^[A-Za-z0-9.-]+(:[0-9]{1,5})?$ ]] ||
+             [[ "$P2P_REGISTRY_CONFIGURED" == .* || "$P2P_REGISTRY_CONFIGURED" == *. || "$P2P_REGISTRY_CONFIGURED" == *..* ]]; then
+            echo "P2P_REGISTRY must be a bare registry host with an optional port" >&2
+            exit 1
+          fi
+
+      - name: Prepare Zot registry credentials
+        if: ${{ inputs.dry-run == false && env.REGISTRY_MODE == 'zot' }}
+        shell: bash
+        env:
+          DOCKER_CONFIG: ${{ runner.temp }}/p2p-latest-image-docker-config
+        run: |
+          set -euo pipefail
+          install -d -m 0700 "$DOCKER_CONFIG"
+          printf 'DOCKER_CONFIG=%s\n' "$DOCKER_CONFIG" >> "$GITHUB_ENV"
+
+      - name: Install Skopeo from Ubuntu packages
+        if: ${{ inputs.dry-run == false && env.REGISTRY_MODE == 'zot' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes skopeo
+          skopeo --version
+
+      - name: Login to Zot registry
+        if: ${{ inputs.dry-run == false && env.REGISTRY_MODE == 'zot' }}
+        shell: bash
+        env:
+          DOCKER_CONFIG: ${{ runner.temp }}/p2p-latest-image-docker-config
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/p2p-workflow-src/.github/scripts/github-oidc-registry-login" \
+            --audience "$ZOT_OIDC_AUDIENCE" \
+            --registry "$P2P_REGISTRY_CONFIGURED" \
+            --skopeo-auth-file "$RUNNER_TEMP/p2p-latest-image-zot-auth.json"
+
       - name: Get latest image
         id: get-latest-image
         env:
           DRY_RUN: ${{ inputs.dry-run }}
         run: |
-            set -o pipefail
-            if [ "$DRY_RUN" == false ]; then
-              if ! version=$(gcloud artifacts docker images list "${REGISTRY}/${REGISTRY_PATH}/${IMAGE_NAME}" --include-tags --sort-by=~buildTime --format=json 2>/dev/null | node "$RUNNER_TEMP/p2p-workflow-src/.github/scripts/latest-image.js"); then
-                echo "exiting"
-                exit 1
-              fi
-            else
+            set -euo pipefail
+            if [[ "$DRY_RUN" == "true" ]]; then
               version="0.0.0"
+            elif [[ "$REGISTRY_MODE" == "zot" ]]; then
+              repository="${P2P_REGISTRY_CONFIGURED}/${REGISTRY_PATH}/${IMAGE_NAME}"
+              tags_json="$(skopeo list-tags --authfile "$RUNNER_TEMP/p2p-latest-image-zot-auth.json" "docker://${P2P_REGISTRY_CONFIGURED}/${REGISTRY_PATH}/${IMAGE_NAME}")"
+              tags="$(jq -cer '.Tags | if type == "array" then . else error("Zot response did not contain a Tags array") end' <<< "$tags_json")"
+              version="$(printf '%s' "$tags" | node "$RUNNER_TEMP/p2p-workflow-src/.github/scripts/latest-image.js")"
+            else
+              repository="${REGISTRY}/${REGISTRY_PATH}/${IMAGE_NAME}"
+              version="$(gcloud artifacts docker images list "${REGISTRY}/${REGISTRY_PATH}/${IMAGE_NAME}" --include-tags --sort-by=~buildTime --format=json 2>/dev/null | node "$RUNNER_TEMP/p2p-workflow-src/.github/scripts/latest-image.js")"
             fi
             found=true
-            if [ "$DRY_RUN" == false ] && { [ -z "${version:-}" ] || [ "${version}" == "null" ]; }; then
-              echo "No image tags found for ${REGISTRY}/${REGISTRY_PATH}/${IMAGE_NAME}; skipping downstream scan."
+            if [[ "$DRY_RUN" == "false" && ( -z "${version:-}" || "$version" == "null" ) ]]; then
+              echo "No image tags found for ${repository}; skipping downstream scan."
               version=""
               found=false
             fi
@@ -128,3 +178,10 @@ jobs:
         run: |
           echo "Output version: ${{ steps.get-latest-image.outputs.version }}"
           echo "Found image: ${{ steps.get-latest-image.outputs.found }}"
+
+      - name: Clean up Zot registry credentials
+        if: ${{ always() && env.REGISTRY_MODE == 'zot' }}
+        shell: bash
+        run: |
+          rm -rf "$RUNNER_TEMP/p2p-latest-image-docker-config"
+          rm -f "$RUNNER_TEMP/p2p-latest-image-zot-auth.json"

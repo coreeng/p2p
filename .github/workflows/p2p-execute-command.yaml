@@ -282,23 +282,37 @@ jobs:
           driver-opts: |
             default-load=true
 
-      - name: Setup skopeo
+      - name: Prepare Zot registry credentials
+        if: ${{ inputs.dry-run == false && env.REGISTRY_MODE == 'zot' }}
+        shell: bash
+        env:
+          DOCKER_CONFIG: ${{ runner.temp }}/p2p-execute-docker-config
+        run: |
+          set -euo pipefail
+          install -d -m 0700 "$DOCKER_CONFIG"
+          printf 'DOCKER_CONFIG=%s\n' "$DOCKER_CONFIG" >> "$GITHUB_ENV"
+
+      - name: Install Skopeo from Ubuntu packages
         id: setup-skopeo
+        if: ${{ inputs.dry-run == false && env.REGISTRY_MODE == 'zot' }}
         shell: bash
         run: |
-          curl -fsSL "https://github.com/lework/skopeo-binary/releases/download/v1.22.0/skopeo-linux-amd64" -o /usr/local/bin/skopeo
-          chmod +x /usr/local/bin/skopeo
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes skopeo
           skopeo --version
 
       - name: Login to Zot registry
         if: ${{ inputs.dry-run == false && env.REGISTRY_MODE == 'zot' }}
         shell: bash
+        env:
+          DOCKER_CONFIG: ${{ runner.temp }}/p2p-execute-docker-config
         run: |
           set -euo pipefail
           "$RUNNER_TEMP/p2p-workflow-src/.github/scripts/github-oidc-registry-login" \
             --audience "$ZOT_OIDC_AUDIENCE" \
             --registry "$P2P_REGISTRY_CONFIGURED" \
-            --skopeo-auth-file "$RUNNER_TEMP/zot-containers-auth.json"
+            --skopeo-auth-file "$RUNNER_TEMP/p2p-execute-zot-auth.json"
 
       - name: Expose GitHub Runtime
         id: expose-github-runtime
@@ -450,7 +464,7 @@ jobs:
         run: |
           set -euo pipefail
           reference="${P2P_REGISTRY_FAST_FEEDBACK}/${P2P_APP_NAME}:${P2P_VERSION}"
-          digest="$(skopeo inspect --authfile "$RUNNER_TEMP/zot-containers-auth.json" \
+          digest="$(skopeo inspect --authfile "$RUNNER_TEMP/p2p-execute-zot-auth.json" \
             "docker://${P2P_REGISTRY_FAST_FEEDBACK}/${P2P_APP_NAME}:${P2P_VERSION}" \
             | jq -er '.Digest | select(test("^sha256:[0-9a-f]{64}$"))')"
           printf '%s\n' "$digest" > "$RUNNER_TEMP/zot-public-digest"
@@ -509,3 +523,10 @@ jobs:
           path: ${{ steps.resolve-artifacts.outputs.paths }}
           retention-days: 14
           if-no-files-found: warn
+
+      - name: Clean up Zot registry credentials
+        if: ${{ always() && env.REGISTRY_MODE == 'zot' }}
+        shell: bash
+        run: |
+          rm -rf "$RUNNER_TEMP/p2p-execute-docker-config"
+          rm -f "$RUNNER_TEMP/p2p-execute-zot-auth.json"

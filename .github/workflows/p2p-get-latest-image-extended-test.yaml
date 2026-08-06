@@ -46,6 +46,9 @@ jobs:
   get-latest-version:
     uses: ./.github/workflows/p2p-get-latest-image.yaml
     if: success() && (github.ref == inputs.main-branch )
+    permissions:
+      contents: read
+      id-token: write
     secrets:
       env_vars: ${{ secrets.env_vars }}
     strategy:
