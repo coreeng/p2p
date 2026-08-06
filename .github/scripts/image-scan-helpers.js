@@ -91,7 +91,9 @@ async function resolveImages({
   }
 
   function standardRefs(images) {
-    const registry = `${env.REGION}-docker.pkg.dev/${env.PROJECT_ID}/tenant/${env.TENANT_NAME}/${stage}`;
+    const registry = env.REGISTRY_MODE === 'zot'
+      ? `${env.P2P_REGISTRY}/${stage}`
+      : `${env.REGION}-docker.pkg.dev/${env.PROJECT_ID}/tenant/${env.TENANT_NAME}/${stage}`;
     return images.map(img => `${registry}/${img}:${env.VERSION}`);
   }
 

@@ -84,6 +84,19 @@ Stable `@v1` neither enforces `github_env == DPLATFORM` nor consumes `PINNIPED_E
 
 For this spike, an operator must read the endpoint and CA from the cluster's `CredentialIssuer` and publish them manually. Automating publication through the portal is future work and is out of scope.
 
+### `spike/zot-envoy-registry` only
+
+The Zot registry authentication spike selects Zot only when `REGISTRY_MODE` is exactly `zot`. Artifact Registry remains the default for an unset or any other value. Configure these variables on the `sandbox-3-gcp` GitHub environment for the `auth-test-2` spike application:
+
+```
+REGISTRY_MODE=zot
+P2P_REGISTRY=registry-auth-test-2.sandbox-3-gcp.sandboxes.cecg.platform.cecg.io
+P2P_DEPLOYMENT_REGISTRY=registry-auth-test-2.sandbox-3-gcp-internal.sandboxes.cecg.platform.cecg.io
+ZOT_OIDC_AUDIENCE=core-platform-registry:sandbox-3-gcp:auth-test-2
+```
+
+`P2P_REGISTRY` is the public build and scan endpoint. `P2P_DEPLOYMENT_REGISTRY` is the internal endpoint used by deployment targets and must not be used for image scanning. Both values are bare registry hosts without a URL scheme or path. The workflow validates them and the audience before requesting a GitHub OIDC token.
+
 ## Cloud provider auth variables
 
 ### GCP (used by P2P)

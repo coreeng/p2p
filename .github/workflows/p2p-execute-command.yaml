@@ -94,6 +94,10 @@ jobs:
       PROJECT_ID: ${{ vars.PROJECT_ID }}
       PROJECT_NUMBER: ${{ vars.PROJECT_NUMBER }}
       REGION: ${{ vars.REGION || inputs.region }}
+      REGISTRY_MODE: ${{ vars.REGISTRY_MODE || 'artifact-registry' }}
+      P2P_REGISTRY_CONFIGURED: ${{ vars.P2P_REGISTRY }}
+      P2P_DEPLOYMENT_REGISTRY_CONFIGURED: ${{ vars.P2P_DEPLOYMENT_REGISTRY }}
+      ZOT_OIDC_AUDIENCE: ${{ vars.ZOT_OIDC_AUDIENCE }}
       REGISTRY: ${{ vars.REGION || inputs.region }}-docker.pkg.dev/${{ vars.PROJECT_ID }}/tenant/${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}
       VERSION: ${{ inputs.version }}
       SERVICE_ACCOUNT: p2p-${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}@${{ vars.PROJECT_ID }}.iam.gserviceaccount.com
@@ -126,6 +130,49 @@ jobs:
           set -euo pipefail
           rm -rf "$RUNNER_TEMP/p2p-workflow-src"
           mv .p2p-workflow-src "$RUNNER_TEMP/p2p-workflow-src"
+
+      - name: Validate Zot registry configuration
+        if: ${{ inputs.dry-run == false && env.REGISTRY_MODE == 'zot' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${P2P_REGISTRY_CONFIGURED:?P2P_REGISTRY is required in Zot mode}"
+          : "${P2P_DEPLOYMENT_REGISTRY_CONFIGURED:?P2P_DEPLOYMENT_REGISTRY is required in Zot mode}"
+          : "${ZOT_OIDC_AUDIENCE:?ZOT_OIDC_AUDIENCE is required in Zot mode}"
+          validate_registry_host() {
+            local value="$1" host="$1" port='' normalized_port label
+            local labels=()
+            if [[ "$value" == *:* ]]; then
+              [[ "$value" != *:*:* ]] || return 1
+              host="${value%:*}"
+              port="${value##*:}"
+              [[ "$port" =~ ^[0-9]+$ ]] || return 1
+              normalized_port="$port"
+              while [[ ${#normalized_port} -gt 1 && "$normalized_port" == 0* ]]; do
+                normalized_port="${normalized_port#0}"
+              done
+              [[ ${#normalized_port} -le 5 ]] || return 1
+              ((10#$normalized_port >= 1 && 10#$normalized_port <= 65535)) || return 1
+            fi
+            [[ -n "$host" && ${#host} -le 253 ]] || return 1
+            [[ "$host" =~ ^[A-Za-z0-9.-]+$ ]] || return 1
+            [[ "$host" != .* && "$host" != *. && "$host" != *..* ]] || return 1
+            IFS='.' read -r -a labels <<< "$host"
+            for label in "${labels[@]}"; do
+              [[ ${#label} -le 63 ]] || return 1
+              [[ "$label" =~ ^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?$ ]] || return 1
+            done
+          }
+          for registry in "$P2P_REGISTRY_CONFIGURED" "$P2P_DEPLOYMENT_REGISTRY_CONFIGURED"; do
+            if ! validate_registry_host "$registry"; then
+              echo "Registry must be a bare registry host with an optional port" >&2
+              exit 1
+            fi
+          done
+          if [[ ! "$ZOT_OIDC_AUDIENCE" =~ ^[^[:space:]/]+$ ]]; then
+            echo "ZOT_OIDC_AUDIENCE must be a non-empty audience without whitespace or slashes" >&2
+            exit 1
+          fi
 
       - name: Validate Pinniped configuration
         if: ${{ inputs.dry-run == false }}
@@ -243,13 +290,23 @@ jobs:
           chmod +x /usr/local/bin/skopeo
           skopeo --version
 
+      - name: Login to Zot registry
+        if: ${{ inputs.dry-run == false && env.REGISTRY_MODE == 'zot' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/p2p-workflow-src/.github/scripts/github-oidc-registry-login" \
+            --audience "$ZOT_OIDC_AUDIENCE" \
+            --registry "$P2P_REGISTRY_CONFIGURED" \
+            --skopeo-auth-file "$RUNNER_TEMP/zot-containers-auth.json"
+
       - name: Expose GitHub Runtime
         id: expose-github-runtime
         uses: crazy-max/ghaction-github-runtime@v4
 
       - name: Login to Artifact Registry
         uses: docker/login-action@v4
-        if: ${{ inputs.dry-run == false }}
+        if: ${{ inputs.dry-run == false && env.REGISTRY_MODE != 'zot' }}
         with:
           registry: ${{ env.REGION }}-docker.pkg.dev
           username: oauth2accesstoken
@@ -348,13 +405,23 @@ jobs:
           export P2P_TENANT_NAME="${{ env.TENANT_NAME }}"
           export P2P_APP_NAME=${{ inputs.app-name }}
           export P2P_VERSION=${{ inputs.version }}
-          export P2P_REGISTRY=${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/tenant/${{ env.TENANT_NAME }}
+          if [[ "$REGISTRY_MODE" == "zot" ]]; then
+            P2P_REGISTRY="${P2P_REGISTRY_CONFIGURED}"
+            P2P_DEPLOYMENT_REGISTRY="${P2P_DEPLOYMENT_REGISTRY_CONFIGURED}"
+          else
+            P2P_REGISTRY=${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/tenant/${{ env.TENANT_NAME }}
+            P2P_DEPLOYMENT_REGISTRY="$P2P_REGISTRY"
+          fi
+          export P2P_REGISTRY P2P_DEPLOYMENT_REGISTRY
           export P2P_REGISTRY_FAST_FEEDBACK_PATH=fast-feedback
           export P2P_REGISTRY_EXTENDED_TEST_PATH=extended-test
           export P2P_REGISTRY_PROD_PATH=prod
           export P2P_REGISTRY_FAST_FEEDBACK=${P2P_REGISTRY}/${P2P_REGISTRY_FAST_FEEDBACK_PATH}
           export P2P_REGISTRY_EXTENDED_TEST=${P2P_REGISTRY}/${P2P_REGISTRY_EXTENDED_TEST_PATH}
           export P2P_REGISTRY_PROD=${P2P_REGISTRY}/${P2P_REGISTRY_PROD_PATH}
+          export P2P_DEPLOYMENT_REGISTRY_FAST_FEEDBACK=${P2P_DEPLOYMENT_REGISTRY}/${P2P_REGISTRY_FAST_FEEDBACK_PATH}
+          export P2P_DEPLOYMENT_REGISTRY_EXTENDED_TEST=${P2P_DEPLOYMENT_REGISTRY}/${P2P_REGISTRY_EXTENDED_TEST_PATH}
+          export P2P_DEPLOYMENT_REGISTRY_PROD=${P2P_DEPLOYMENT_REGISTRY}/${P2P_REGISTRY_PROD_PATH}
           if [[ "${{ env.TENANT_NAME }}" == "${{ inputs.app-name }}" ]]; then
             P2P_NAMESPACE="${{ env.TENANT_NAME }}"
           else
@@ -376,6 +443,22 @@ jobs:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ steps.auth.outputs.credentials_file_path }}
         run: |
           make ${{ inputs.command }}
+
+      - name: Verify Zot public image read
+        if: ${{ inputs.dry-run == false && env.REGISTRY_MODE == 'zot' && inputs.command == 'p2p-build' && steps.run-command.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          reference="${P2P_REGISTRY_FAST_FEEDBACK}/${P2P_APP_NAME}:${P2P_VERSION}"
+          digest="$(skopeo inspect --authfile "$RUNNER_TEMP/zot-containers-auth.json" \
+            "docker://${P2P_REGISTRY_FAST_FEEDBACK}/${P2P_APP_NAME}:${P2P_VERSION}" \
+            | jq -er '.Digest | select(test("^sha256:[0-9a-f]{64}$"))')"
+          printf '%s\n' "$digest" > "$RUNNER_TEMP/zot-public-digest"
+          {
+            printf '## Zot public image read\n\n'
+            printf -- '- Reference: `%s`\n' "$reference"
+            printf -- '- Digest: `%s`\n' "$digest"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Resolve artifact paths
         id: resolve-artifacts

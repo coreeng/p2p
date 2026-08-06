@@ -3,6 +3,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const {
+  resolveImages,
   scanImages,
   secretScanImages,
 } = require('../image-scan-helpers');
@@ -87,6 +88,34 @@ async function runScanFunction(scanFunction, options = {}) {
 }
 
 (async () => {
+  const resolvedOutputs = {};
+  const resolvedInfo = [];
+  await resolveImages({
+    env: {
+      PIPELINE_STAGE: 'fast-feedback',
+      WORKING_DIR: '.',
+      IMAGE_NAMES: 'api,worker',
+      REGISTRY_MODE: 'zot',
+      P2P_REGISTRY: 'registry-auth-test-2.sandbox-3-gcp.sandboxes.cecg.platform.cecg.io',
+      P2P_DEPLOYMENT_REGISTRY: 'registry-auth-test-2.sandbox-3-gcp-internal.sandboxes.cecg.platform.cecg.io',
+      VERSION: '1.2.3',
+    },
+    core: {
+      setOutput: (key, value) => { resolvedOutputs[key] = value; },
+      setFailed: message => { throw new Error(message); },
+      info: message => { resolvedInfo.push(message); },
+    },
+  });
+  assert.strictEqual(
+    resolvedOutputs['image-refs'],
+    [
+      'registry-auth-test-2.sandbox-3-gcp.sandboxes.cecg.platform.cecg.io/fast-feedback/api:1.2.3',
+      'registry-auth-test-2.sandbox-3-gcp.sandboxes.cecg.platform.cecg.io/fast-feedback/worker:1.2.3',
+    ].join('\n'),
+  );
+  assert(!resolvedOutputs['image-refs'].includes('gcp-internal'));
+  assert(!resolvedInfo.join('\n').includes('gcp-internal'));
+
   const trivyRun = await runScanFunction(scanImages);
   assert.deepStrictEqual(trivyRun.failures, []);
   assert.deepStrictEqual(

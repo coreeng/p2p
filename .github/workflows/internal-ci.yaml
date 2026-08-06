@@ -107,7 +107,9 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Test GitHub OIDC registry login
-        run: .github/scripts/tests/github-oidc-registry-login.test.sh
+        run: |
+          .github/scripts/tests/github-oidc-registry-login.test.sh
+          python3 .github/scripts/tests/zot-workflow.test.py
 
   test_p2p_registry_variables:
     runs-on: ubuntu-24.04

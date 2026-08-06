@@ -86,6 +86,9 @@ jobs:
   security-image-scan:
     name: security-image-scan (${{ inputs.github_env != '' && format('{0}, {1}', inputs.pipeline-stage, inputs.github_env) || inputs.pipeline-stage }})
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
     environment: ${{ inputs.security-scan-enabled && inputs.github_env || '' }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
     outputs:
@@ -100,6 +103,10 @@ jobs:
       PROJECT_ID: ${{ vars.PROJECT_ID }}
       PROJECT_NUMBER: ${{ vars.PROJECT_NUMBER }}
       REGION: ${{ vars.REGION || inputs.region }}
+      REGISTRY_MODE: ${{ vars.REGISTRY_MODE || 'artifact-registry' }}
+      P2P_REGISTRY_CONFIGURED: ${{ vars.P2P_REGISTRY }}
+      P2P_DEPLOYMENT_REGISTRY_CONFIGURED: ${{ vars.P2P_DEPLOYMENT_REGISTRY }}
+      ZOT_OIDC_AUDIENCE: ${{ vars.ZOT_OIDC_AUDIENCE }}
       VERSION: ${{ inputs.version }}
       SERVICE_ACCOUNT: p2p-${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}@${{ vars.PROJECT_ID }}.iam.gserviceaccount.com
       TENANT_NAME: ${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}
@@ -127,9 +134,52 @@ jobs:
           rm -rf "$RUNNER_TEMP/p2p-workflow-src"
           mv .p2p-workflow-src "$RUNNER_TEMP/p2p-workflow-src"
 
+      - name: Validate Zot registry configuration
+        if: ${{ inputs.security-scan-enabled && inputs.dry-run == false && env.REGISTRY_MODE == 'zot' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${P2P_REGISTRY_CONFIGURED:?P2P_REGISTRY is required in Zot mode}"
+          : "${P2P_DEPLOYMENT_REGISTRY_CONFIGURED:?P2P_DEPLOYMENT_REGISTRY is required in Zot mode}"
+          : "${ZOT_OIDC_AUDIENCE:?ZOT_OIDC_AUDIENCE is required in Zot mode}"
+          validate_registry_host() {
+            local value="$1" host="$1" port='' normalized_port label
+            local labels=()
+            if [[ "$value" == *:* ]]; then
+              [[ "$value" != *:*:* ]] || return 1
+              host="${value%:*}"
+              port="${value##*:}"
+              [[ "$port" =~ ^[0-9]+$ ]] || return 1
+              normalized_port="$port"
+              while [[ ${#normalized_port} -gt 1 && "$normalized_port" == 0* ]]; do
+                normalized_port="${normalized_port#0}"
+              done
+              [[ ${#normalized_port} -le 5 ]] || return 1
+              ((10#$normalized_port >= 1 && 10#$normalized_port <= 65535)) || return 1
+            fi
+            [[ -n "$host" && ${#host} -le 253 ]] || return 1
+            [[ "$host" =~ ^[A-Za-z0-9.-]+$ ]] || return 1
+            [[ "$host" != .* && "$host" != *. && "$host" != *..* ]] || return 1
+            IFS='.' read -r -a labels <<< "$host"
+            for label in "${labels[@]}"; do
+              [[ ${#label} -le 63 ]] || return 1
+              [[ "$label" =~ ^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?$ ]] || return 1
+            done
+          }
+          for registry in "$P2P_REGISTRY_CONFIGURED" "$P2P_DEPLOYMENT_REGISTRY_CONFIGURED"; do
+            if ! validate_registry_host "$registry"; then
+              echo "Registry must be a bare registry host with an optional port" >&2
+              exit 1
+            fi
+          done
+          if [[ ! "$ZOT_OIDC_AUDIENCE" =~ ^[^[:space:]/]+$ ]]; then
+            echo "ZOT_OIDC_AUDIENCE must be a non-empty audience without whitespace or slashes" >&2
+            exit 1
+          fi
+
       - name: Authenticate to Google Cloud
         id: auth
-        if: ${{ inputs.security-scan-enabled && inputs.dry-run == false }}
+        if: ${{ inputs.security-scan-enabled && inputs.dry-run == false && env.REGISTRY_MODE != 'zot' }}
         uses: google-github-actions/auth@v3
         with:
           workload_identity_provider: ${{ env.WORKLOAD_IDENTITY_PROVIDER }}
@@ -139,12 +189,31 @@ jobs:
           access_token_lifetime: 3600s
 
       - name: Login to Artifact Registry
-        if: ${{ inputs.security-scan-enabled && inputs.dry-run == false }}
+        if: ${{ inputs.security-scan-enabled && inputs.dry-run == false && env.REGISTRY_MODE != 'zot' }}
         uses: docker/login-action@v4
         with:
           registry: ${{ env.REGION }}-docker.pkg.dev
           username: oauth2accesstoken
           password: ${{ steps.auth.outputs.access_token }}
+
+      - name: Setup skopeo for Zot authentication
+        if: ${{ inputs.security-scan-enabled && inputs.dry-run == false && env.REGISTRY_MODE == 'zot' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://github.com/lework/skopeo-binary/releases/download/v1.22.0/skopeo-linux-amd64" -o /usr/local/bin/skopeo
+          chmod +x /usr/local/bin/skopeo
+          skopeo --version
+
+      - name: Login to Zot registry
+        if: ${{ inputs.security-scan-enabled && inputs.dry-run == false && env.REGISTRY_MODE == 'zot' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/p2p-workflow-src/.github/scripts/github-oidc-registry-login" \
+            --audience "$ZOT_OIDC_AUDIENCE" \
+            --registry "$P2P_REGISTRY_CONFIGURED" \
+            --skopeo-auth-file "$RUNNER_TEMP/zot-containers-auth.json"
 
       - name: Login to tenant provided registry
         if: ${{ inputs.security-scan-enabled && inputs.dry-run == false }}
@@ -168,6 +237,8 @@ jobs:
           PIPELINE_STAGE: ${{ inputs.pipeline-stage }}
           WORKING_DIR: ${{ inputs.working-directory }}
           IMAGE_NAMES: ${{ inputs.image-names }}
+          REGISTRY_MODE: ${{ env.REGISTRY_MODE }}
+          P2P_REGISTRY: ${{ env.P2P_REGISTRY_CONFIGURED }}
           P2P_IMAGE_SCAN_HELPERS: ${{ runner.temp }}/p2p-workflow-src/.github/scripts/image-scan-helpers.js
         with:
           script: |

@@ -82,6 +82,11 @@ on:
         required: false
         type: boolean
         default: false
+      promotion-enabled:
+        description: 'Promote successful fast-feedback images to extended-test.'
+        required: false
+        type: boolean
+        default: true
     outputs:
       version:
         value: ${{ inputs.version }}
@@ -227,7 +232,7 @@ jobs:
   promote:
     name: promote
     needs: [integration-test, security-image-scan, security-source-scan]
-    if: success() && ( github.ref == inputs.main-branch || github.ref_type == 'tag' )
+    if: success() && inputs.promotion-enabled && ( github.ref == inputs.main-branch || github.ref_type == 'tag' )
     secrets:
       env_vars: ${{ secrets.env_vars }}
     uses: ./.github/workflows/p2p-promote-image.yaml
