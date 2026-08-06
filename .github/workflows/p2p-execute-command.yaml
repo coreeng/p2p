@@ -196,7 +196,7 @@ jobs:
 
       - name: Authenticate to Google Cloud
         id: auth
-        if: ${{ inputs.dry-run == false }}
+        if: ${{ inputs.dry-run == false && env.REGISTRY_MODE != 'zot' }}
         uses: google-github-actions/auth@v3
         with:
           workload_identity_provider: ${{ env.WORKLOAD_IDENTITY_PROVIDER }}

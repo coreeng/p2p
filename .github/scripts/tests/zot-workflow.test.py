@@ -10,6 +10,13 @@ INTERNAL_CI = (ROOT / ".github/workflows/internal-ci.yaml").read_text()
 DOCS = (ROOT / "docs/explanation/environment-configuration.md").read_text()
 
 
+def workflow_step(workflow, name):
+    marker = f"      - name: {name}\n"
+    start = workflow.index(marker)
+    end = workflow.find("\n      - name: ", start + len(marker))
+    return workflow[start:] if end == -1 else workflow[start:end]
+
+
 class ZotWorkflowTests(unittest.TestCase):
     def test_jobs_source_registry_configuration_from_environment_variables(self):
         required = (
@@ -57,8 +64,17 @@ class ZotWorkflowTests(unittest.TestCase):
             self.assertIn('--registry "$P2P_REGISTRY_CONFIGURED"', workflow)
             self.assertNotIn("echo \"$ACTIONS_ID_TOKEN_REQUEST_TOKEN\"", workflow)
             self.assertNotIn("echo \"$token\"", workflow)
-        self.assertIn("env.REGISTRY_MODE != 'zot'", EXECUTE)
         self.assertIn("env.REGISTRY_MODE != 'zot'", IMAGE_SCAN)
+
+    def test_execute_google_registry_auth_steps_are_independently_mode_gated(self):
+        expected_condition = "if: ${{ inputs.dry-run == false && env.REGISTRY_MODE != 'zot' }}"
+        google_auth = workflow_step(EXECUTE, "Authenticate to Google Cloud")
+        artifact_registry_login = workflow_step(EXECUTE, "Login to Artifact Registry")
+
+        self.assertIn("uses: google-github-actions/auth@v3", google_auth)
+        self.assertIn(expected_condition, google_auth)
+        self.assertIn("uses: docker/login-action@v4", artifact_registry_login)
+        self.assertIn(expected_condition, artifact_registry_login)
 
     def test_execute_exports_separate_public_and_deployment_registries(self):
         self.assertIn('P2P_REGISTRY="${P2P_REGISTRY_CONFIGURED}"', EXECUTE)
