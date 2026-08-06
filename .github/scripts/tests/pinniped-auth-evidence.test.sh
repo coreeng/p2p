@@ -58,19 +58,20 @@ set -euo pipefail
 } >> "${MOCK_KUBECTL_ARGS_FILE}"
 
 case "$*" in
-  "--kubeconfig ${RUNNER_TEMP}/pinniped-kubeconfig."*" auth can-i create deployments.apps --namespace auth-test-2")
-    printf 'yes\n'
+  "--kubeconfig ${RUNNER_TEMP}/pinniped-kubeconfig."*" auth can-i create deployments.apps --namespace auth-test-2 --quiet")
     ;;
-  "--kubeconfig ${RUNNER_TEMP}/pinniped-kubeconfig."*" auth can-i get pods --namespace kube-system"|\
-  "--kubeconfig ${RUNNER_TEMP}/pinniped-kubeconfig."*" auth can-i get pods --namespace cecg-system")
-    printf 'no\n'
+  "--kubeconfig ${RUNNER_TEMP}/pinniped-kubeconfig."*" auth can-i get pods --namespace kube-system --quiet"|\
+  "--kubeconfig ${RUNNER_TEMP}/pinniped-kubeconfig."*" auth can-i get pods --namespace cecg-system --quiet")
     exit 1
     ;;
-  "--kubeconfig ${RUNNER_TEMP}/pinniped-kubeconfig."*" auth can-i get pods --namespace status-2")
-    printf 'no\n'
+  "--kubeconfig ${RUNNER_TEMP}/pinniped-kubeconfig."*" auth can-i get pods --namespace status-1-stderr --quiet")
+    printf 'transport setup failed\n' >&2
+    exit 1
+    ;;
+  "--kubeconfig ${RUNNER_TEMP}/pinniped-kubeconfig."*" auth can-i get pods --namespace status-2 --quiet")
     exit 2
     ;;
-  "--kubeconfig ${RUNNER_TEMP}/pinniped-kubeconfig."*" auth can-i get pods --namespace malformed-output")
+  "--kubeconfig ${RUNNER_TEMP}/pinniped-kubeconfig."*" auth can-i get pods --namespace malformed-output --quiet")
     printf 'unknown\n'
     ;;
   *" auth can-i "*)
@@ -167,6 +168,7 @@ assert_contains_line '--exec-arg=--concierge-api-group-suffix=pinniped.dev' "${M
 assert_contains_line '--exec-arg=--concierge-authenticator-name=github-actions-auth-test-2' "${MOCK_KUBECTL_ARGS_FILE}"
 assert_contains_line '--exec-arg=--concierge-authenticator-type=jwt' "${MOCK_KUBECTL_ARGS_FILE}"
 assert_contains_line '--exec-arg=--credential-cache=' "${MOCK_KUBECTL_ARGS_FILE}"
+assert_contains_line '--quiet' "${MOCK_KUBECTL_ARGS_FILE}"
 assert_contains_line 'whoami' "${MOCK_PINNIPED_ARGS_FILE}"
 assert_contains_line '--kubeconfig' "${MOCK_PINNIPED_ARGS_FILE}"
 assert_excludes 'core-platform:sandbox-3-gcp:auth-test-2' "${RUN_OUTPUT_FILE}"
@@ -181,6 +183,15 @@ run_runner invalid-authorization-status \
   --deny=get,pods,status-2
 [[ ${RUN_STATUS} -ne 0 ]] || fail 'authorization status 2 unexpectedly produced evidence'
 assert_excludes 'DENY get pods in status-2' "${RUN_OUTPUT_FILE}"
+
+run_runner denied-authorization-with-stderr \
+  --audience=audience \
+  --authenticator=authenticator \
+  --expect-authentication=success \
+  --deny=get,pods,status-1-stderr
+[[ ${RUN_STATUS} -ne 0 ]] || fail 'authorization status 1 with stderr unexpectedly produced evidence'
+assert_excludes 'transport setup failed' "${RUN_OUTPUT_FILE}"
+assert_excludes 'DENY get pods in status-1-stderr' "${RUN_OUTPUT_FILE}"
 
 run_runner malformed-authorization-output \
   --audience=audience \
