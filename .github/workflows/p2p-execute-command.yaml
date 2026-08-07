@@ -275,13 +275,6 @@ jobs:
           pinniped whoami --kubeconfig "$KUBECONFIG" >/dev/null
           echo "Pinniped authentication succeeded"
 
-      - name: Setup Docker Buildx
-        id: setup-docker-buildx
-        uses: docker/setup-buildx-action@v4
-        with:
-          driver-opts: |
-            default-load=true
-
       - name: Prepare Zot registry credentials
         if: ${{ inputs.dry-run == false && env.REGISTRY_MODE == 'zot' }}
         shell: bash
@@ -313,6 +306,14 @@ jobs:
             --audience "$ZOT_OIDC_AUDIENCE" \
             --registry "$P2P_REGISTRY_CONFIGURED" \
             --skopeo-auth-file "$RUNNER_TEMP/p2p-execute-zot-auth.json"
+
+      - name: Setup Docker Buildx
+        id: setup-docker-buildx
+        uses: docker/setup-buildx-action@v4
+        with:
+          driver-opts: |
+            default-load=true
+          cleanup: false
 
       - name: Expose GitHub Runtime
         id: expose-github-runtime
@@ -473,6 +474,17 @@ jobs:
             printf -- '- Reference: `%s`\n' "$reference"
             printf -- '- Digest: `%s`\n' "$digest"
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Clean up Docker Buildx
+        if: ${{ always() }}
+        shell: bash
+        env:
+          BUILDER_NAME: ${{ steps.setup-docker-buildx.outputs.name }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$BUILDER_NAME" ]]; then
+            docker buildx rm "$BUILDER_NAME"
+          fi
 
       - name: Resolve artifact paths
         id: resolve-artifacts
