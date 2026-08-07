@@ -313,7 +313,6 @@ jobs:
         with:
           driver-opts: |
             default-load=true
-          cleanup: false
 
       - name: Expose GitHub Runtime
         id: expose-github-runtime
@@ -475,17 +474,6 @@ jobs:
             printf -- '- Digest: `%s`\n' "$digest"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Clean up Docker Buildx
-        if: ${{ always() }}
-        shell: bash
-        env:
-          BUILDER_NAME: ${{ steps.setup-docker-buildx.outputs.name }}
-        run: |
-          set -euo pipefail
-          if [[ -n "$BUILDER_NAME" ]]; then
-            docker buildx rm "$BUILDER_NAME"
-          fi
-
       - name: Resolve artifact paths
         id: resolve-artifacts
         if: ${{ always() && inputs.artifacts != '' }}
@@ -539,6 +527,23 @@ jobs:
       - name: Clean up Zot registry credentials
         if: ${{ always() && env.REGISTRY_MODE == 'zot' }}
         shell: bash
+        env:
+          DOCKER_CONFIG: ${{ runner.temp }}/p2p-execute-docker-config
+          PRIMARY_JOB_STATUS: ${{ job.status }}
         run: |
-          rm -rf "$RUNNER_TEMP/p2p-execute-docker-config"
-          rm -f "$RUNNER_TEMP/p2p-execute-zot-auth.json"
+          set -uo pipefail
+          cleanup_failed=false
+          if [[ -d "$DOCKER_CONFIG" ]]; then
+            docker logout "$P2P_REGISTRY_CONFIGURED" >/dev/null 2>&1 || true
+            rm -f "$DOCKER_CONFIG/config.json" || cleanup_failed=true
+          fi
+          rm -f "$RUNNER_TEMP/p2p-execute-zot-auth.json" || cleanup_failed=true
+          if [[ -e "$DOCKER_CONFIG/config.json" || -e "$RUNNER_TEMP/p2p-execute-zot-auth.json" ]]; then
+            cleanup_failed=true
+          fi
+          if [[ "$cleanup_failed" == "true" ]]; then
+            echo "::error::Failed to remove isolated registry credentials"
+            if [[ "$PRIMARY_JOB_STATUS" == "success" ]]; then
+              exit 1
+            fi
+          fi

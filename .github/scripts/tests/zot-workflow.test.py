@@ -237,21 +237,26 @@ class ZotWorkflowTests(unittest.TestCase):
             "${{ inputs.dry-run == false && env.REGISTRY_MODE == 'zot' && inputs.command == 'p2p-build' && steps.run-command.outcome == 'success' }}",
         )
 
-    def test_execute_establishes_zot_docker_config_before_buildx_and_cleans_builder_first(self):
+    def test_execute_retains_docker_config_for_normal_buildx_post_cleanup(self):
         job = parsed_job(ROOT / ".github/workflows/p2p-execute-command.yaml", "exec")
         setup_buildx = parsed_step(job, "Setup Docker Buildx")
-        cleanup_buildx = next((step for step in job["steps"] if step.get("name") == "Clean up Docker Buildx"), None)
+        cleanup = parsed_step(job, "Clean up Zot registry credentials")
 
         self.assertLess(parsed_step_index(job, "Prepare Zot registry credentials"), parsed_step_index(job, "Login to Zot registry"))
         self.assertLess(parsed_step_index(job, "Login to Zot registry"), parsed_step_index(job, "Setup Docker Buildx"))
         self.assertLess(parsed_step_index(job, "Setup Docker Buildx"), parsed_step_index(job, "Run make ${{ inputs.command }}"))
-        self.assertEqual(setup_buildx["with"]["cleanup"], False)
-        if cleanup_buildx is None:
-            self.fail("missing Clean up Docker Buildx step")
-        self.assertEqual(cleanup_buildx["if"], "${{ always() }}")
-        self.assertIn("steps.setup-docker-buildx.outputs.name", cleanup_buildx["env"]["BUILDER_NAME"])
-        self.assertLess(parsed_step_index(job, "Run make ${{ inputs.command }}"), parsed_step_index(job, "Clean up Docker Buildx"))
-        self.assertLess(parsed_step_index(job, "Clean up Docker Buildx"), parsed_step_index(job, "Clean up Zot registry credentials"))
+        self.assertEqual(setup_buildx["with"].get("cleanup", True), True)
+        self.assertFalse(any(step.get("name") == "Clean up Docker Buildx" for step in job["steps"]))
+        self.assertEqual(cleanup["if"], "${{ always() && env.REGISTRY_MODE == 'zot' }}")
+        self.assertEqual(cleanup["env"]["DOCKER_CONFIG"], "${{ runner.temp }}/p2p-execute-docker-config")
+        self.assertEqual(cleanup["env"]["PRIMARY_JOB_STATUS"], "${{ job.status }}")
+        self.assertIn('docker logout "$P2P_REGISTRY_CONFIGURED" >/dev/null 2>&1 || true', cleanup["run"])
+        self.assertIn('rm -f "$DOCKER_CONFIG/config.json"', cleanup["run"])
+        self.assertIn('rm -f "$RUNNER_TEMP/p2p-execute-zot-auth.json"', cleanup["run"])
+        self.assertIn('[[ -e "$DOCKER_CONFIG/config.json" || -e "$RUNNER_TEMP/p2p-execute-zot-auth.json" ]]', cleanup["run"])
+        self.assertIn('[[ "$PRIMARY_JOB_STATUS" == "success" ]]', cleanup["run"])
+        self.assertNotIn("rm -rf", cleanup["run"])
+        self.assertNotIn("cat ", cleanup["run"])
 
     def test_zot_credentials_are_prepared_before_login_and_cleaned_after_last_use(self):
         cases = (
@@ -283,7 +288,10 @@ class ZotWorkflowTests(unittest.TestCase):
             self.assertIn(f'$RUNNER_TEMP/{auth_file}', login["run"])
             self.assertIn("DOCKER_CONFIG", login.get("env", {}))
             self.assertEqual(cleanup["if"], "${{ always() && env.REGISTRY_MODE == 'zot' }}")
-            self.assertIn(docker_dir, cleanup["run"])
+            self.assertTrue(
+                docker_dir in cleanup["run"] or docker_dir in cleanup.get("env", {}).get("DOCKER_CONFIG", ""),
+                f"cleanup does not reference isolated Docker config {docker_dir}",
+            )
             self.assertIn(auth_file, cleanup["run"])
             self.assertLess(parsed_step_index(job, "Prepare Zot registry credentials"), parsed_step_index(job, "Login to Zot registry"))
             self.assertLess(parsed_step_index(job, "Login to Zot registry"), parsed_step_index(job, last_use))
