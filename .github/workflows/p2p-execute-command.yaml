@@ -291,6 +291,7 @@ jobs:
           set -euo pipefail
           install -d -m 0700 "$DOCKER_CONFIG"
           printf 'DOCKER_CONFIG=%s\n' "$DOCKER_CONFIG" >> "$GITHUB_ENV"
+          printf 'P2P_ZOT_AUTH_FILE=%s\n' "$RUNNER_TEMP/p2p-execute-zot-auth.json" >> "$GITHUB_ENV"
 
       - name: Install Skopeo from Ubuntu packages
         id: setup-skopeo

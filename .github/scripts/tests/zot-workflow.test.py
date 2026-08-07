@@ -113,6 +113,16 @@ class ZotWorkflowTests(unittest.TestCase):
         self.assertIn('P2P_DEPLOYMENT_REGISTRY_EXTENDED_TEST=${P2P_DEPLOYMENT_REGISTRY}/${P2P_REGISTRY_EXTENDED_TEST_PATH}', EXECUTE)
         self.assertIn('P2P_DEPLOYMENT_REGISTRY_PROD=${P2P_DEPLOYMENT_REGISTRY}/${P2P_REGISTRY_PROD_PATH}', EXECUTE)
 
+    def test_execute_exports_runner_temp_zot_auth_file_contract(self):
+        job = parsed_job(ROOT / ".github/workflows/p2p-execute-command.yaml", "exec")
+        prepare = parsed_step(job, "Prepare Zot registry credentials")
+
+        self.assertIn(
+            "printf 'P2P_ZOT_AUTH_FILE=%s\\n' \"$RUNNER_TEMP/p2p-execute-zot-auth.json\" >> \"$GITHUB_ENV\"",
+            prepare["run"],
+        )
+        self.assertIn('$RUNNER_TEMP/p2p-execute-zot-auth.json', parsed_step(job, "Login to Zot registry")["run"])
+
     def test_build_proves_public_read_without_persisting_inspect_json(self):
         self.assertIn("Verify Zot public image read", EXECUTE)
         self.assertIn('inputs.command == \'p2p-build\'', EXECUTE)
