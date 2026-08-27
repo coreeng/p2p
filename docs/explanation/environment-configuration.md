@@ -17,7 +17,7 @@ GitHub environment protection rules (required reviewers, deployment branches) ap
 
 ## Repository variables
 
-Four repository-level variables control which environments participate in each stage; all four use a JSON matrix format compatible with GitHub Actions `strategy.matrix`.
+Repository variables select the environments for each stage and identify the application tenant.
 
 ### `FAST_FEEDBACK`
 
@@ -56,6 +56,12 @@ The application tenant name as configured in the platform. Each application has 
 ```
 TENANT_NAME=my-app
 ```
+
+## Runner selection
+
+Every primary P2P workflow accepts an optional `runner-label` input. When it is empty, P2P reads `P2P_RUNNER_LABEL` from the calling repository's organization or repository variables. A repository value overrides an organization value. When neither is set, P2P uses `ubuntu-24.04`.
+
+Use an organization variable to set one runner label for multiple repositories. Restrict the variable to selected repositories while rolling out a new runner, then widen access when those workflows have passed.
 
 ## Per-environment variables
 
@@ -123,6 +129,7 @@ FAST_FEEDBACK={"include": [{"deploy_env": "gcp-dev"}]}
 EXTENDED_TEST={"include": [{"deploy_env": "gcp-dev"}]}
 PROD={"include": [{"deploy_env": "gcp-prod"}]}
 TENANT_NAME=my-app
+P2P_RUNNER_LABEL=ubuntu-24.04
 ```
 
 **`gcp-dev` environment variables:**

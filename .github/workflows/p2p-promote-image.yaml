@@ -42,10 +42,15 @@ on:
       checkout-version:
         required: false
         type: string
+      runner-label:
+        description: 'GitHub Actions runner label for image promotion jobs.'
+        required: false
+        type: string
+        default: ''
 
 jobs:
   lookup:
-    runs-on: ubuntu-24.04
+    runs-on: ${{ inputs.runner-label || vars.P2P_RUNNER_LABEL || 'ubuntu-24.04' }}
     environment: ${{ fromJson(inputs.source_matrix).include[0]['deploy_env'] }}
     env:
       TENANT_NAME: ${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}
@@ -67,7 +72,7 @@ jobs:
 
   promote-image:
     name: promote-to-${{ inputs.promotion-stage }}
-    runs-on: ubuntu-24.04
+    runs-on: ${{ inputs.runner-label || vars.P2P_RUNNER_LABEL || 'ubuntu-24.04' }}
     needs: [lookup]
     environment: ${{ inputs.dest_github_env }}
     env:

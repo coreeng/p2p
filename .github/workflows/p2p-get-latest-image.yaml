@@ -39,11 +39,16 @@ on:
         required: false
         type: string
         default: '.'
+      runner-label:
+        description: 'GitHub Actions runner label for image lookup.'
+        required: false
+        type: string
+        default: ''
 
 jobs:
   get-latest-image:
     name: get-latest-image (${{ inputs.registry-path }}, ${{ inputs.github_env }})
-    runs-on: ubuntu-24.04
+    runs-on: ${{ inputs.runner-label || vars.P2P_RUNNER_LABEL || 'ubuntu-24.04' }}
     outputs:
       version: ${{ steps.get-latest-image.outputs.version }}
       found: ${{ steps.get-latest-image.outputs.found }}

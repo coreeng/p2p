@@ -22,6 +22,7 @@ jobs:
 | `dry-run` | boolean | No | `false` | When `true`, skips tag creation. |
 | `version-prefix` | string | No | `v` | Prefix prepended to the semantic version number (e.g. `v1.2.3`). |
 | `checkout-version` | string | No | `''` | Git ref to check out before computing the version. Defaults to the triggering ref. |
+| `runner-label` | string | No | `''` | GitHub Actions runner label for every job. When empty, uses the caller's `P2P_RUNNER_LABEL` organization or repository variable, then `ubuntu-24.04`. |
 
 ## Secrets
 

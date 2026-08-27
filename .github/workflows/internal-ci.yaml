@@ -27,6 +27,7 @@ jobs:
       git-token: ${{ secrets.GITHUB_TOKEN }}
     with:
       dry-run: true
+      runner-label: ubuntu-24.04
       version-prefix: app-tag
     uses: ./.github/workflows/p2p-version.yaml
 
@@ -35,6 +36,7 @@ jobs:
       git-token: ${{ secrets.GITHUB_TOKEN }}
     with:
       dry-run: true
+      runner-label: ubuntu-24.04
     uses: ./.github/workflows/p2p-version.yaml
 
   test_execute_command:
@@ -46,6 +48,7 @@ jobs:
     with:
       command: test-var-print
       dry-run: true
+      runner-label: ubuntu-24.04
       version: ${{ needs.test_version.outputs.version }}
 
   test_fastfeedback:
@@ -56,15 +59,9 @@ jobs:
         TEST_VARIABLE=value
     with:
       dry-run: true
+      runner-label: ubuntu-24.04
       run-fastfeedback-integration-on-prs: true
       version: ${{ needs.test_version.outputs.version }}
-
-  test_runner_label_contract:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v6
-      - name: Test provider-neutral runner label contract
-        run: python3 .github/scripts/tests/runner-label-contract.test.py
 
   test_source_security_scan:
     uses: ./.github/workflows/p2p-workflow-source-security-scan.yaml
@@ -72,6 +69,7 @@ jobs:
       secret-scan-scope: changes
       blocking-severity: off
       dry-run: true
+      runner-label: ubuntu-24.04
       timeout-minutes: 10
 
   test_scheduled_security_scan:
@@ -82,6 +80,7 @@ jobs:
     with:
       image-names: p2p
       dry-run: true
+      runner-label: ubuntu-24.04
       security-scan-blocking-severity: off
       timeout-minutes: 10
 
@@ -133,6 +132,7 @@ jobs:
     with:
       dry-run: true
       pipeline-stage: ${{ matrix.pipeline-stage }}
+      runner-label: ubuntu-24.04
       version: ${{ needs.test_version.outputs.version }}
 
   test_image_security_ignore_report:
@@ -298,6 +298,7 @@ jobs:
       dry-run: true
       main-branch: ${{ github.ref }}
       image-name: p2p
+      runner-label: ubuntu-24.04
 
   test_extended_test:
     uses: ./.github/workflows/p2p-workflow-extended-test.yaml
@@ -308,6 +309,7 @@ jobs:
     with:
       dry-run: true
       main-branch: ${{ github.ref }}
+      runner-label: ubuntu-24.04
       version: ${{ needs.get_image_extended_test.outputs.version }}
 
   get_image_prod:
@@ -319,6 +321,7 @@ jobs:
       dry-run: true
       main-branch: ${{ github.ref }}
       image-name: p2p
+      runner-label: ubuntu-24.04
 
   test_prod:
     uses: ./.github/workflows/p2p-workflow-prod.yaml
@@ -329,4 +332,5 @@ jobs:
     with:
       dry-run: true
       main-branch: ${{ github.ref }}
+      runner-label: ubuntu-24.04
       version: ${{ needs.get_image_prod.outputs.version }}

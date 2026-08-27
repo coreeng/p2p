@@ -43,7 +43,7 @@ Grant `pull-requests: write` when the workflow runs on pull requests so source a
 | `source` | `string` | No | `${{ vars.FAST_FEEDBACK }}` | JSON matrix of deploy environments for the fast-feedback stage. |
 | `destination` | `string` | No | `${{ vars.EXTENDED_TEST }}` | JSON matrix of deploy environments to promote to after integration tests pass. |
 | `working-directory` | `string` | No | `.` | Repository path from which make targets are executed. |
-| `runner-label` | `string` | No | `''` | GitHub Actions runner label for build, functional, NFT, and integration command jobs. When empty, uses the caller's `P2P_RUNNER_LABEL` organization or repository variable, then `ubuntu-24.04`. Security scans, promotion, and notifications keep their existing runners. |
+| `runner-label` | `string` | No | `''` | GitHub Actions runner label for every job in the workflow. When empty, uses the caller's `P2P_RUNNER_LABEL` organization or repository variable, then `ubuntu-24.04`. |
 | `run-fastfeedback-integration-on-prs` | `boolean` | No | `false` | When `true`, runs the `integration-test` job on pull requests. Integration tests always run on main or tags. |
 | `skip-subnamespaces-create` | `boolean` | No | `false` | Skips creating subnamespaces before running make targets. |
 | `artifacts` | `string` | No | `''` | YAML-formatted map of make target names to artifact paths. Paths matching each active command are uploaded after that command runs. |
@@ -105,7 +105,7 @@ notify-failure       (needs: all jobs; runs on main-branch when any job fails)
 
 All jobs use a matrix derived from `source`. The `promote` job uses a matrix derived from `destination`. The `security-source-scan` job is not part of the matrix; it runs once per workflow. Security PR comments are scoped to `app-name`.
 
-`runner-label` is forwarded only to the command-execution jobs (`build`, `functional-test`, `nft-test`, and `integration-test`). Set it on a workflow call for an explicit override. To configure callers centrally, define `P2P_RUNNER_LABEL` as an organization variable and grant the required repositories access. A repository variable with the same name overrides the organization value. When neither setting has a value, P2P uses `ubuntu-24.04`.
+`runner-label` applies to command execution, security scanning, promotion, and notification jobs. Set it on a workflow call for an explicit override. To configure callers centrally, define `P2P_RUNNER_LABEL` as an organization variable and grant the required repositories access. A repository variable with the same name overrides the organization value. When neither setting has a value, P2P uses `ubuntu-24.04`.
 
 ## See also
 

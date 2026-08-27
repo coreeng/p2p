@@ -73,6 +73,9 @@ Before calling the workflows, set up the following:
   | `EXTENDED_TEST` | JSON matrix | `{"include": [{"deploy_env": "gcp-dev"}]}` |
   | `PROD` | JSON matrix | `{"include": [{"deploy_env": "gcp-prod"}]}` |
   | `TENANT_NAME` | string | `my-tenant` |
+  | `P2P_RUNNER_LABEL` | string | `ubuntu-24.04` |
+
+  `P2P_RUNNER_LABEL` may be defined as an organization variable for a shared default or as a repository variable for a repository-specific override. Callers may also pass the `runner-label` workflow input, which takes precedence. When none is set, P2P uses `ubuntu-24.04`.
 
 - **Per-environment variables** (set on each GitHub environment):
 
