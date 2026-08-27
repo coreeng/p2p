@@ -55,12 +55,7 @@ on:
         description: 'GitHub Actions runner label for fast-feedback command execution.'
         required: false
         type: string
-        default: ubuntu-24.04
-      repository-runner-setup:
-        description: 'Run the caller repository runner setup action after checkout.'
-        required: false
-        type: boolean
-        default: false
+        default: ''
       run-fastfeedback-integration-on-prs:
         required: false
         type: boolean
@@ -118,7 +113,6 @@ jobs:
       region: ${{ inputs.region }}
       working-directory: ${{ inputs.working-directory }}
       runner-label: ${{ inputs.runner-label }}
-      repository-runner-setup: ${{ inputs.repository-runner-setup }}
       skip-subnamespaces-create: ${{ inputs.skip-subnamespaces-create }}
       artifacts: ${{ inputs.artifacts }}
 
@@ -183,7 +177,6 @@ jobs:
       dry-run: ${{ inputs.dry-run }}
       working-directory: ${{ inputs.working-directory }}
       runner-label: ${{ inputs.runner-label }}
-      repository-runner-setup: ${{ inputs.repository-runner-setup }}
       skip-subnamespaces-create: ${{ inputs.skip-subnamespaces-create }}
       artifacts: ${{ inputs.artifacts }}
 
@@ -210,7 +203,6 @@ jobs:
       dry-run: ${{ inputs.dry-run }}
       working-directory: ${{ inputs.working-directory }}
       runner-label: ${{ inputs.runner-label }}
-      repository-runner-setup: ${{ inputs.repository-runner-setup }}
       skip-subnamespaces-create: ${{ inputs.skip-subnamespaces-create }}
       artifacts: ${{ inputs.artifacts }}
 
@@ -238,7 +230,6 @@ jobs:
       dry-run: ${{ inputs.dry-run }}
       working-directory: ${{ inputs.working-directory }}
       runner-label: ${{ inputs.runner-label }}
-      repository-runner-setup: ${{ inputs.repository-runner-setup }}
       skip-subnamespaces-create: ${{ inputs.skip-subnamespaces-create }}
       artifacts: ${{ inputs.artifacts }}
 

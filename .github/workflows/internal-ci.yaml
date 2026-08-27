@@ -59,6 +59,13 @@ jobs:
       run-fastfeedback-integration-on-prs: true
       version: ${{ needs.test_version.outputs.version }}
 
+  test_runner_label_contract:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: Test provider-neutral runner label contract
+        run: python3 .github/scripts/tests/runner-label-contract.test.py
+
   test_source_security_scan:
     uses: ./.github/workflows/p2p-workflow-source-security-scan.yaml
     with:

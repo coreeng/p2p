@@ -17,12 +17,7 @@ on:
         description: 'GitHub Actions runner label for command execution.'
         required: false
         type: string
-        default: ubuntu-24.04
-      repository-runner-setup:
-        description: 'Run the caller repository runner setup action after checkout.'
-        required: false
-        type: boolean
-        default: false
+        default: ''
       github_env:
         required: false
         type: string
@@ -87,7 +82,7 @@ on:
 jobs:
   exec:
     name: '${{ inputs.command }} (${{ inputs.github_env }})'
-    runs-on: ${{ inputs.runner-label }}
+    runs-on: ${{ inputs.runner-label || vars.P2P_RUNNER_LABEL || 'ubuntu-24.04' }}
     environment: ${{ inputs.github_env }}
     concurrency:
       group: >-
@@ -120,12 +115,6 @@ jobs:
         uses: actions/checkout@v6
         with:
           ref: ${{ inputs.dry-run == false && inputs.checkout-version || '' }}
-
-      - name: Setup repository runner
-        if: ${{ inputs.repository-runner-setup }}
-        uses: ./.github/actions/p2p-runner-setup
-        with:
-          command: ${{ inputs.command }}
 
       - name: Authenticate to Google Cloud
         id: auth
@@ -164,7 +153,6 @@ jobs:
 
       - name: Setup Docker Buildx
         id: setup-docker-buildx
-        if: ${{ inputs.repository-runner-setup == false }}
         uses: docker/setup-buildx-action@v4
         with:
           driver-opts: |

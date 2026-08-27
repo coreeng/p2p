@@ -21,8 +21,7 @@ jobs:
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `command` | string | Yes | — | The `make` target to run (e.g. `p2p-build`). |
-| `runner-label` | string | No | `ubuntu-24.04` | GitHub Actions runner label for the command-execution job. |
-| `repository-runner-setup` | boolean | No | `false` | When `true`, runs the caller repository's `.github/actions/p2p-runner-setup` action after checkout, passes it the current command, and skips the standard Docker Buildx setup. |
+| `runner-label` | string | No | `''` | GitHub Actions runner label for the command-execution job. When empty, uses the caller's `P2P_RUNNER_LABEL` organization or repository variable, then `ubuntu-24.04`. |
 | `github_env` | string | No | `''` | GitHub environment name used for deployment protection rules and concurrency grouping. |
 | `dry-run` | boolean | No | `false` | When `true`, skips GCP authentication, cluster setup, and the `make` invocation. |
 | `region` | string | No | `''` | GCP region. Falls back to the `REGION` repository/environment variable, then `europe-west2`. |
@@ -53,11 +52,7 @@ This workflow has no outputs.
 
 ## Job Graph
 
-1. `exec` — Single job that performs all steps: checkout, optional repository runner setup, GCP auth, cluster setup, Docker Buildx setup, skopeo setup, environment variable decoding, P2P variable export, and the `make` invocation.
-
-## Repository runner setup
-
-When `repository-runner-setup` is `true`, the checked-out caller repository must provide a composite action at `.github/actions/p2p-runner-setup/action.yaml` or `.github/actions/p2p-runner-setup/action.yml`. The action must declare a required `command` input. P2P passes the current command unchanged, such as `p2p-build`, `p2p-functional`, `p2p-nft`, or `p2p-integration`. The action runs immediately after checkout and owns any Docker builder configuration required by later make targets, so the workflow does not create the standard Buildx builder.
+1. `exec` — Single job that performs all steps: checkout, GCP auth, cluster setup, Docker Buildx setup, skopeo setup, environment variable decoding, P2P variable export, and the `make` invocation.
 
 ## Concurrency
 
