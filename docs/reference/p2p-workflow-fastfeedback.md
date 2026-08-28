@@ -39,7 +39,7 @@ Grant `pull-requests: write` when the workflow runs on pull requests so source a
 | `checkout-version` | `string` | No | `''` | Git ref to check out. Defaults to the current workflow ref when empty. |
 | `app-name` | `string` | No | `''` | Application name. Must equal the tenant name (each application has its own application tenant). Also scopes source and image security sticky PR comments so multi-app repositories do not overwrite comments between apps. |
 | `tenant-name` | `string` | No | `''` | Tenant name passed to all make targets. |
-| `region` | `string` | No | `europe-west2` | Cloud region used by all make targets. |
+| `region` | `string` | No | `''` | Cloud region used by all make targets. Falls back to the environment's `REGION` variable, then `europe-west2`. |
 | `source` | `string` | No | `${{ vars.FAST_FEEDBACK }}` | JSON matrix of deploy environments for the fast-feedback stage. |
 | `destination` | `string` | No | `${{ vars.EXTENDED_TEST }}` | JSON matrix of deploy environments to promote to after integration tests pass. |
 | `working-directory` | `string` | No | `.` | Repository path from which make targets are executed. |

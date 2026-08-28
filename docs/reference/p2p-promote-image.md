@@ -27,7 +27,7 @@ jobs:
 | `app-name` | string | No | `''` | Application name. Must equal the tenant name (each application has its own application tenant). |
 | `tenant-name` | string | No | `''` | Tenant name. Must equal `app-name`. Falls back to the `TENANT_NAME` repository/environment variable when not set. |
 | `version` | string | No | `''` | Artifact version passed as `P2P_VERSION`. |
-| `region` | string | No | `europe-west2` | GCP region. Overridden by the `REGION` repository/environment variable when set. |
+| `region` | string | No | `''` | GCP region. Falls back to the `REGION` repository/environment variable, then `europe-west2`. |
 | `working-directory` | string | No | `'.'` | Directory from which the `make` target is executed. |
 | `checkout-version` | string | No | `''` | Git ref to check out. Ignored when `dry-run` is `true`; the workflow checks out the default ref. |
 | `dry-run` | boolean | No | `false` | When `true`, skips GCP authentication, skopeo login, and the `make` invocation. |

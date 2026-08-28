@@ -43,7 +43,7 @@ This workflow runs image scanning before deployment. The image scan authenticate
 | `version-prefix` | `string` | No | `v` | Prefix prepended to `version` to form the `checkout-version` ref (e.g., `v` + `1.2.3` = `v1.2.3`). |
 | `dry-run` | `boolean` | No | `false` | When `true`, runs commands without making persistent changes and skips the success Slack notification. |
 | `main-branch` | `string` | No | `refs/heads/main` | Full ref of the main branch, used to gate the deploy job and Slack alerts. |
-| `region` | `string` | No | `europe-west2` | Cloud region used by the `p2p-prod` make target. |
+| `region` | `string` | No | `''` | Cloud region used by the `p2p-prod` make target. Falls back to the environment's `REGION` variable, then `europe-west2`. |
 | `source` | `string` | No | `${{ vars.PROD }}` | JSON matrix of deploy environments for the prod stage. |
 | `working-directory` | `string` | No | `.` | Repository path from which the make target is executed. |
 | `app-name` | `string` | No | `''` | Application name. Must equal the tenant name (each application has its own application tenant). Also scopes image security sticky PR comments so multi-app repositories do not overwrite comments between apps. |

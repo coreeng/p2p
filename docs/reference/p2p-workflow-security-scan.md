@@ -39,7 +39,7 @@ jobs:
 | `app-name` | string | No | `''` | Application name passed through to child security scans so sticky PR comments are scoped per app in multi-app repositories. Scheduled wrappers should set this to the application tenant name. |
 | `image-names` | string | No | `''` | Newline-, comma-, or whitespace-separated list of standard P2P image names. The first entry is the version-lookup anchor for each stage, and the full list is passed to each image scan. If empty, image scans fall back to `make p2p-images` in `working-directory`. |
 | `working-directory` | string | No | `.` | Working directory for `make p2p-images` when `image-names` is empty. |
-| `region` | string | No | `europe-west2` | GCP region; overridden by `vars.REGION`. |
+| `region` | string | No | `''` | GCP region. Falls back to `vars.REGION`, then `europe-west2`. |
 | `dry-run` | boolean | No | `false` | Passed through to child workflows; still resolves the anchor image from `image-names` or `make p2p-images`, then skips registry lookups and scans. |
 | `checkout-version` | string | No | `''` | Internal consistency input for child checkouts. Application wrappers should normally omit it. |
 | `security-scan-blocking-severity` | string | No | `off` | Minimum security finding severity that blocks the umbrella workflow: `off`, `low`, `medium`, `high`, or `critical`. When blocking is enabled, verified secrets are treated as `critical`. Child policy jobs fail only for blocking findings unless `security-scan-fail-on-non-blocking-findings` is enabled. |

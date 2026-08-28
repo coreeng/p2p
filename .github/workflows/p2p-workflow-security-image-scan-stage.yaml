@@ -41,7 +41,7 @@ on:
       region:
         required: false
         type: string
-        default: europe-west2
+        default: ''
       dry-run:
         required: false
         type: boolean

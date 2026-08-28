@@ -23,7 +23,7 @@ jobs:
 | `command` | string | Yes | — | The `make` target to run (e.g. `p2p-build`). |
 | `github_env` | string | No | `''` | GitHub environment name used for deployment protection rules and concurrency grouping. |
 | `dry-run` | boolean | No | `false` | When `true`, skips GCP authentication, cluster setup, and the `make` invocation. |
-| `region` | string | No | `europe-west2` | GCP region. Overridden by the `REGION` repository/environment variable when set. |
+| `region` | string | No | `''` | GCP region. Falls back to the `REGION` repository/environment variable, then `europe-west2`. |
 | `subnamespace` | string | No | `''` | Kubernetes subnamespace suffix to create and switch context to before running the command. |
 | `app-name` | string | No | `''` | Application name. Must equal the tenant name (each application has its own application tenant). Falls back to `TENANT_NAME` when empty. |
 | `tenant-name` | string | No | `''` | Tenant name. Must equal `app-name`. Falls back to the `TENANT_NAME` repository/environment variable when not set. |
