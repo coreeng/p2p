@@ -31,7 +31,7 @@ on:
       region:
         required: false
         type: string
-        default: europe-west2
+        default: ''
       github_env:
         required: true
         type: string
@@ -54,8 +54,8 @@ jobs:
       DPLATFORM: ${{ vars.DPLATFORM }}
       PROJECT_ID: ${{ vars.PROJECT_ID }}
       PROJECT_NUMBER: ${{ vars.PROJECT_NUMBER }}
-      REGION: ${{ vars.REGION || inputs.region }}
-      REGISTRY: ${{ vars.REGION || inputs.region }}-docker.pkg.dev/${{ vars.PROJECT_ID }}/tenant/${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}
+      REGION: ${{ inputs.region || vars.REGION || 'europe-west2' }}
+      REGISTRY: ${{ inputs.region || vars.REGION || 'europe-west2' }}-docker.pkg.dev/${{ vars.PROJECT_ID }}/tenant/${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}
       SERVICE_ACCOUNT: p2p-${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}@${{ vars.PROJECT_ID }}.iam.gserviceaccount.com
       ENV_NAME: ${{ inputs.github_env }}
       TENANT_NAME: ${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}

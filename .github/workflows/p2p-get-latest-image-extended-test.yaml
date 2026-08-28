@@ -40,7 +40,7 @@ on:
       region:
         required: false
         type: string
-        default: europe-west2
+        default: ''
 
 jobs:
   get-latest-version:

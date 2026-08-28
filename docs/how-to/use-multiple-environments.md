@@ -34,7 +34,7 @@ fastfeedback:
 
 ## 3. Override region with `region`
 
-The `region` input defaults to `europe-west2`. Override it per workflow call when your environment runs in a different region.
+The `region` input takes precedence over the environment's `REGION` variable. When neither is set, P2P uses `europe-west2`.
 
 ```yaml
 fastfeedback:

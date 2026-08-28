@@ -32,7 +32,7 @@ on:
       region:
         required: false
         type: string
-        default: europe-west2
+        default: ''
       working-directory:
         required: false
         type: string
@@ -99,7 +99,7 @@ jobs:
     env:
       PROJECT_ID: ${{ vars.PROJECT_ID }}
       PROJECT_NUMBER: ${{ vars.PROJECT_NUMBER }}
-      REGION: ${{ vars.REGION || inputs.region }}
+      REGION: ${{ inputs.region || vars.REGION || 'europe-west2' }}
       VERSION: ${{ inputs.version }}
       SERVICE_ACCOUNT: p2p-${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}@${{ vars.PROJECT_ID }}.iam.gserviceaccount.com
       TENANT_NAME: ${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}

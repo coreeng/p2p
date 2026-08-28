@@ -34,7 +34,7 @@ This workflow runs image scanning before promotion. The image scan authenticates
 | `version-prefix` | `string` | No | `v` | Prefix prepended to `version` to form the `checkout-version` ref (e.g., `v` + `1.2.3` = `v1.2.3`). |
 | `dry-run` | `boolean` | No | `false` | When `true`, runs commands without making persistent changes. |
 | `main-branch` | `string` | No | `refs/heads/main` | Full ref of the main branch, used to gate all jobs and Slack alerts. |
-| `region` | `string` | No | `europe-west2` | Cloud region used by all make targets. |
+| `region` | `string` | No | `''` | Cloud region used by all make targets. Falls back to the environment's `REGION` variable, then `europe-west2`. |
 | `source` | `string` | No | `${{ vars.EXTENDED_TEST }}` | JSON matrix of deploy environments for the extended-test stage. |
 | `destination` | `string` | No | `${{ vars.PROD }}` | JSON matrix of deploy environments to promote to after tests pass. |
 | `working-directory` | `string` | No | `.` | Repository path from which make targets are executed. |

@@ -34,7 +34,7 @@ on:
       region:
         required: false
         type: string
-        default: europe-west2
+        default: ''
       working-directory:
         required: false
         type: string
@@ -49,7 +49,7 @@ jobs:
     environment: ${{ fromJson(inputs.source_matrix).include[0]['deploy_env'] }}
     env:
       TENANT_NAME: ${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}
-      REGISTRY: ${{ vars.REGION || inputs.region }}-docker.pkg.dev/${{ vars.PROJECT_ID }}/tenant/${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}
+      REGISTRY: ${{ inputs.region || vars.REGION || 'europe-west2' }}-docker.pkg.dev/${{ vars.PROJECT_ID }}/tenant/${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}
       PROJECT_ID: ${{ vars.PROJECT_ID }}
       SERVICE_ACCOUNT: p2p-${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}@${{ vars.PROJECT_ID }}.iam.gserviceaccount.com
       WORKLOAD_IDENTITY_PROVIDER: projects/${{ vars.PROJECT_NUMBER }}/locations/global/workloadIdentityPools/p2p-${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}/providers/p2p-${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}
@@ -78,8 +78,8 @@ jobs:
       DPLATFORM: ${{ vars.DPLATFORM }}
       PROJECT_ID: ${{ vars.PROJECT_ID }}
       PROJECT_NUMBER: ${{ vars.PROJECT_NUMBER }}
-      REGION: ${{ vars.REGION || inputs.region }}
-      REGISTRY: ${{ vars.REGION || inputs.region }}-docker.pkg.dev/${{ vars.PROJECT_ID }}/tenant/${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}
+      REGION: ${{ inputs.region || vars.REGION || 'europe-west2' }}
+      REGISTRY: ${{ inputs.region || vars.REGION || 'europe-west2' }}-docker.pkg.dev/${{ vars.PROJECT_ID }}/tenant/${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}
       SERVICE_ACCOUNT: p2p-${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}@${{ vars.PROJECT_ID }}.iam.gserviceaccount.com
       VERSION: ${{ inputs.version }}
       SOURCE_GITHUB_ENV: ${{ fromJson(inputs.source_matrix).include[0]['deploy_env'] }}

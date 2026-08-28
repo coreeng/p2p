@@ -68,7 +68,7 @@ Each GitHub environment carries variables that describe the target cloud project
 | `DPLATFORM` | GKE cluster name (used as both the cluster identifier and the `PLATFORM_ENVIRONMENT` env var) |
 | `PROJECT_ID` | GCP project ID for the Core Platform environment (e.g., `core-platform-dev-1a2b`) |
 | `PROJECT_NUMBER` | GCP project number (e.g., `123456789012`) |
-| `REGION` | GCP region (e.g., `europe-west2`); overrides the workflow's `region` input |
+| `REGION` | Default GCP region (e.g., `europe-west2`); used when the workflow's `region` input is empty |
 
 ## Cloud provider auth variables
 
