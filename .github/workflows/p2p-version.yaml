@@ -37,7 +37,7 @@ jobs:
     name: increment-version
     runs-on: ubuntu-24.04
     concurrency:
-      group: increment-version-${{ github.ref }}
+      group: increment-version-${{ inputs.version-prefix }}
       cancel-in-progress: false
     outputs:
       version: ${{ steps.setversion.outputs.version }}

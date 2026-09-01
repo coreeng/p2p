@@ -52,6 +52,8 @@ jobs:
 
 In all cases, `previous_version` is the numeric part of the highest existing semver tag (e.g. `1.2.3`), or `0.0.0` if no tags exist.
 
+Calls using the same `version-prefix` are serialized with `cancel-in-progress` disabled. This prevents concurrent main-branch runs from computing and attempting to create the same next tag while allowing independent version prefixes to proceed in parallel.
+
 ## See also
 
 - [How to customise versioning](../how-to/customise-versioning.md)
