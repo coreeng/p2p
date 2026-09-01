@@ -134,7 +134,7 @@ The `p2p-build` command uses a per-run concurrency group, allowing independent b
 
 Since each application has its own application tenant, the tenant name uniquely identifies the app. The pipeline sets `cancel-in-progress` to `false`, so when two runs target the same environment, tenant, and subnamespace simultaneously, the second run queues rather than cancels the first. This keeps in-flight deployments safe from interruption by newer commits.
 
-Version generation is serialized separately by `version-prefix`, which is the shared git tag namespace. Different prefixes can generate versions in parallel.
+Tag-producing main-branch version jobs are serialized separately by `version-prefix`, which is the shared git tag namespace. Up to 100 jobs using the same prefix can wait without replacing an earlier pending job, while different prefixes and non-tagging pull-request or dry-run jobs can proceed in parallel.
 
 ## Role of `p2p-get-latest-image-*` workflows
 
