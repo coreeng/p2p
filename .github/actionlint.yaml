@@ -1,4 +1,9 @@
 paths:
+  .github/workflows/p2p-version.yaml:
+    ignore:
+      # GitHub supports queued concurrency groups, but actionlint v1.7.12
+      # does not include the queue property yet.
+      - 'unexpected key "queue" for "concurrency" section'
   .github/workflows/p2p-get-latest-image.yaml:
     ignore:
       # GitHub documents job.workflow_repository/job.workflow_sha for reusable

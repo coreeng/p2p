@@ -36,6 +36,13 @@ jobs:
   increment-version:
     name: increment-version
     runs-on: ubuntu-24.04
+    concurrency:
+      group: >-
+        ${{ github.ref == inputs.main-branch && inputs.dry-run == false
+        && format('increment-version-{0}', inputs.version-prefix)
+        || format('increment-version-{0}-{1}-{2}', inputs.version-prefix, github.run_id, github.run_attempt) }}
+      cancel-in-progress: false
+      queue: max
     outputs:
       version: ${{ steps.setversion.outputs.version }}
       previous_version: ${{ steps.setversion.outputs.previous_version }}

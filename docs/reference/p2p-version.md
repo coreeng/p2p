@@ -52,6 +52,8 @@ jobs:
 
 In all cases, `previous_version` is the numeric part of the highest existing semver tag (e.g. `1.2.3`), or `0.0.0` if no tags exist.
 
+Tag-producing main-branch calls using the same `version-prefix` are serialized with in-progress cancellation disabled and a queue of up to 100 pending jobs. This prevents concurrent runs from computing and attempting to create the same next tag without replacing an earlier pending run. Calls using different prefixes, pull-request calls, and dry runs can proceed in parallel.
+
 ## See also
 
 - [How to customise versioning](../how-to/customise-versioning.md)

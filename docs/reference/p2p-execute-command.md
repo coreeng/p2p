@@ -53,6 +53,10 @@ This workflow has no outputs.
 
 1. `exec` — Single job that performs all steps: checkout, GCP auth, cluster setup, Docker Buildx setup, skopeo setup, environment variable decoding, P2P variable export, and the `make` invocation.
 
+## Concurrency
+
+`p2p-build` receives a per-run concurrency group so independent builds can run in parallel. Every other command is grouped by GitHub environment, tenant, application, and subnamespace. Those commands queue rather than cancel when they target the same resources because `cancel-in-progress` is `false`.
+
 ## Environment Variables
 
 The following variables are exported to `GITHUB_ENV` before the `make` target runs and are therefore available inside the target:
