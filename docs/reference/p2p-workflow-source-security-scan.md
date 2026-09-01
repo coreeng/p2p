@@ -20,6 +20,7 @@ Internal workflow called from [`p2p-workflow-fastfeedback`](p2p-workflow-fastfee
 | `dry-run` | boolean | No | `false` | When `true`, skips scanner installs, scans, sticky PR comments, artifact upload, and policy enforcement. The summary reports that the scan was skipped. Dry-run still parses discovered `.p2p-security-ignore.yaml` files, so a malformed ignore file can fail report generation. |
 | `checkout-version` | string | No | `''` | Git ref to check out before scanning. Ignored when `dry-run` is `true`; the workflow checks out the default ref. |
 | `timeout-minutes` | number | No | `30` | Job timeout for scanner jobs. |
+| `runner-label` | string | No | `''` | GitHub Actions runner label for every source security job. When empty, uses the caller's `P2P_RUNNER_LABEL` organization or repository variable, then `ubuntu-24.04`. |
 
 ## Permissions
 

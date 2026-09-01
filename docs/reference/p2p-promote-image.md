@@ -31,6 +31,7 @@ jobs:
 | `working-directory` | string | No | `'.'` | Directory from which the `make` target is executed. |
 | `checkout-version` | string | No | `''` | Git ref to check out. Ignored when `dry-run` is `true`; the workflow checks out the default ref. |
 | `dry-run` | boolean | No | `false` | When `true`, skips GCP authentication, skopeo login, and the `make` invocation. |
+| `runner-label` | string | No | `''` | GitHub Actions runner label for every promotion job. When empty, uses the caller's `P2P_RUNNER_LABEL` organization or repository variable, then `ubuntu-24.04`. |
 
 ## Secrets
 

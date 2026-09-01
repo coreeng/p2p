@@ -64,6 +64,11 @@ on:
         required: false
         type: number
         default: 30
+      runner-label:
+        description: 'GitHub Actions runner label for scheduled security scan jobs.'
+        required: false
+        type: string
+        default: ''
 
 jobs:
   security-source-scan:
@@ -78,6 +83,7 @@ jobs:
       dry-run: ${{ inputs.dry-run }}
       checkout-version: ${{ inputs.checkout-version }}
       timeout-minutes: ${{ inputs.timeout-minutes }}
+      runner-label: ${{ inputs.runner-label }}
 
   # Resolve a single anchor image used to look up the latest version per
   # stage. All p2p images in a release share the same version, so any image
@@ -85,7 +91,7 @@ jobs:
   security-resolve-anchor-image:
     name: security-resolve-anchor-image
     if: inputs.security-scan-enabled
-    runs-on: ubuntu-24.04
+    runs-on: ${{ inputs.runner-label || vars.P2P_RUNNER_LABEL || 'ubuntu-24.04' }}
     outputs:
       image-name: ${{ steps.pick.outputs.image-name }}
     steps:
@@ -143,6 +149,7 @@ jobs:
       security-scan-blocking-severity: ${{ inputs.security-scan-blocking-severity }}
       security-scan-enabled: ${{ inputs.security-scan-enabled }}
       security-scan-fail-on-non-blocking-findings: ${{ inputs.security-scan-fail-on-non-blocking-findings }}
+      runner-label: ${{ inputs.runner-label }}
 
   security-image-scan-extended-test:
     needs: [security-resolve-anchor-image]
@@ -174,6 +181,7 @@ jobs:
       security-scan-blocking-severity: ${{ inputs.security-scan-blocking-severity }}
       security-scan-enabled: ${{ inputs.security-scan-enabled }}
       security-scan-fail-on-non-blocking-findings: ${{ inputs.security-scan-fail-on-non-blocking-findings }}
+      runner-label: ${{ inputs.runner-label }}
 
   security-image-scan-prod:
     needs: [security-resolve-anchor-image]
@@ -205,3 +213,4 @@ jobs:
       security-scan-blocking-severity: ${{ inputs.security-scan-blocking-severity }}
       security-scan-enabled: ${{ inputs.security-scan-enabled }}
       security-scan-fail-on-non-blocking-findings: ${{ inputs.security-scan-fail-on-non-blocking-findings }}
+      runner-label: ${{ inputs.runner-label }}

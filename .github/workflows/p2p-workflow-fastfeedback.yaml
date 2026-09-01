@@ -51,6 +51,11 @@ on:
         required: false
         type: string
         default: '.'
+      runner-label:
+        description: 'GitHub Actions runner label for fast-feedback command execution.'
+        required: false
+        type: string
+        default: ''
       run-fastfeedback-integration-on-prs:
         required: false
         type: boolean
@@ -107,6 +112,7 @@ jobs:
       dry-run: ${{ inputs.dry-run }}
       region: ${{ inputs.region }}
       working-directory: ${{ inputs.working-directory }}
+      runner-label: ${{ inputs.runner-label }}
       skip-subnamespaces-create: ${{ inputs.skip-subnamespaces-create }}
       artifacts: ${{ inputs.artifacts }}
 
@@ -122,6 +128,7 @@ jobs:
       dry-run: ${{ inputs.dry-run }}
       checkout-version: ${{ inputs.checkout-version }}
       timeout-minutes: 10
+      runner-label: ${{ inputs.runner-label }}
 
   security-image-scan:
     needs: [build]
@@ -147,6 +154,7 @@ jobs:
       blocking-severity: ${{ inputs.security-scan-blocking-severity }}
       security-scan-enabled: ${{ inputs.security-scan-enabled }}
       fail-on-non-blocking-findings: ${{ inputs.security-scan-fail-on-non-blocking-findings }}
+      runner-label: ${{ inputs.runner-label }}
 
   functional-test:
     needs: [build]
@@ -170,6 +178,7 @@ jobs:
       checkout-version: ${{ inputs.checkout-version }}
       dry-run: ${{ inputs.dry-run }}
       working-directory: ${{ inputs.working-directory }}
+      runner-label: ${{ inputs.runner-label }}
       skip-subnamespaces-create: ${{ inputs.skip-subnamespaces-create }}
       artifacts: ${{ inputs.artifacts }}
 
@@ -195,6 +204,7 @@ jobs:
       checkout-version: ${{ inputs.checkout-version }}
       dry-run: ${{ inputs.dry-run }}
       working-directory: ${{ inputs.working-directory }}
+      runner-label: ${{ inputs.runner-label }}
       skip-subnamespaces-create: ${{ inputs.skip-subnamespaces-create }}
       artifacts: ${{ inputs.artifacts }}
 
@@ -221,6 +231,7 @@ jobs:
       checkout-version: ${{ inputs.checkout-version }}
       dry-run: ${{ inputs.dry-run }}
       working-directory: ${{ inputs.working-directory }}
+      runner-label: ${{ inputs.runner-label }}
       skip-subnamespaces-create: ${{ inputs.skip-subnamespaces-create }}
       artifacts: ${{ inputs.artifacts }}
 
@@ -245,10 +256,11 @@ jobs:
       checkout-version: ${{ inputs.checkout-version }}
       dry-run: ${{ inputs.dry-run }}
       working-directory: ${{ inputs.working-directory }}
+      runner-label: ${{ inputs.runner-label }}
 
   notify-failure:
     needs: [build, security-source-scan, security-image-scan, functional-test, nft-test, integration-test, promote]
-    runs-on: ubuntu-24.04
+    runs-on: ${{ inputs.runner-label || vars.P2P_RUNNER_LABEL || 'ubuntu-24.04' }}
     timeout-minutes: 5
     if: always() && github.ref == inputs.main-branch && contains(needs.*.result, 'failure')
 

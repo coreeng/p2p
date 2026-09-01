@@ -25,6 +25,7 @@ Internal workflow called by [`p2p-workflow-fastfeedback`](p2p-workflow-fastfeedb
 | `fail-on-non-blocking-findings` | boolean | No | `false` | Fails the `security-image-policy` job for non-blocking findings so GitHub shows a red policy job while the workflow continues. Blocking findings always fail the workflow. |
 | `ignore-unfixed` | boolean | No | `true` | When `true`, passes `--ignore-unfixed` to Trivy — only vulnerabilities with a fixed version are reported. |
 | `timeout-minutes` | number | No | `20` | Job timeout. |
+| `runner-label` | string | No | `''` | GitHub Actions runner label for every image security job. When empty, uses the caller's `P2P_RUNNER_LABEL` organization or repository variable, then `ubuntu-24.04`. |
 
 ## Secrets
 

@@ -31,6 +31,7 @@ jobs:
 | `working-directory` | string | No | `'.'` | Accepted for caller interface compatibility; version lookup queries Artifact Registry and does not require a checkout. |
 | `dry-run` | boolean | No | `false` | When `true`, skips GCP authentication and returns `0.0.0` as the version. |
 | `main-branch` | string | No | `refs/heads/main` | The ref on which the workflow executes. The job and failure notification are skipped when the triggering ref does not match. |
+| `runner-label` | string | No | `''` | GitHub Actions runner label for every job in the workflow. When empty, uses the caller's `P2P_RUNNER_LABEL` organization or repository variable, then `ubuntu-24.04`. |
 
 ## Secrets
 

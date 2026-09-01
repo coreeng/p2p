@@ -42,6 +42,11 @@ on:
         required: false
         type: number
         default: 30
+      runner-label:
+        description: 'GitHub Actions runner label for source security scan jobs.'
+        required: false
+        type: string
+        default: ''
     outputs:
       report-file:
         value: ${{ jobs.security-source-report.outputs.report-file }}
@@ -66,7 +71,7 @@ jobs:
   security-secret-scan:
     name: security-secret-scan
     if: inputs.security-scan-enabled
-    runs-on: ubuntu-24.04
+    runs-on: ${{ inputs.runner-label || vars.P2P_RUNNER_LABEL || 'ubuntu-24.04' }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
     outputs:
       base: ${{ steps.scan-range.outputs.base }}
@@ -173,7 +178,7 @@ jobs:
   security-sca-scan:
     name: security-sca-scan
     if: inputs.security-scan-enabled
-    runs-on: ubuntu-24.04
+    runs-on: ${{ inputs.runner-label || vars.P2P_RUNNER_LABEL || 'ubuntu-24.04' }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
     steps:
       - name: Checkout code
@@ -219,7 +224,7 @@ jobs:
 
   security-source-report:
     name: security-source-report
-    runs-on: ubuntu-24.04
+    runs-on: ${{ inputs.runner-label || vars.P2P_RUNNER_LABEL || 'ubuntu-24.04' }}
     needs: [security-secret-scan, security-sca-scan]
     if: always()
     outputs:
@@ -339,7 +344,7 @@ jobs:
 
   security-source-scan-status-policy:
     name: security-source-scan-status-policy
-    runs-on: ubuntu-24.04
+    runs-on: ${{ inputs.runner-label || vars.P2P_RUNNER_LABEL || 'ubuntu-24.04' }}
     needs: [security-source-report]
     if: ${{ always() && inputs.security-scan-enabled && inputs.dry-run == false }}
     timeout-minutes: 1
@@ -357,7 +362,7 @@ jobs:
 
   security-source-policy:
     name: security-source-policy
-    runs-on: ubuntu-24.04
+    runs-on: ${{ inputs.runner-label || vars.P2P_RUNNER_LABEL || 'ubuntu-24.04' }}
     needs: [security-source-report]
     if: ${{ always() && inputs.security-scan-enabled && inputs.dry-run == false }}
     continue-on-error: ${{ inputs.fail-on-non-blocking-findings && (inputs.blocking-severity == 'off' || (needs.security-source-report.outputs.vulnerability-blocking == '0' && needs.security-source-report.outputs.secret-blocking == '0')) }}

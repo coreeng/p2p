@@ -31,6 +31,7 @@ jobs:
 | `dry-run` | boolean | No | `false` | When `true`, skips GCP authentication and returns `0.0.0` as the version. |
 | `region` | string | No | `''` | GCP region. Falls back to the `REGION` repository/environment variable, then `europe-west2`. |
 | `working-directory` | string | No | `'.'` | Accepted for caller interface compatibility; version lookup queries Artifact Registry and does not require a checkout. |
+| `runner-label` | string | No | `''` | GitHub Actions runner label for image lookup. When empty, uses the caller's `P2P_RUNNER_LABEL` organization or repository variable, then `ubuntu-24.04`. |
 
 ## Secrets
 

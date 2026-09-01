@@ -74,6 +74,11 @@ on:
         required: false
         type: number
         default: 20
+      runner-label:
+        description: 'GitHub Actions runner label for image security scan jobs.'
+        required: false
+        type: string
+        default: ''
     outputs:
       json-file:
         value: ${{ jobs.security-image-scan.outputs.json-file }}
@@ -85,7 +90,7 @@ on:
 jobs:
   security-image-scan:
     name: security-image-scan (${{ inputs.github_env != '' && format('{0}, {1}', inputs.pipeline-stage, inputs.github_env) || inputs.pipeline-stage }})
-    runs-on: ubuntu-24.04
+    runs-on: ${{ inputs.runner-label || vars.P2P_RUNNER_LABEL || 'ubuntu-24.04' }}
     environment: ${{ inputs.security-scan-enabled && inputs.github_env || '' }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
     outputs:
@@ -310,7 +315,7 @@ jobs:
 
   security-image-scan-status-policy:
     name: security-image-scan-status-policy (${{ inputs.github_env != '' && format('{0}, {1}', inputs.pipeline-stage, inputs.github_env) || inputs.pipeline-stage }})
-    runs-on: ubuntu-24.04
+    runs-on: ${{ inputs.runner-label || vars.P2P_RUNNER_LABEL || 'ubuntu-24.04' }}
     needs: [security-image-scan]
     if: ${{ always() && inputs.security-scan-enabled && inputs.dry-run == false }}
     timeout-minutes: 1
@@ -328,7 +333,7 @@ jobs:
 
   security-image-policy:
     name: security-image-policy (${{ inputs.github_env != '' && format('{0}, {1}', inputs.pipeline-stage, inputs.github_env) || inputs.pipeline-stage }})
-    runs-on: ubuntu-24.04
+    runs-on: ${{ inputs.runner-label || vars.P2P_RUNNER_LABEL || 'ubuntu-24.04' }}
     needs: [security-image-scan]
     if: ${{ always() && inputs.security-scan-enabled && inputs.dry-run == false }}
     continue-on-error: ${{ inputs.fail-on-non-blocking-findings && (inputs.blocking-severity == 'off' || (needs.security-image-scan.outputs.blocking-count == '0' && needs.security-image-scan.outputs.secret-blocking-count == '0')) }}

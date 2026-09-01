@@ -21,6 +21,7 @@ jobs:
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `command` | string | Yes | — | The `make` target to run (e.g. `p2p-build`). |
+| `runner-label` | string | No | `''` | GitHub Actions runner label for the command-execution job. When empty, uses the caller's `P2P_RUNNER_LABEL` organization or repository variable, then `ubuntu-24.04`. |
 | `github_env` | string | No | `''` | GitHub environment name used for deployment protection rules and concurrency grouping. |
 | `dry-run` | boolean | No | `false` | When `true`, skips GCP authentication, cluster setup, and the `make` invocation. |
 | `region` | string | No | `''` | GCP region. Falls back to the `REGION` repository/environment variable, then `europe-west2`. |

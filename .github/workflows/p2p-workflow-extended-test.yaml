@@ -78,6 +78,11 @@ on:
         required: false
         type: string
         default: ''
+      runner-label:
+        description: 'GitHub Actions runner label for extended-test jobs.'
+        required: false
+        type: string
+        default: ''
 
 jobs:
   run-tests:
@@ -104,6 +109,7 @@ jobs:
       checkout-version: ${{ inputs.version-prefix }}${{ inputs.version }}
       skip-subnamespaces-create: ${{ inputs.skip-subnamespaces-create }}
       artifacts: ${{ inputs.artifacts }}
+      runner-label: ${{ inputs.runner-label }}
 
   security-image-scan:
     uses: ./.github/workflows/p2p-workflow-image-scan.yaml
@@ -132,6 +138,7 @@ jobs:
       blocking-severity: ${{ inputs.security-scan-blocking-severity }}
       security-scan-enabled: ${{ inputs.security-scan-enabled }}
       fail-on-non-blocking-findings: ${{ inputs.security-scan-fail-on-non-blocking-findings }}
+      runner-label: ${{ inputs.runner-label }}
 
   promote:
     uses: ./.github/workflows/p2p-promote-image.yaml
@@ -153,10 +160,11 @@ jobs:
       dry-run: ${{ inputs.dry-run }}
       working-directory: ${{ inputs.working-directory }}
       checkout-version: ${{ inputs.version-prefix }}${{ inputs.version }}
+      runner-label: ${{ inputs.runner-label }}
 
   notify-failure:
     needs: [run-tests, security-image-scan, promote]
-    runs-on: ubuntu-24.04
+    runs-on: ${{ inputs.runner-label || vars.P2P_RUNNER_LABEL || 'ubuntu-24.04' }}
     timeout-minutes: 5
     if: always() && github.ref == inputs.main-branch && contains(needs.*.result, 'failure')
 
