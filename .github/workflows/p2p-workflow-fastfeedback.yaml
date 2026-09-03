@@ -56,6 +56,11 @@ on:
         required: false
         type: string
         default: ''
+      command-overrides:
+        description: 'Comma-separated P2P commands implemented by the caller repository.'
+        required: false
+        type: string
+        default: ''
       run-fastfeedback-integration-on-prs:
         required: false
         type: boolean
@@ -113,6 +118,7 @@ jobs:
       region: ${{ inputs.region }}
       working-directory: ${{ inputs.working-directory }}
       runner-label: ${{ inputs.runner-label }}
+      command-overrides: ${{ inputs.command-overrides }}
       skip-subnamespaces-create: ${{ inputs.skip-subnamespaces-create }}
       artifacts: ${{ inputs.artifacts }}
 
@@ -179,6 +185,7 @@ jobs:
       dry-run: ${{ inputs.dry-run }}
       working-directory: ${{ inputs.working-directory }}
       runner-label: ${{ inputs.runner-label }}
+      command-overrides: ${{ inputs.command-overrides }}
       skip-subnamespaces-create: ${{ inputs.skip-subnamespaces-create }}
       artifacts: ${{ inputs.artifacts }}
 
@@ -205,6 +212,7 @@ jobs:
       dry-run: ${{ inputs.dry-run }}
       working-directory: ${{ inputs.working-directory }}
       runner-label: ${{ inputs.runner-label }}
+      command-overrides: ${{ inputs.command-overrides }}
       skip-subnamespaces-create: ${{ inputs.skip-subnamespaces-create }}
       artifacts: ${{ inputs.artifacts }}
 
@@ -232,6 +240,7 @@ jobs:
       dry-run: ${{ inputs.dry-run }}
       working-directory: ${{ inputs.working-directory }}
       runner-label: ${{ inputs.runner-label }}
+      command-overrides: ${{ inputs.command-overrides }}
       skip-subnamespaces-create: ${{ inputs.skip-subnamespaces-create }}
       artifacts: ${{ inputs.artifacts }}
 
