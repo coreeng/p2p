@@ -61,6 +61,7 @@ jobs:
       dry-run: true
       runner-label: ubuntu-24.04
       run-fastfeedback-integration-on-prs: true
+      command-overrides: p2p-build
       version: ${{ needs.test_version.outputs.version }}
 
   test_source_security_scan:
