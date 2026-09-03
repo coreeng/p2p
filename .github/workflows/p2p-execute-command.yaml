@@ -193,22 +193,6 @@ jobs:
         run: |
           kubectl cluster-info
 
-      - name: Setup Docker Buildx
-        id: setup-docker-buildx
-        if: ${{ steps.resolve-command-override.outputs.overridden != 'true' }}
-        uses: docker/setup-buildx-action@v4
-        with:
-          driver-opts: |
-            default-load=true
-
-      - name: Setup skopeo
-        id: setup-skopeo
-        shell: bash
-        run: |
-          curl -fsSL "https://github.com/lework/skopeo-binary/releases/download/v1.22.0/skopeo-linux-amd64" -o /usr/local/bin/skopeo
-          chmod +x /usr/local/bin/skopeo
-          skopeo --version
-
       - name: Expose GitHub Runtime
         id: expose-github-runtime
         uses: crazy-max/ghaction-github-runtime@v4
@@ -289,6 +273,23 @@ jobs:
           export P2P_NAMESPACE_EXTENDED=${P2P_NAMESPACE}-extended
           export P2P_NAMESPACE_PROD=${P2P_NAMESPACE}-prod
           env | grep "^P2P_" | sort | tee "${GITHUB_ENV}"
+
+      - name: Setup Docker Buildx
+        id: setup-docker-buildx
+        if: ${{ inputs.dry-run == false && steps.resolve-command-override.outputs.overridden != 'true' }}
+        uses: docker/setup-buildx-action@v4
+        with:
+          driver-opts: |
+            default-load=true
+
+      - name: Setup skopeo
+        id: setup-skopeo
+        if: ${{ inputs.dry-run == false && steps.resolve-command-override.outputs.overridden != 'true' }}
+        shell: bash
+        run: |
+          curl -fsSL "https://github.com/lework/skopeo-binary/releases/download/v1.22.0/skopeo-linux-amd64" -o /usr/local/bin/skopeo
+          chmod +x /usr/local/bin/skopeo
+          skopeo --version
 
       - name: Run make ${{ inputs.command }}
         id: run-command
