@@ -18,6 +18,11 @@ on:
         required: false
         type: string
         default: ''
+      command-overrides:
+        description: 'Comma-separated P2P commands implemented by the caller repository.'
+        required: false
+        type: string
+        default: ''
       github_env:
         required: false
         type: string
@@ -116,6 +121,43 @@ jobs:
         with:
           ref: ${{ inputs.dry-run == false && inputs.checkout-version || '' }}
 
+      - name: Resolve command override
+        id: resolve-command-override
+        env:
+          COMMAND: ${{ inputs.command }}
+          COMMAND_OVERRIDES: ${{ inputs.command-overrides }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+
+          allowed = {
+              "p2p-build",
+              "p2p-extended-test",
+              "p2p-functional",
+              "p2p-integration",
+              "p2p-nft",
+              "p2p-prod",
+          }
+          raw = os.environ["COMMAND_OVERRIDES"]
+          overrides = [] if raw == "" else [value.strip() for value in raw.split(",")]
+
+          if "" in overrides:
+              raise SystemExit("command-overrides contains an empty command")
+
+          unsupported = [value for value in overrides if value not in allowed]
+          if unsupported:
+              raise SystemExit(f"command-overrides contains unsupported command: {unsupported[0]}")
+
+          if len(overrides) != len(set(overrides)):
+              raise SystemExit("command-overrides contains a duplicate command")
+
+          overridden = str(os.environ["COMMAND"] in overrides).lower()
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"overridden={overridden}\n")
+          PY
+
       - name: Authenticate to Google Cloud
         id: auth
         if: ${{ inputs.dry-run == false }}
@@ -153,6 +195,7 @@ jobs:
 
       - name: Setup Docker Buildx
         id: setup-docker-buildx
+        if: ${{ steps.resolve-command-override.outputs.overridden != 'true' }}
         uses: docker/setup-buildx-action@v4
         with:
           driver-opts: |
@@ -249,13 +292,24 @@ jobs:
 
       - name: Run make ${{ inputs.command }}
         id: run-command
-        if: ${{ inputs.dry-run == false }}
+        if: ${{ inputs.dry-run == false && steps.resolve-command-override.outputs.overridden != 'true' }}
         working-directory: ${{ inputs.working-directory }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
           GOOGLE_APPLICATION_CREDENTIALS: ${{ steps.auth.outputs.credentials_file_path }}
         run: |
           make ${{ inputs.command }}
+
+      - name: Run repository implementation for ${{ inputs.command }}
+        id: run-command-override
+        if: ${{ inputs.dry-run == false && steps.resolve-command-override.outputs.overridden == 'true' }}
+        uses: ./.github/actions/p2p-command
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ steps.auth.outputs.credentials_file_path }}
+        with:
+          command: ${{ inputs.command }}
+          working-directory: ${{ inputs.working-directory }}
 
       - name: Resolve artifact paths
         id: resolve-artifacts
