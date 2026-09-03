@@ -22,12 +22,12 @@ async function runReport() {
     '      package: dev-only-tool',
     '      paths:',
     '        - package-lock.json',
-    '      expires: 2026-09-01',
+    '      expires: 2099-09-01',
     '  secrets:',
     '    - id: source-secret-1',
     '      reason: Rotated credential retained until history rewrite.',
     '      path: docs/example.env',
-    '      expires: 2026-10-01',
+    '      expires: 2099-10-01',
     '',
   ].join('\n'));
   fs.writeFileSync(path.join(root, 'trivy', 'trivy-fs.json'), JSON.stringify({
@@ -999,7 +999,7 @@ async function runReportWithMissingTruffleHogOutput() {
     {
       id: 'CVE-2026-0001',
       reason: 'Dev-only dependency is unreachable.',
-      expires: '2026-09-01',
+      expires: '2099-09-01',
     },
   ]);
   assert.deepStrictEqual(result.normalized.ignored.secrets.map(s => ({
@@ -1010,7 +1010,7 @@ async function runReportWithMissingTruffleHogOutput() {
     {
       id: 'source-secret-1',
       reason: 'Rotated credential retained until history rewrite.',
-      expires: '2026-10-01',
+      expires: '2099-10-01',
     },
   ]);
   assert(!result.summary.includes('### Ignored source findings'));
