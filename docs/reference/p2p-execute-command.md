@@ -21,6 +21,7 @@ jobs:
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `command` | string | Yes | — | The `make` target to run (e.g. `p2p-build`). |
+| `command-overrides` | string | No | `''` | Comma-separated commands implemented by the caller's `.github/actions/p2p-command` composite action. Unlisted commands use Make. |
 | `runner-label` | string | No | `''` | GitHub Actions runner label for the command-execution job. When empty, uses the caller's `P2P_RUNNER_LABEL` organization or repository variable, then `ubuntu-24.04`. |
 | `github_env` | string | No | `''` | GitHub environment name used for deployment protection rules and concurrency grouping. |
 | `dry-run` | boolean | No | `false` | When `true`, skips GCP authentication, cluster setup, and the `make` invocation. |
@@ -45,6 +46,37 @@ jobs:
 | `container_registry_user` | No | Username for an additional container registry login. |
 | `container_registry_pat` | No | Password/PAT for an additional container registry login. Required when `container_registry_user` is set. |
 | `container_registry_url` | No | URL of the additional container registry. |
+
+## Repository command implementation
+
+Set `command-overrides: p2p-build` to select the caller action for builds. The
+action must exist at `.github/actions/p2p-command/action.yml` in the caller
+checkout selected by `checkout-version`. It receives `command` and
+`working-directory` inputs; shell steps must set their own working directory.
+
+Authentication, registry login, kubeconfig, namespace setup, decoded secrets,
+`P2P_*` variables, `GITHUB_TOKEN`, and `GOOGLE_APPLICATION_CREDENTIALS` are prepared
+before the action runs. Artifact collection and concurrency remain P2P-owned.
+The action executes with the job's credentials and permissions, so callers must
+review its code and third-party actions as privileged workflow code.
+
+The selected action owns tool setup and the complete command outcome, including
+checks, all image tags and pushes, and any additional artifacts. P2P skips its
+Buildx setup, skopeo installation, and Make invocation for that command. An action
+can perform custom setup then call Make itself, installing any tools it needs.
+Missing actions and action failures fail the job; they never fall back to Make.
+
+Supported selections are `p2p-build`, `p2p-functional`, `p2p-nft`,
+`p2p-integration`, `p2p-extended-test`, and `p2p-prod`. Surrounding whitespace is
+trimmed. Unknown names, duplicates, and empty list entries fail validation.
+An empty input preserves the default implementation for every command. Dry runs
+validate selection but skip both implementations and default tool setup.
+
+For rollout, use a reviewed P2P commit from `release/command-overrides`. To roll
+back command customization, remove `command-overrides`; the caller action can
+remain present and unused. The higher-level fast-feedback workflow forwards this
+input; extended-test and production callers can use the execution workflow
+directly if they need overrides.
 
 ## Outputs
 

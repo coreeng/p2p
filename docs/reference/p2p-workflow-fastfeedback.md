@@ -34,6 +34,7 @@ Grant `pull-requests: write` when the workflow runs on pull requests so source a
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `version` | `string` | Yes | — | Version identifier for the build and all subsequent stages. |
+| `command-overrides` | `string` | No | `''` | Comma-separated commands owned by the caller action. Use `p2p-build` to override builds while retaining default tests. See the [caller contract](p2p-execute-command.md#repository-command-implementation). |
 | `dry-run` | `boolean` | No | `false` | When `true`, runs commands without making persistent changes. |
 | `main-branch` | `string` | No | `refs/heads/main` | Full ref of the main branch, used to gate promotion and Slack alerts. |
 | `checkout-version` | `string` | No | `''` | Git ref to check out. Defaults to the current workflow ref when empty. |
