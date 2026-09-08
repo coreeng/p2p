@@ -6,6 +6,13 @@ on:
       - main
 
 jobs:
+  test_command_overrides:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: Validate command selection and malformed inputs
+        run: python3 .github/scripts/tests/command-overrides.test.py
+
   increment-version:
     uses: ./.github/workflows/internal-version.yaml
     secrets:
@@ -61,6 +68,7 @@ jobs:
       dry-run: true
       runner-label: ubuntu-24.04
       run-fastfeedback-integration-on-prs: true
+      command-overrides: p2p-build
       version: ${{ needs.test_version.outputs.version }}
 
   test_source_security_scan:
