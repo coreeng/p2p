@@ -207,7 +207,9 @@ function isEmptyContainerImage(ref, digest, execFileSyncImpl) {
     return false;
   }
   if (!raw || !IMAGE_CONFIG_MEDIA_TYPES.has(raw.config?.mediaType)) return false;
-  return Array.isArray(raw.layers) && raw.layers.length === 0;
+  // Docker schema 2 can serialize a scratch image's empty layer list as null.
+  // Do not treat a missing or otherwise malformed layers field as empty.
+  return raw.layers === null || (Array.isArray(raw.layers) && raw.layers.length === 0);
 }
 
 function isNonImageOciArtifact(info) {
