@@ -6,12 +6,14 @@ on:
       - main
 
 jobs:
-  test_command_overrides:
+  test_command_contracts:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
-      - name: Validate command selection and malformed inputs
-        run: python3 .github/scripts/tests/command-overrides.test.py
+      - name: Validate command and runner selection contracts
+        run: |
+          python3 .github/scripts/tests/command-overrides.test.py
+          python3 .github/scripts/tests/fastfeedback-runner-label.test.py
 
   increment-version:
     uses: ./.github/workflows/internal-version.yaml

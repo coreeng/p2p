@@ -56,6 +56,11 @@ on:
         required: false
         type: string
         default: ''
+      build-runner-label:
+        description: 'GitHub Actions runner label for the build job. Defaults to runner-label.'
+        required: false
+        type: string
+        default: ''
       command-overrides:
         description: 'Comma-separated P2P commands implemented by the caller repository.'
         required: false
@@ -117,7 +122,7 @@ jobs:
       dry-run: ${{ inputs.dry-run }}
       region: ${{ inputs.region }}
       working-directory: ${{ inputs.working-directory }}
-      runner-label: ${{ inputs.runner-label }}
+      runner-label: ${{ inputs.build-runner-label || inputs.runner-label }}
       command-overrides: ${{ inputs.command-overrides }}
       skip-subnamespaces-create: ${{ inputs.skip-subnamespaces-create }}
       artifacts: ${{ inputs.artifacts }}
