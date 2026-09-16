@@ -91,7 +91,7 @@ jobs:
           access_token_lifetime: 3600s
 
       - name: Checkout P2P workflow sources
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}

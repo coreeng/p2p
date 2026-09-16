@@ -106,7 +106,7 @@ jobs:
           EOT
 
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ inputs.dry-run == false && inputs.checkout-version || '' }}
 

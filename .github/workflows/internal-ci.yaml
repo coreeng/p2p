@@ -87,7 +87,7 @@ jobs:
   test_security_ignore_helper:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Test shared P2P security ignore helper
         run: |
           set -euo pipefail
@@ -96,7 +96,7 @@ jobs:
   test_source_security_ignore_report:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Test source security ignores split active and ignored findings
         run: |
           set -euo pipefail
@@ -138,7 +138,7 @@ jobs:
   test_image_security_ignore_report:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Test image security ignores split active and ignored findings
         run: |
           set -euo pipefail
@@ -147,7 +147,7 @@ jobs:
   test_image_ref_resolution:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Test latest image tag resolver
         run: |
           node .github/scripts/tests/latest-image.test.js
