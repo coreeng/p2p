@@ -84,6 +84,48 @@ jobs:
       security-scan-blocking-severity: off
       timeout-minutes: 10
 
+  test_cache_save:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/cache@v6
+        with:
+          path: ${{ runner.temp }}/p2p-cache-smoke
+          key: p2p-cache-smoke-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Create isolated cache fixture
+        env:
+          FIXTURE_DIR: ${{ runner.temp }}/p2p-cache-smoke
+          EXPECTED_REVISION: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$FIXTURE_DIR"
+          printf '%s\n' "$EXPECTED_REVISION" > "$FIXTURE_DIR/revision"
+
+  test_cache_restore:
+    needs: test_cache_save
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - id: cache
+        uses: actions/cache@v6
+        with:
+          path: ${{ runner.temp }}/p2p-cache-smoke
+          key: p2p-cache-smoke-${{ github.run_id }}-${{ github.run_attempt }}
+          fail-on-cache-miss: true
+      - name: Verify cache restored on a fresh runner
+        env:
+          FIXTURE_DIR: ${{ runner.temp }}/p2p-cache-smoke
+          EXPECTED_REVISION: ${{ github.sha }}
+          CACHE_HIT: ${{ steps.cache.outputs.cache-hit }}
+        run: |
+          set -euo pipefail
+          test "$CACHE_HIT" = true
+          test "$(cat "$FIXTURE_DIR/revision")" = "$EXPECTED_REVISION"
+
   test_security_ignore_helper:
     runs-on: ubuntu-24.04
     steps:
