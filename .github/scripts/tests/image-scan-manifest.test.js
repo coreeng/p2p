@@ -403,6 +403,50 @@ async function runManifestScript({ stage, vulnLines = [], secretLines = [], vuln
   assert.strictEqual(fs.readFileSync(allEmptyImages.outputs['list-path'], 'utf8'), '');
   assert.strictEqual(allEmptyImages.outputs['scan-target-count'], '0');
 
+  // Registry-observed Docker schema 2 shape for a FROM scratch image.
+  const nullLayersImage = await runPullScript(
+    ['ghcr.io/example/empty:1.0.0'],
+    {
+      'ghcr.io/example/empty:1.0.0': {
+        formatted: {
+          manifest: { digest: 'sha256:empty' },
+          image: { os: 'linux', architecture: 'amd64' },
+        },
+        raw: {
+          schemaVersion: 2,
+          mediaType: 'application/vnd.docker.distribution.manifest.v2+json',
+          config: { mediaType: 'application/vnd.docker.container.image.v1+json' },
+          layers: null,
+        },
+      },
+    },
+  );
+  assert.deepStrictEqual(nullLayersImage.failures, []);
+  assert.deepStrictEqual(nullLayersImage.pulls, []);
+  assert.deepStrictEqual(nullLayersImage.warnings, [
+    'Skipping ghcr.io/example/empty:1.0.0 (linux/amd64) @ sha256:empty; it is an empty container image.',
+  ]);
+  assert.strictEqual(fs.readFileSync(nullLayersImage.outputs['list-path'], 'utf8'), '');
+  assert.strictEqual(nullLayersImage.outputs['scan-target-count'], '0');
+
+  for (const layers of ['', false, {}, [{ digest: 'sha256:layer' }]]) {
+    const nonEmpty = await runPullScript(['ghcr.io/example/app:1.0.0'], {
+      'ghcr.io/example/app:1.0.0': {
+        formatted: {
+          manifest: { digest: 'sha256:app' },
+          image: { os: 'linux', architecture: 'amd64' },
+        },
+        raw: {
+          config: { mediaType: 'application/vnd.docker.container.image.v1+json' },
+          layers,
+        },
+      },
+    });
+    assert.deepStrictEqual(nonEmpty.warnings, []);
+    assert.strictEqual(nonEmpty.pulls.length, 1);
+    assert.strictEqual(nonEmpty.outputs['scan-target-count'], '1');
+  }
+
   const missingLayersIsNotEmpty = await runPullScript(
     ['europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/prod/api:1.2.3'],
     {
