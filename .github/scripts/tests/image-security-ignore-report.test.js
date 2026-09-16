@@ -3,6 +3,10 @@ const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { mock } = require('node:test');
+
+// Keep accepted and expired fixtures stable as the wall clock advances.
+mock.timers.enable({ apis: ['Date'], now: new Date('2026-08-01T00:00:00Z') });
 
 const { buildImageSecurityReport } = require('../image-security-report.js');
 const helperPath = path.resolve(__dirname, '../p2p-security-ignore.js');

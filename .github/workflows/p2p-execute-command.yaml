@@ -112,7 +112,7 @@ jobs:
           EOT
 
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ inputs.dry-run == false && inputs.checkout-version || '' }}
 
@@ -162,7 +162,7 @@ jobs:
         id: setup-skopeo
         shell: bash
         run: |
-          curl -fsSL "https://github.com/lework/skopeo-binary/releases/download/v1.22.0/skopeo-linux-amd64" -o /usr/local/bin/skopeo
+          curl -fsSL "https://github.com/lework/skopeo-binary/releases/download/v1.24.0/skopeo-linux-amd64" -o /usr/local/bin/skopeo
           chmod +x /usr/local/bin/skopeo
           skopeo --version
 
