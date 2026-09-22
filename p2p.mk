@@ -104,11 +104,12 @@ p2p-images:
 
 .PHONY: p2p-promote-to-extended-test ## Promote to extended test
 p2p-promote-to-extended-test:
-	$(foreach image, $(P2P_IMAGE_NAMES), \
+	@for image in $(P2P_IMAGE_NAMES); do \
 		skopeo copy --all --preserve-digests \
-			docker://$(SOURCE_REGISTRY)/$(P2P_REGISTRY_FAST_FEEDBACK_PATH)/$(image):$(P2P_VERSION) \
-			docker://$(REGISTRY)/$(P2P_REGISTRY_EXTENDED_TEST_PATH)/$(image):$(P2P_VERSION) \
-	;)
+			docker://$(SOURCE_REGISTRY)/$(P2P_REGISTRY_FAST_FEEDBACK_PATH)/$${image}:$(P2P_VERSION) \
+			docker://$(REGISTRY)/$(P2P_REGISTRY_EXTENDED_TEST_PATH)/$${image}:$(P2P_VERSION) \
+			|| exit $$?; \
+	done
 
 .PHONY: p2p-extended-test ## Run extended tests
 %-extended-test: p2p_app_url_suffix=-extended
@@ -120,11 +121,12 @@ p2p-promote-to-extended-test:
 
 .PHONY: p2p-promote-to-prod ## Promote to prod
 p2p-promote-to-prod:
-	$(foreach image, $(P2P_IMAGE_NAMES), \
+	@for image in $(P2P_IMAGE_NAMES); do \
 		skopeo copy --all --preserve-digests \
-			docker://$(SOURCE_REGISTRY)/$(P2P_REGISTRY_EXTENDED_TEST_PATH)/$(image):$(P2P_VERSION) \
-			docker://$(REGISTRY)/$(P2P_REGISTRY_PROD_PATH)/$(image):$(P2P_VERSION) \
-	;)
+			docker://$(SOURCE_REGISTRY)/$(P2P_REGISTRY_EXTENDED_TEST_PATH)/$${image}:$(P2P_VERSION) \
+			docker://$(REGISTRY)/$(P2P_REGISTRY_PROD_PATH)/$${image}:$(P2P_VERSION) \
+			|| exit $$?; \
+	done
 
 .PHONY: p2p-prod ## Deploy to prod
 %-prod: p2p_app_url_suffix=
