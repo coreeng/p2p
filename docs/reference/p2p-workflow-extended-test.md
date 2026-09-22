@@ -81,10 +81,15 @@ security-image-scan    (independent of run-tests; runs in parallel)
               When security-scan-enabled=false, records a disabled summary
               and does not run image scanner auth, pulls, or policy jobs.
 
-notify-failure  (needs: run-tests, security-image-scan, promote; runs on main-branch when any job fails)
+notify-failure  (needs: resolve-targets, run-tests, security-image-scan, promote; runs on main-branch when any job fails)
 ```
 
 All jobs use a matrix derived from `source`. The `promote` job uses a matrix derived from `destination`.
+
+When the repository-level `CORECTL_CONTEXT` variable is set, command jobs use
+corectl OIDC. When `CORECTL_VERSION` is unset, P2P uses the latest corectl
+version; set it to a published version to pin it. `CORECTL_PORTAL_URL` is
+optional; set it to use a different Portal instance.
 
 ## See also
 

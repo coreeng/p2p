@@ -113,7 +113,7 @@ jobs:
 
       - name: Authenticate to Google Cloud (Source)
         id: auth-source
-        if: inputs.dry-run == false
+        if: ${{ inputs.dry-run == false && vars.CORECTL_CONTEXT == '' }}
         uses: google-github-actions/auth@v3
         with:
           export_environment_variables: false
@@ -126,7 +126,7 @@ jobs:
 
       - name: Authenticate to Google Cloud (Dest)
         id: auth-dest
-        if: inputs.dry-run == false
+        if: ${{ inputs.dry-run == false && vars.CORECTL_CONTEXT == '' }}
         uses: google-github-actions/auth@v3
         with:
           export_environment_variables: false
@@ -174,7 +174,7 @@ jobs:
 
       - name: Setup skopeo
         id: setup-skopeo
-        if: ${{ inputs.dry-run == false }}
+        if: ${{ inputs.dry-run == false && vars.CORECTL_CONTEXT == '' }}
         env:
           SOURCE_ACCESS_TOKEN: ${{ steps.auth-source.outputs.access_token }}
           DEST_ACCESS_TOKEN: ${{ steps.auth-dest.outputs.access_token }}

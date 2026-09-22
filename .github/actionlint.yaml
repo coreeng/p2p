@@ -1,4 +1,12 @@
 paths:
+  .github/workflows/p2p-execute-command.yaml:
+    ignore:
+      # GitHub supports $/ self-references in reusable workflows, but actionlint
+      # v1.7.12 does not recognize this action reference syntax yet.
+      - 'specifying action .*setup-corectl.* in invalid format'
+  .github/workflows/p2p-resolve-targets.yaml:
+    ignore:
+      - 'specifying action .*setup-corectl.* in invalid format'
   .github/workflows/p2p-version.yaml:
     ignore:
       # GitHub supports queued concurrency groups, but actionlint v1.7.12

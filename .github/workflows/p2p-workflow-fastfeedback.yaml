@@ -92,7 +92,18 @@ on:
         value: ${{ inputs.version }}
 
 jobs:
+  resolve-targets:
+    uses: ./.github/workflows/p2p-resolve-targets.yaml
+    with:
+      app-name: ${{ inputs.app-name }}
+      source: ${{ inputs.source }}
+      destination: ${{ inputs.destination }}
+      source-stage: fastFeedback
+      destination-stage: 'extendedTest'
+      runner-label: ${{ inputs.runner-label }}
+
   build:
+    needs: [resolve-targets]
     uses: ./.github/workflows/p2p-execute-command.yaml
     secrets:
       env_vars: ${{ secrets.env_vars }}
@@ -100,7 +111,7 @@ jobs:
       container_registry_pat: ${{ secrets.container_registry_pat }}
       container_registry_url: ${{ secrets.container_registry_url }}
     strategy:
-      matrix: ${{ fromJSON(inputs.source) }}
+      matrix: ${{ fromJSON(needs.resolve-targets.outputs.source) }}
       fail-fast: false
     with:
       command: p2p-build
@@ -131,7 +142,7 @@ jobs:
       runner-label: ${{ inputs.runner-label }}
 
   security-image-scan:
-    needs: [build]
+    needs: [resolve-targets, build]
     uses: ./.github/workflows/p2p-workflow-image-scan.yaml
     secrets:
       env_vars: ${{ secrets.env_vars }}
@@ -139,7 +150,7 @@ jobs:
       container_registry_pat: ${{ secrets.container_registry_pat }}
       container_registry_url: ${{ secrets.container_registry_url }}
     strategy:
-      matrix: ${{ fromJSON(inputs.source) }}
+      matrix: ${{ fromJSON(needs.resolve-targets.outputs.source) }}
       fail-fast: false
     with:
       pipeline-stage: fast-feedback
@@ -157,7 +168,7 @@ jobs:
       runner-label: ${{ inputs.runner-label }}
 
   functional-test:
-    needs: [build]
+    needs: [resolve-targets, build]
     uses: ./.github/workflows/p2p-execute-command.yaml
     secrets:
       env_vars: ${{ secrets.env_vars }}
@@ -165,7 +176,7 @@ jobs:
       container_registry_pat: ${{ secrets.container_registry_pat }}
       container_registry_url: ${{ secrets.container_registry_url }}
     strategy:
-      matrix: ${{ fromJSON(inputs.source) }}
+      matrix: ${{ fromJSON(needs.resolve-targets.outputs.source) }}
       fail-fast: false
     with:
       command: p2p-functional
@@ -183,7 +194,7 @@ jobs:
       artifacts: ${{ inputs.artifacts }}
 
   nft-test:
-    needs: [build]
+    needs: [resolve-targets, build]
     uses: ./.github/workflows/p2p-execute-command.yaml
     secrets:
       env_vars: ${{ secrets.env_vars }}
@@ -191,7 +202,7 @@ jobs:
       container_registry_pat: ${{ secrets.container_registry_pat }}
       container_registry_url: ${{ secrets.container_registry_url }}
     strategy:
-      matrix: ${{ fromJSON(inputs.source) }}
+      matrix: ${{ fromJSON(needs.resolve-targets.outputs.source) }}
       fail-fast: false
     with:
       command: p2p-nft
@@ -209,7 +220,7 @@ jobs:
       artifacts: ${{ inputs.artifacts }}
 
   integration-test:
-    needs: [functional-test, nft-test]
+    needs: [resolve-targets, functional-test, nft-test]
     if: success() && ( inputs.run-fastfeedback-integration-on-prs || github.ref == inputs.main-branch || github.ref_type == 'tag' )
     uses: ./.github/workflows/p2p-execute-command.yaml
     secrets:
@@ -218,7 +229,7 @@ jobs:
       container_registry_pat: ${{ secrets.container_registry_pat }}
       container_registry_url: ${{ secrets.container_registry_url }}
     strategy:
-      matrix: ${{ fromJSON(inputs.source) }}
+      matrix: ${{ fromJSON(needs.resolve-targets.outputs.source) }}
       fail-fast: false
     with:
       command: p2p-integration
@@ -237,16 +248,16 @@ jobs:
 
   promote:
     name: promote
-    needs: [integration-test, security-image-scan, security-source-scan]
+    needs: [resolve-targets, integration-test, security-image-scan, security-source-scan]
     if: success() && ( github.ref == inputs.main-branch || github.ref_type == 'tag' )
     secrets:
       env_vars: ${{ secrets.env_vars }}
     uses: ./.github/workflows/p2p-promote-image.yaml
     strategy:
-      matrix: ${{ fromJSON(inputs.destination) }}
+      matrix: ${{ fromJSON(needs.resolve-targets.outputs.destination) }}
       fail-fast: false
     with:
-      source_matrix: ${{ inputs.source }}
+      source_matrix: ${{ needs.resolve-targets.outputs.source }}
       dest_github_env: ${{ matrix.deploy_env }}
       region: ${{ inputs.region }}
       promotion-stage: extended-test
@@ -259,7 +270,7 @@ jobs:
       runner-label: ${{ inputs.runner-label }}
 
   notify-failure:
-    needs: [build, security-source-scan, security-image-scan, functional-test, nft-test, integration-test, promote]
+    needs: [resolve-targets, build, security-source-scan, security-image-scan, functional-test, nft-test, integration-test, promote]
     runs-on: ${{ inputs.runner-label || vars.P2P_RUNNER_LABEL || 'ubuntu-24.04' }}
     timeout-minutes: 5
     if: always() && github.ref == inputs.main-branch && contains(needs.*.result, 'failure')

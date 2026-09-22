@@ -52,6 +52,9 @@ This workflow has no outputs.
 
 The `promote-image` job authenticates separately to the source and destination GCP projects using Workload Identity Federation. It then logs skopeo in to both registries so that the tenant's `p2p-promote-to-<stage>` make target can copy images without managing credentials itself.
 
+When the repository-level `CORECTL_CONTEXT` variable is set, those cloud-auth
+and skopeo-login steps are skipped.
+
 The following environment variables are available to the make target:
 
 | Variable | Description |

@@ -105,6 +105,26 @@ notify-failure       (needs: all jobs; runs on main-branch when any job fails)
 
 All jobs use a matrix derived from `source`. The `promote` job uses a matrix derived from `destination`. The `security-source-scan` job is not part of the matrix; it runs once per workflow. Security PR comments are scoped to `app-name`.
 
+Set the repository-level `CORECTL_CONTEXT` GitHub Actions variable (for example,
+`core-platform-integration/cecg-test`) to enable corectl OIDC. When `CORECTL_VERSION`
+is unset, P2P uses the latest corectl version. Set `CORECTL_VERSION` to a published
+version to pin it. `CORECTL_PORTAL_URL` is optional; set it to use a different
+Portal instance. Each command job resolves the package to a digest for that run,
+downloads corectl, and checks its published SHA-256 checksums. It connects to the
+cluster named by that job's `DPLATFORM` GitHub environment variable, or by the
+GitHub environment name when `DPLATFORM` is unset, and exports an isolated
+kubeconfig for kubectl, Helm, and Make. It then attempts to disconnect after
+artifacts are uploaded. A disconnect failure produces a warning without failing
+the job. Both paths run `kubectl cluster-info --namespace "$TENANT_NAME"` and
+`kubectl auth whoami` before running Make. They check permission to create
+subnamespaces only when automatic subnamespace creation is enabled and
+requested. In corectl mode, they also wait for deployment permission in the
+new subnamespace. The caller must grant `id-token: write`. The repository must be
+associated with a delivery unit in the Portal context on the target cluster;
+the cluster needs Pinniped configuration and namespace RBAC before the command
+job can deploy. The corectl tunnel renews its GitHub OIDC assertion and Pinniped
+credentials during long-running jobs.
+
 `runner-label` applies to command execution, security scanning, promotion, and notification jobs. Set it on a workflow call for an explicit override. To configure callers centrally, define `P2P_RUNNER_LABEL` as an organization variable and grant the required repositories access. A repository variable with the same name overrides the organization value. When neither setting has a value, P2P uses `ubuntu-24.04`.
 
 ## See also

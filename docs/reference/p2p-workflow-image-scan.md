@@ -67,7 +67,11 @@ The workflow inherits the token permissions passed by the caller chain. In neste
 | `id-token: write` | Always — GCP authentication via Workload Identity Federation. |
 | `pull-requests: write` | `pull_request` events only, and only when sticky PR comments are wanted. Without it the comment step fails open (continue-on-error); the summary and artifact are still produced. |
 
-The job runs under `environment: ${{ inputs.github_env }}` and authenticates to the stage Artifact Registry plus the optional tenant-provided registry before pulling and scanning images.
+The job runs under `environment: ${{ inputs.github_env }}`. In legacy mode it
+authenticates to the stage Artifact Registry plus the optional tenant-provided
+registry before pulling and scanning images. When the repository-level
+`CORECTL_CONTEXT` variable is set, it skips cloud-provider authentication and
+Artifact Registry login.
 
 ## Image resolution
 
