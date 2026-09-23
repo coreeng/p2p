@@ -77,6 +77,16 @@ on:
         default: ''
 
 jobs:
+  resolve-targets:
+    uses: ./.github/workflows/p2p-resolve-targets.yaml
+    with:
+      app-name: ${{ inputs.app-name }}
+      source: ${{ inputs.source }}
+      destination: ''
+      source-stage: prod
+      destination-stage: ''
+      runner-label: ${{ inputs.runner-label }}
+
   validate-version:
     name: validate-version
     if: success() && github.ref == inputs.main-branch
@@ -95,7 +105,7 @@ jobs:
           fi
 
   security-image-scan:
-    needs: [validate-version]
+    needs: [resolve-targets, validate-version]
     if: success() && github.ref == inputs.main-branch
     uses: ./.github/workflows/p2p-workflow-image-scan.yaml
     permissions:
@@ -107,7 +117,7 @@ jobs:
       container_registry_pat: ${{ secrets.container_registry_pat }}
       container_registry_url: ${{ secrets.container_registry_url }}
     strategy:
-      matrix: ${{ fromJSON(inputs.source) }}
+      matrix: ${{ fromJSON(needs.resolve-targets.outputs.source) }}
       fail-fast: false
     with:
       pipeline-stage: prod
@@ -126,7 +136,7 @@ jobs:
 
   prod-deploy:
     name: prod-deploy
-    needs: [security-image-scan]
+    needs: [resolve-targets, security-image-scan]
     if: success() && github.ref == inputs.main-branch
     uses: ./.github/workflows/p2p-execute-command.yaml
     secrets:
@@ -135,7 +145,7 @@ jobs:
       container_registry_pat: ${{ secrets.container_registry_pat }}
       container_registry_url: ${{ secrets.container_registry_url }}
     strategy:
-      matrix: ${{ fromJSON(inputs.source) }}
+      matrix: ${{ fromJSON(needs.resolve-targets.outputs.source) }}
       fail-fast: false
     with:
       command: p2p-prod
@@ -152,7 +162,7 @@ jobs:
       runner-label: ${{ inputs.runner-label }}
 
   notify-failure:
-    needs: [validate-version, security-image-scan, prod-deploy]
+    needs: [resolve-targets, validate-version, security-image-scan, prod-deploy]
     runs-on: ${{ inputs.runner-label || vars.P2P_RUNNER_LABEL || 'ubuntu-24.04' }}
     timeout-minutes: 5
     if: always() && github.ref == inputs.main-branch && contains(needs.*.result, 'failure')

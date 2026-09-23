@@ -86,11 +86,16 @@ validate-version
                 Only runs on main-branch after security-image-scan succeeds.
                 checkout-version = version-prefix + version.
 
-notify-failure  (needs: validate-version, security-image-scan, prod-deploy; runs on main-branch when any job fails)
+notify-failure  (needs: resolve-targets, validate-version, security-image-scan, prod-deploy; runs on main-branch when any job fails)
 notify-success  (needs: prod-deploy; runs on main-branch when prod-deploy succeeds and dry-run=false)
 ```
 
 `notify-failure` and `notify-success` are independent of each other and run after `prod-deploy` completes. Unlike other orchestrator workflows, this workflow sends a Slack notification on successful deployment as well as on failure.
+
+When the repository-level `CORECTL_CONTEXT` variable is set, command jobs use
+corectl OIDC. When `CORECTL_VERSION` is unset, P2P uses the latest corectl version;
+set it to a published version to pin it. `CORECTL_PORTAL_URL` is optional; set it
+to use a different Portal instance.
 
 ## See also
 

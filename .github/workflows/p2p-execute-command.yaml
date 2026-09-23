@@ -94,8 +94,8 @@ jobs:
       env_vars: ${{ secrets.env_vars }}
       BASE_DOMAIN: ${{ vars.BASE_DOMAIN }}
       INTERNAL_SERVICES_DOMAIN: ${{ vars.INTERNAL_SERVICES_DOMAIN }}
-      DPLATFORM: ${{ vars.DPLATFORM }}
-      PLATFORM_ENVIRONMENT: ${{ vars.DPLATFORM }}
+      DPLATFORM: ${{ vars.DPLATFORM || inputs.github_env }}
+      PLATFORM_ENVIRONMENT: ${{ vars.DPLATFORM || inputs.github_env }}
       PROJECT_ID: ${{ vars.PROJECT_ID }}
       PROJECT_NUMBER: ${{ vars.PROJECT_NUMBER }}
       REGION: ${{ inputs.region || vars.REGION || 'europe-west2' }}
@@ -104,6 +104,8 @@ jobs:
       SERVICE_ACCOUNT: p2p-${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}@${{ vars.PROJECT_ID }}.iam.gserviceaccount.com
       TENANT_NAME: ${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}
       WORKLOAD_IDENTITY_PROVIDER: projects/${{ vars.PROJECT_NUMBER }}/locations/global/workloadIdentityPools/p2p-${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}/providers/p2p-${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}
+      CORECTL_PORTAL_URL: ${{ vars.CORECTL_PORTAL_URL }}
+      CORECTL_CONTEXT: ${{ vars.CORECTL_CONTEXT }}
     steps:
       - name: print env context
         run: |
@@ -116,9 +118,38 @@ jobs:
         with:
           ref: ${{ inputs.dry-run == false && inputs.checkout-version || '' }}
 
-      - name: Authenticate to Google Cloud
+      - name: Setup corectl
+        if: ${{ inputs.dry-run == false && vars.CORECTL_CONTEXT != '' }}
+        uses: $/.github/actions/setup-corectl
+        with:
+          version: ${{ vars.CORECTL_VERSION || 'latest' }}
+
+      - name: Connect to cluster
+        id: corectl-connect
+        if: ${{ inputs.dry-run == false && vars.CORECTL_CONTEXT != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$CORECTL_CONTEXT" || -z "$DPLATFORM" ]]; then
+            echo "corectl OIDC requires a context and DPLATFORM cluster" >&2
+            exit 1
+          fi
+          echo "XDG_CONFIG_HOME=$RUNNER_TEMP/corectl-ci" >> "$GITHUB_ENV"
+          echo "KUBECONFIG=$RUNNER_TEMP/corectl-kubeconfig" >> "$GITHUB_ENV"
+          portal_args=()
+          if [[ -n "$CORECTL_PORTAL_URL" ]]; then
+            portal_args=(--url "$CORECTL_PORTAL_URL")
+          fi
+          XDG_CONFIG_HOME="$RUNNER_TEMP/corectl-ci" \
+            corectl connect "$DPLATFORM" --oidc github \
+            --context "$CORECTL_CONTEXT" "${portal_args[@]}" \
+            --kubeconfig "$RUNNER_TEMP/corectl-kubeconfig"
+
+      # Provider-specific authentication belongs to the legacy path. The corectl
+      # path uses Portal OIDC and Pinniped without GKE, AWS, or Azure credentials.
+      - name: Authenticate to Google Cloud for GKE and Artifact Registry
         id: auth
-        if: ${{ inputs.dry-run == false }}
+        if: ${{ inputs.dry-run == false && vars.CORECTL_CONTEXT == '' }}
         uses: google-github-actions/auth@v3
         with:
           workload_identity_provider: ${{ env.WORKLOAD_IDENTITY_PROVIDER }}
@@ -129,14 +160,14 @@ jobs:
 
       - name: Setup Google Cloud SDK
         id: setup-gcloud
-        if: ${{ inputs.dry-run == false }}
+        if: ${{ inputs.dry-run == false && vars.CORECTL_CONTEXT == '' }}
         uses: google-github-actions/setup-gcloud@v3
         with:
           skip_install: true
 
       - name: Setup kubeconfig
         id: setup-kubeconfig
-        if: ${{ inputs.dry-run == false }}
+        if: ${{ inputs.dry-run == false && vars.CORECTL_CONTEXT == '' }}
         uses: google-github-actions/get-gke-credentials@v3
         with:
           context_name: gke_${{ env.PROJECT_ID }}_${{ env.REGION }}_${{ env.DPLATFORM }}
@@ -148,8 +179,14 @@ jobs:
       - name: Test kubeconfig
         id: test-kubeconfig
         if: ${{ inputs.dry-run == false }}
+        env:
+          VERIFY_SUBNAMESPACE_CREATION: ${{ inputs.skip-subnamespaces-create == false && inputs.app-name != '' && inputs.subnamespace != '' }}
         run: |
-          kubectl cluster-info
+          kubectl cluster-info --namespace "$TENANT_NAME"
+          kubectl auth whoami
+          if [[ "$VERIFY_SUBNAMESPACE_CREATION" == true ]]; then
+            kubectl auth can-i create subnamespaceanchors.hnc.x-k8s.io -n "$TENANT_NAME" | grep -qx yes
+          fi
 
       - name: Setup Docker Buildx
         id: setup-docker-buildx
@@ -172,7 +209,7 @@ jobs:
 
       - name: Login to Artifact Registry
         uses: docker/login-action@v4
-        if: ${{ inputs.dry-run == false }}
+        if: ${{ inputs.dry-run == false && vars.CORECTL_CONTEXT == '' }}
         with:
           registry: ${{ env.REGION }}-docker.pkg.dev
           username: oauth2accesstoken
@@ -209,7 +246,20 @@ jobs:
           done
           kubectl config set-context --current --namespace="${SUBNAMESPACE}"
           echo ""
-          kubectl get ns "${SUBNAMESPACE}"
+          if [[ -n "$CORECTL_CONTEXT" ]]; then
+            for attempt in {1..60}; do
+              if kubectl auth can-i create deployments.apps -n "${SUBNAMESPACE}" | grep -qx yes; then
+                break
+              fi
+              if (( attempt == 60 )); then
+                echo "Timed out waiting for deployment access to subnamespace ${SUBNAMESPACE}" >&2
+                exit 1
+              fi
+              sleep 2
+            done
+          else
+            kubectl get ns "${SUBNAMESPACE}"
+          fi
 
       - name: Decode environment variables
         shell: bash
@@ -306,3 +356,11 @@ jobs:
           path: ${{ steps.resolve-artifacts.outputs.paths }}
           retention-days: 14
           if-no-files-found: warn
+
+      - name: Disconnect from cluster
+        if: ${{ always() && steps.corectl-connect.outcome == 'success' }}
+        shell: bash
+        run: |
+          if ! corectl disconnect --kubeconfig "$KUBECONFIG"; then
+            echo "::warning title=Tunnel cleanup failed::corectl disconnect failed; check for a remaining tunnel and Portal session"
+          fi

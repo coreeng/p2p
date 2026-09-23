@@ -1,0 +1,78 @@
+on:
+  workflow_call:
+    inputs:
+      app-name:
+        required: false
+        type: string
+        default: ''
+      source:
+        required: false
+        type: string
+        default: ''
+      destination:
+        required: false
+        type: string
+        default: ''
+      source-stage:
+        required: true
+        type: string
+      destination-stage:
+        required: false
+        type: string
+        default: ''
+      runner-label:
+        required: false
+        type: string
+        default: ''
+    outputs:
+      source:
+        value: ${{ jobs.resolve.outputs.source }}
+      destination:
+        value: ${{ jobs.resolve.outputs.destination }}
+
+jobs:
+  resolve:
+    runs-on: ${{ inputs.runner-label || vars.P2P_RUNNER_LABEL || 'ubuntu-24.04' }}
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      source: ${{ steps.targets.outputs.source }}
+      destination: ${{ steps.targets.outputs.destination }}
+    env:
+      CORECTL_PORTAL_URL: ${{ vars.CORECTL_PORTAL_URL }}
+      CORECTL_CONTEXT: ${{ vars.CORECTL_CONTEXT }}
+      APP_NAME: ${{ inputs.app-name }}
+      SOURCE_STAGE: ${{ inputs.source-stage }}
+      DESTINATION_STAGE: ${{ inputs.destination-stage }}
+      LEGACY_SOURCE: ${{ inputs.source }}
+      LEGACY_DESTINATION: ${{ inputs.destination }}
+    steps:
+      - name: Setup corectl
+        if: ${{ vars.CORECTL_CONTEXT != '' }}
+        uses: $/.github/actions/setup-corectl
+        with:
+          version: ${{ vars.CORECTL_VERSION || 'latest' }}
+      - name: Resolve application targets
+        id: targets
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -n "$CORECTL_CONTEXT" ]]; then
+            portal_args=()
+            if [[ -n "$CORECTL_PORTAL_URL" ]]; then
+              portal_args=(--url "$CORECTL_PORTAL_URL")
+            fi
+            targets="$(corectl --non-interactive --context "$CORECTL_CONTEXT" p2p targets --application "$APP_NAME" --oidc github "${portal_args[@]}" -o json)"
+            source="$(jq -c --arg stage "$SOURCE_STAGE" '.[$stage]' <<< "$targets")"
+            destination="$(jq -c --arg stage "$DESTINATION_STAGE" '.[$stage]' <<< "$targets")"
+          else
+            source="$LEGACY_SOURCE"
+            destination="$LEGACY_DESTINATION"
+          fi
+          jq -e '.include | length > 0' <<< "$source" >/dev/null
+          if [[ -n "$DESTINATION_STAGE" ]]; then
+            jq -e '.include | length > 0' <<< "$destination" >/dev/null
+          fi
+          echo "source=$source" >> "$GITHUB_OUTPUT"
+          echo "destination=$destination" >> "$GITHUB_OUTPUT"
