@@ -84,6 +84,9 @@ jobs:
     name: '${{ inputs.command }} (${{ inputs.github_env }})'
     runs-on: ${{ inputs.runner-label || vars.P2P_RUNNER_LABEL || 'ubuntu-24.04' }}
     environment: ${{ inputs.github_env }}
+    permissions:
+      contents: read
+      id-token: write
     concurrency:
       group: >-
         ${{ inputs.command == 'p2p-build'
@@ -188,6 +191,15 @@ jobs:
             kubectl auth can-i create subnamespaceanchors.hnc.x-k8s.io -n "$TENANT_NAME" | grep -qx yes
           fi
 
+      - name: Prepare image registry client
+        if: ${{ inputs.dry-run == false && vars.CORECTL_CONTEXT != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker_config="$RUNNER_TEMP/p2p-registry-docker"
+          install -d -m 0700 "$docker_config"
+          echo "DOCKER_CONFIG=$docker_config" >> "$GITHUB_ENV"
+
       - name: Setup Docker Buildx
         id: setup-docker-buildx
         uses: docker/setup-buildx-action@v4
@@ -220,7 +232,7 @@ jobs:
           REGISTRY_USER: ${{ secrets.container_registry_user }}
           REGISTRY_PAT: ${{ secrets.container_registry_pat }}
           REGISTRY_URL: ${{ secrets.container_registry_url }}
-        if:  ${{ env.REGISTRY_USER && env.REGISTRY_PAT }}
+        if: ${{ vars.CORECTL_CONTEXT == '' && env.REGISTRY_USER && env.REGISTRY_PAT }}
         run: |
           echo ${{ env.REGISTRY_PAT }} | docker login ${{ env.REGISTRY_URL }} -u ${{ env.REGISTRY_USER }} --password-stdin
 
@@ -266,10 +278,35 @@ jobs:
         run: |
           IFS=$'\n'
           for i in $env_vars; do
+            if [[ "$i" =~ ^CORECTL_CONTEXT= ]]; then
+              echo "Application environment variables cannot override CORECTL_CONTEXT" >&2
+              exit 1
+            fi
+            if [[ -n "$CORECTL_CONTEXT" && "$i" =~ ^(P2P_REGISTRY|REGISTRY=|TENANT_NAME=|GITHUB_REPOSITORY_ID=|DPLATFORM=|CORECTL_PORTAL_URL=|DOCKER_CONFIG=|RUNNER_TEMP=) ]]; then
+              echo "Application environment variables cannot override platform registry configuration" >&2
+              exit 1
+            fi
             i="${i%%=*}"="${i#*=}"
             echo "::add-mask::${i#*=}"
             printf '%s\n' "${i//\\/\\\\}" >> "${GITHUB_ENV}"
           done
+
+      - name: Connect to image registry
+        if: ${{ inputs.dry-run == false && vars.CORECTL_CONTEXT != '' }}
+        shell: bash
+        env:
+          EXPECTED_GITHUB_ENV: ${{ inputs.github_env }}
+        run: |
+          set -euo pipefail
+          corectl p2p registry connect "$DPLATFORM" --application "$TENANT_NAME" \
+            --context "$CORECTL_CONTEXT" --url "$CORECTL_PORTAL_URL" \
+            --ci-environment "$EXPECTED_GITHUB_ENV" --output env >> "$GITHUB_ENV"
+
+      - name: Authenticate to image registry
+        if: ${{ inputs.dry-run == false && vars.CORECTL_CONTEXT != '' }}
+        shell: bash
+        run: |
+          corectl p2p registry login "$DPLATFORM" --context "$CORECTL_CONTEXT"
 
       - name: Set p2p variables
         id: setup-p2p-variables
@@ -278,7 +315,15 @@ jobs:
           export P2P_TENANT_NAME="${{ env.TENANT_NAME }}"
           export P2P_APP_NAME=${{ inputs.app-name }}
           export P2P_VERSION=${{ inputs.version }}
-          export P2P_REGISTRY=${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/tenant/${{ env.TENANT_NAME }}
+          if [[ -n "$CORECTL_CONTEXT" ]]; then
+            : "${P2P_REGISTRY:?platform registry contract is missing}"
+            if [[ "${{ inputs.command }}" != "p2p-build" ]]; then
+              echo "Cluster image pulls are not available yet" >&2
+              exit 1
+            fi
+          else
+            export P2P_REGISTRY=${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/tenant/${{ env.TENANT_NAME }}
+          fi
           export P2P_REGISTRY_FAST_FEEDBACK_PATH=fast-feedback
           export P2P_REGISTRY_EXTENDED_TEST_PATH=extended-test
           export P2P_REGISTRY_PROD_PATH=prod
@@ -356,6 +401,14 @@ jobs:
           path: ${{ steps.resolve-artifacts.outputs.paths }}
           retention-days: 14
           if-no-files-found: warn
+
+      - name: Disconnect from image registry
+        if: ${{ always() && inputs.dry-run == false && vars.CORECTL_CONTEXT != '' }}
+        shell: bash
+        run: |
+          if command -v corectl >/dev/null && ! corectl p2p registry disconnect "$DPLATFORM" --context "$CORECTL_CONTEXT"; then
+            echo "::warning title=Registry cleanup failed::The image registry connection may still be active"
+          fi
 
       - name: Disconnect from cluster
         if: ${{ always() && steps.corectl-connect.outcome == 'success' }}

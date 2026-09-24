@@ -198,6 +198,9 @@ jobs:
         run: |
           node .github/scripts/tests/image-ref-resolution.test.js
 
+      - name: Test registry Make contract
+        run: python3 .github/scripts/tests/registry-workflow.test.py
+
       - name: Test scheduled image name pass-through
         run: |
           set -euo pipefail

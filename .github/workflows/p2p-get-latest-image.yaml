@@ -56,7 +56,9 @@ jobs:
     env:
       BASE_DOMAIN: ${{ vars.BASE_DOMAIN }}
       INTERNAL_SERVICES_DOMAIN: ${{ vars.INTERNAL_SERVICES_DOMAIN }}
-      DPLATFORM: ${{ vars.DPLATFORM }}
+      DPLATFORM: ${{ vars.DPLATFORM || inputs.github_env }}
+      CORECTL_CONTEXT: ${{ vars.CORECTL_CONTEXT }}
+      CORECTL_PORTAL_URL: ${{ vars.CORECTL_PORTAL_URL }}
       PROJECT_ID: ${{ vars.PROJECT_ID }}
       PROJECT_NUMBER: ${{ vars.PROJECT_NUMBER }}
       REGION: ${{ inputs.region || vars.REGION || 'europe-west2' }}
@@ -104,23 +106,77 @@ jobs:
           rm -rf "$RUNNER_TEMP/p2p-workflow-src"
           mv .p2p-workflow-src "$RUNNER_TEMP/p2p-workflow-src"
 
+      - name: Setup corectl
+        if: ${{ inputs.dry-run == false && vars.CORECTL_CONTEXT != '' }}
+        uses: $/.github/actions/setup-corectl
+        with:
+          version: ${{ vars.CORECTL_VERSION || 'latest' }}
+
+      - name: Prepare image lookup
+        if: ${{ inputs.dry-run == false && vars.CORECTL_CONTEXT != '' }}
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes skopeo
+
+      - name: Connect to image registry
+        if: ${{ inputs.dry-run == false && vars.CORECTL_CONTEXT != '' }}
+        shell: bash
+        env:
+          EXPECTED_GITHUB_ENV: ${{ inputs.github_env }}
+        run: |
+          set -euo pipefail
+          export XDG_CONFIG_HOME="$RUNNER_TEMP/corectl-ci"
+          echo "XDG_CONFIG_HOME=$XDG_CONFIG_HOME" >> "$GITHUB_ENV"
+          corectl p2p registry connect "$DPLATFORM" --application "$TENANT_NAME" \
+            --context "$CORECTL_CONTEXT" --url "$CORECTL_PORTAL_URL" \
+            --ci-environment "$EXPECTED_GITHUB_ENV" --output env >> "$GITHUB_ENV"
+
+      - name: Authenticate to image registry
+        if: ${{ inputs.dry-run == false && vars.CORECTL_CONTEXT != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          export DOCKER_CONFIG="$RUNNER_TEMP/p2p-latest-docker"
+          install -d -m 0700 "$DOCKER_CONFIG"
+          echo "DOCKER_CONFIG=$DOCKER_CONFIG" >> "$GITHUB_ENV"
+          corectl p2p registry login "$DPLATFORM" --context "$CORECTL_CONTEXT"
+
       - name: Get latest image
         id: get-latest-image
         env:
           DRY_RUN: ${{ inputs.dry-run }}
         run: |
-            set -o pipefail
+            set -euo pipefail
             if [ "$DRY_RUN" == false ]; then
-              if ! version=$(gcloud artifacts docker images list "${REGISTRY}/${REGISTRY_PATH}/${IMAGE_NAME}" --include-tags --sort-by=~buildTime --format=json 2>/dev/null | node "$RUNNER_TEMP/p2p-workflow-src/.github/scripts/latest-image.js"); then
-                echo "exiting"
-                exit 1
+              if [[ -n "$CORECTL_CONTEXT" ]]; then
+                [[ "$REGISTRY_PATH" =~ ^(fast-feedback|extended-test|prod)$ ]] || exit 1
+                [[ "$IMAGE_NAME" =~ ^[a-z0-9]+([._-][a-z0-9]+)*$ ]] || exit 1
+                tags_file="$RUNNER_TEMP/p2p-image-tags.json"
+                error_file="$RUNNER_TEMP/p2p-image-tags-error"
+                if ! skopeo list-tags --tls-verify=false --authfile "$DOCKER_CONFIG/p2p-auth.json" \
+                  "docker://${P2P_REGISTRY}/${REGISTRY_PATH}/${IMAGE_NAME}" > "$tags_file" 2> "$error_file"; then
+                  if grep -Eqi '(^|[^[:alnum:]_])name[_ ]unknown([^[:alnum:]_]|$)|repository name not known to registry' "$error_file"; then
+                    printf '{"Tags":[]}\n' > "$tags_file"
+                  else
+                    cat "$error_file" >&2
+                    exit 1
+                  fi
+                fi
+                version="$(jq -r '.Tags[]?' "$tags_file" \
+                  | node "$RUNNER_TEMP/p2p-workflow-src/.github/scripts/latest-image.js")"
+              else
+                if ! version=$(gcloud artifacts docker images list "${REGISTRY}/${REGISTRY_PATH}/${IMAGE_NAME}" --include-tags --sort-by=~buildTime --format=json 2>/dev/null | node "$RUNNER_TEMP/p2p-workflow-src/.github/scripts/latest-image.js"); then
+                  echo "exiting"
+                  exit 1
+                fi
               fi
             else
               version="0.0.0"
             fi
             found=true
             if [ "$DRY_RUN" == false ] && { [ -z "${version:-}" ] || [ "${version}" == "null" ]; }; then
-              echo "No image tags found for ${REGISTRY}/${REGISTRY_PATH}/${IMAGE_NAME}; skipping downstream scan."
+              echo "No image tags found for ${P2P_REGISTRY:-$REGISTRY}/${REGISTRY_PATH}/${IMAGE_NAME}; skipping downstream scan."
               version=""
               found=false
             fi
@@ -133,3 +189,11 @@ jobs:
         run: |
           echo "Output version: ${{ steps.get-latest-image.outputs.version }}"
           echo "Found image: ${{ steps.get-latest-image.outputs.found }}"
+
+      - name: Disconnect from image registry
+        if: ${{ always() && inputs.dry-run == false && vars.CORECTL_CONTEXT != '' }}
+        shell: bash
+        run: |
+          if command -v corectl >/dev/null && ! corectl p2p registry disconnect "$DPLATFORM" --context "$CORECTL_CONTEXT"; then
+            echo "::warning title=Registry cleanup failed::The image registry connection may still be active"
+          fi

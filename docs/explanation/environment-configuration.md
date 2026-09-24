@@ -169,3 +169,17 @@ Images are stored at:
 - [How to use multiple environments](../how-to/use-multiple-environments.md)
 - [p2p-execute-command reference](../reference/p2p-execute-command.md)
 - [Pipeline model](pipeline-model.md)
+
+## Core Platform image registry
+
+The repository-level `CORECTL_CONTEXT` variable selects Core Platform cluster
+access and its image registry. Set it to `INSTANCE/CONTEXT_NAME`. Set
+`CORECTL_PORTAL_URL` only when using a non-default Portal, and `CORECTL_VERSION`
+only when a specific CLI version is required. No separate registry credentials
+or variables are needed. Repositories without `CORECTL_CONTEXT` keep the
+existing Artifact Registry path.
+
+P2P obtains the image path from the platform's delivery-unit assignment;
+applications cannot choose their own registry prefix. Build, scan, lookup,
+and promotion jobs use that assignment. Application deployments remain
+unavailable in this mode until cluster image pulls are configured.

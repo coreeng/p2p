@@ -81,6 +81,31 @@ async function runCase(name, makeOutputs, envOverrides = {}) {
   );
   assert.deepStrictEqual(inputImages.calls, [], 'image-names input wins: make is not called');
 
+  const registryImages = await runCase('context selects private registry', {}, {
+    CORECTL_CONTEXT: 'test/context',
+    P2P_REGISTRY: 'registry.example.com/commerce/payments',
+    IMAGE_NAMES: 'api',
+  });
+  assert.deepStrictEqual(registryImages.failures, []);
+  assert.strictEqual(
+    registryImages.outputs['image-refs'],
+    'registry.example.com/commerce/payments/fast-feedback/api:1.2.3',
+  );
+
+  const missingRegistryPrefix = await runCase('context requires assigned registry', {}, {
+    CORECTL_CONTEXT: 'test/context', IMAGE_NAMES: 'api',
+  });
+  assert.deepStrictEqual(missingRegistryPrefix.failures, ['platform registry prefix is required']);
+
+  const legacyWithRegistryValue = await runCase('empty context keeps Artifact Registry', {}, {
+    CORECTL_CONTEXT: '', P2P_REGISTRY: 'registry.example.com/commerce/payments', IMAGE_NAMES: 'api',
+  });
+  assert.deepStrictEqual(legacyWithRegistryValue.failures, []);
+  assert.strictEqual(
+    legacyWithRegistryValue.outputs['image-refs'],
+    'europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/fast-feedback/api:1.2.3',
+  );
+
   const emptyInput = await runCase('empty image-names falls back', {
     'p2p-images': 'worker\n',
   }, { IMAGE_NAMES: ' , \n\t' });

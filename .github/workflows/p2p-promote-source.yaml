@@ -1,0 +1,95 @@
+name: Read promotion source images
+
+on:
+  workflow_call:
+    inputs:
+      github_env: {required: true, type: string}
+      app-name: {required: false, type: string, default: ''}
+      tenant-name: {required: false, type: string, default: ''}
+      version: {required: true, type: string}
+      source-stage: {required: true, type: string}
+      checkout-version: {required: false, type: string, default: ''}
+      working-directory: {required: false, type: string, default: '.'}
+      runner-label: {required: false, type: string, default: ''}
+
+jobs:
+  read-source:
+    runs-on: ${{ inputs.runner-label || vars.P2P_RUNNER_LABEL || 'ubuntu-24.04' }}
+    environment: ${{ inputs.github_env }}
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      DPLATFORM: ${{ vars.DPLATFORM || inputs.github_env }}
+      CORECTL_CONTEXT: ${{ vars.CORECTL_CONTEXT }}
+      CORECTL_PORTAL_URL: ${{ vars.CORECTL_PORTAL_URL }}
+      TENANT_NAME: ${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}
+      VERSION: ${{ inputs.version }}
+      SOURCE_STAGE: ${{ inputs.source-stage }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.checkout-version || '' }}
+      - name: Setup corectl
+        uses: $/.github/actions/setup-corectl
+        with:
+          version: ${{ vars.CORECTL_VERSION || 'latest' }}
+      - name: Connect to image registry
+        shell: bash
+        env:
+          EXPECTED_GITHUB_ENV: ${{ inputs.github_env }}
+        run: |
+          set -euo pipefail
+          export XDG_CONFIG_HOME="$RUNNER_TEMP/corectl-ci"
+          echo "XDG_CONFIG_HOME=$XDG_CONFIG_HOME" >> "$GITHUB_ENV"
+          corectl p2p registry connect "$DPLATFORM" --application "$TENANT_NAME" \
+            --context "$CORECTL_CONTEXT" --url "$CORECTL_PORTAL_URL" \
+            --ci-environment "$EXPECTED_GITHUB_ENV" --output env >> "$GITHUB_ENV"
+      - name: Prepare image transfer
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes skopeo
+      - name: Collect source images
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          PROMOTION_APP_NAME: ${{ inputs.app-name }}
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_STAGE" =~ ^(fast-feedback|extended-test)$ ]] || exit 1
+          export DOCKER_CONFIG="$RUNNER_TEMP/p2p-source-docker"
+          install -d -m 0700 "$DOCKER_CONFIG" "$RUNNER_TEMP/p2p-source-images"
+          export P2P_TENANT_NAME="$TENANT_NAME"
+          export P2P_VERSION="$VERSION"
+          if [[ -n "$PROMOTION_APP_NAME" ]]; then
+            export P2P_APP_NAME="$PROMOTION_APP_NAME"
+          fi
+          images="$(make --no-print-directory p2p-images)"
+          [[ -n "$images" ]] || { echo "No images to promote" >&2; exit 1; }
+          for image in $images; do
+            [[ "$image" =~ ^[a-z0-9]+([._-][a-z0-9]+)*$ ]] || exit 1
+            corectl p2p registry login "$DPLATFORM" --context "$CORECTL_CONTEXT"
+            source="docker://${P2P_REGISTRY}/${SOURCE_STAGE}/${image}:${VERSION}"
+            digest="$(skopeo inspect --tls-verify=false --authfile "$DOCKER_CONFIG/p2p-auth.json" --format '{{.Digest}}' "$source")"
+            [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || exit 1
+            skopeo copy --all --preserve-digests --src-tls-verify=false --src-authfile "$DOCKER_CONFIG/p2p-auth.json" \
+              "$source" "oci-archive:$RUNNER_TEMP/p2p-source-images/${image}.tar"
+            printf '%s %s\n' "$image" "$digest" >> "$RUNNER_TEMP/p2p-source-images/digests.txt"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: registry-promotion-images
+          path: ${{ runner.temp }}/p2p-source-images/
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Disconnect from image registry
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          export DOCKER_CONFIG="$RUNNER_TEMP/p2p-source-docker"
+          if command -v corectl >/dev/null && ! corectl p2p registry disconnect "$DPLATFORM" --context "$CORECTL_CONTEXT"; then
+            echo "::warning title=Registry cleanup failed::The image registry connection may still be active"
+          fi
+          rm -rf "$DOCKER_CONFIG"

@@ -54,6 +54,17 @@ P2P_NAMESPACE_PROD ?= $(P2P_NAMESPACE)-prod
 
 P2P_IMAGE_NAMES ?= $(P2P_APP_NAME)
 
+.PHONY: p2p-registry-login
+p2p-registry-login:
+	@if [[ -n "$${CORECTL_CONTEXT:-}" ]]; then \
+		: "$${DPLATFORM:?missing platform cluster}"; \
+		: "$${DOCKER_CONFIG:?missing isolated Docker configuration}"; \
+		corectl p2p registry login "$$DPLATFORM" --context "$$CORECTL_CONTEXT"; \
+	fi
+
+# Refresh short-lived registry credentials after building and before pushing.
+push-app push-functional push-nft push-integration push-extended-test: p2p-registry-login
+
 .PHONY: p2p-help
 p2p-help:
 	@echo "Usage:"

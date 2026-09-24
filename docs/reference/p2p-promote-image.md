@@ -1,6 +1,6 @@
 # p2p-promote-image.yaml
 
-> Authenticates to source and destination Artifact Registries via skopeo, then delegates image promotion to the tenant's `p2p-promote-to-<stage>` make target.
+> Promotes a versioned image from the source environment to the destination environment.
 
 ## Usage
 
@@ -21,23 +21,23 @@ jobs:
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `promotion-stage` | string | Yes | — | The promotion stage name. The workflow runs `make p2p-promote-to-<promotion-stage>`. |
+| `promotion-stage` | string | Yes | — | Destination stage (`extended-test` or `prod`). |
 | `source_matrix` | string | Yes | — | JSON matrix string describing the source environment. The first entry's `deploy_env` is used as the source GitHub environment. |
 | `dest_github_env` | string | Yes | — | GitHub environment name for the destination. Used to resolve destination registry credentials. |
 | `app-name` | string | No | `''` | Application name. Must equal the tenant name (each application has its own application tenant). |
 | `tenant-name` | string | No | `''` | Tenant name. Must equal `app-name`. Falls back to the `TENANT_NAME` repository/environment variable when not set. |
-| `version` | string | No | `''` | Artifact version passed as `P2P_VERSION`. |
+| `version` | string | No | `''` | Image version to promote. |
 | `region` | string | No | `''` | GCP region. Falls back to the `REGION` repository/environment variable, then `europe-west2`. |
 | `working-directory` | string | No | `'.'` | Directory from which the `make` target is executed. |
 | `checkout-version` | string | No | `''` | Git ref to check out. Ignored when `dry-run` is `true`; the workflow checks out the default ref. |
-| `dry-run` | boolean | No | `false` | When `true`, skips GCP authentication, skopeo login, and the `make` invocation. |
+| `dry-run` | boolean | No | `false` | When `true`, skips promotion. |
 | `runner-label` | string | No | `''` | GitHub Actions runner label for every promotion job. When empty, uses the caller's `P2P_RUNNER_LABEL` organization or repository variable, then `ubuntu-24.04`. |
 
 ## Secrets
 
 | Name | Required | Description |
 |------|----------|-------------|
-| `env_vars` | No | Newline-delimited `KEY=VALUE` pairs decoded into the job environment before the `make` invocation. |
+| `env_vars` | No | Newline-delimited `KEY=VALUE` pairs for the legacy make target path. |
 
 ## Outputs
 
@@ -45,17 +45,20 @@ This workflow has no outputs.
 
 ## Job Graph
 
-1. `lookup` — Runs in the source GitHub environment to resolve source registry, project ID, service account, and workload identity provider. Outputs are consumed by `promote-image`.
-2. `promote-image` — Runs in `dest_github_env`. Authenticates to both source and destination GCP projects, logs skopeo in to both registries, sets P2P environment variables, and runs `make p2p-promote-to-<promotion-stage>`. Depends on `lookup`.
+Without `CORECTL_CONTEXT`, `lookup` and `promote-image` run the existing
+Artifact Registry path. With `CORECTL_CONTEXT`, the source and destination
+jobs use the platform-assigned registry paths.
 
 ## Promotion mechanism
 
-The `promote-image` job authenticates separately to the source and destination GCP projects using Workload Identity Federation. It then logs skopeo in to both registries so that the tenant's `p2p-promote-to-<stage>` make target can copy images without managing credentials itself.
+The legacy path runs the tenant's `p2p-promote-to-<stage>` make target with
+source and destination registry credentials.
 
-When the repository-level `CORECTL_CONTEXT` variable is set, those cloud-auth
-and skopeo-login steps are skipped.
+When `CORECTL_CONTEXT` is set, P2P promotes images between the assigned
+registries under the same version tag. Deployments remain unavailable in this
+mode until cluster image pulls are configured.
 
-The following environment variables are available to the make target:
+The following environment variables are available to the legacy make target:
 
 | Variable | Description |
 |----------|-------------|

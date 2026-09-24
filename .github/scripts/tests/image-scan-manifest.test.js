@@ -7,17 +7,19 @@ const {
   pullImages,
 } = require('../image-scan-helpers');
 
-async function runPullScript(imageRefs, inspectByRef) {
+async function runPullScript(imageRefs, inspectByRef, envOverrides = {}) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'image-pull-'));
   const outputs = {};
   const failures = [];
   const warnings = [];
   const pulls = [];
+  const authCalls = [];
 
   await pullImages({
     env: {
       RUNNER_TEMP: tmp,
       IMAGE_REFS: imageRefs.join('\n'),
+      ...envOverrides,
     },
     core: {
       setOutput: (key, value) => { outputs[key] = value; },
@@ -26,6 +28,10 @@ async function runPullScript(imageRefs, inspectByRef) {
       warning: message => { warnings.push(message); },
     },
     execFileSyncImpl(command, args) {
+      if (command === 'corectl') {
+        authCalls.push(args);
+        return '';
+      }
       assert.strictEqual(command, 'docker');
       if (args[0] === 'buildx') {
         const ref = args[3];
@@ -45,7 +51,7 @@ async function runPullScript(imageRefs, inspectByRef) {
     },
   });
 
-  return { outputs, failures, pulls, warnings };
+  return { outputs, failures, pulls, warnings, authCalls };
 }
 
 async function runManifestScript({ stage, vulnLines = [], secretLines = [], vulnRawLines = null, secretRawLines = null, setup = null, scanTargetCount = null }) {
@@ -152,6 +158,26 @@ async function runManifestScript({ stage, vulnLines = [], secretLines = [], vuln
     ],
   );
   assert.strictEqual(multiPlatform.outputs['scan-target-count'], '2');
+
+  const registryScan = await runPullScript(
+    ['registry.example.com/org/du/fast-feedback/api:1.2.3'],
+    {
+      'registry.example.com/org/du/fast-feedback/api:1.2.3': {
+        manifest: { digest: 'sha256:resolved' },
+        image: { os: 'linux', architecture: 'amd64' },
+      },
+    },
+    {
+      CORECTL_CONTEXT: 'test/context', DPLATFORM: 'dev',
+      P2P_REGISTRY: 'registry.example.com/org/du',
+      DOCKER_CONFIG: path.join(os.tmpdir(), 'registry-docker'),
+    },
+  );
+  assert.deepStrictEqual(registryScan.failures, []);
+  assert.strictEqual(registryScan.authCalls.length, 2, 'refresh credentials before inspect and pull');
+  assert.deepStrictEqual(registryScan.authCalls[0], [
+    'p2p', 'registry', 'login', 'dev', '--context', 'test/context',
+  ]);
 
   const mixedArtifacts = await runPullScript(
     [
