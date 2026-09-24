@@ -4,6 +4,7 @@ on:
   workflow_call:
     inputs:
       github_env: {required: true, type: string}
+      app-name: {required: false, type: string, default: ''}
       tenant-name: {required: false, type: string, default: ''}
       version: {required: true, type: string}
       source-stage: {required: true, type: string}
@@ -52,11 +53,18 @@ jobs:
       - name: Collect source images
         shell: bash
         working-directory: ${{ inputs.working-directory }}
+        env:
+          PROMOTION_APP_NAME: ${{ inputs.app-name }}
         run: |
           set -euo pipefail
           [[ "$SOURCE_STAGE" =~ ^(fast-feedback|extended-test)$ ]] || exit 1
           export DOCKER_CONFIG="$RUNNER_TEMP/p2p-source-docker"
           install -d -m 0700 "$DOCKER_CONFIG" "$RUNNER_TEMP/p2p-source-images"
+          export P2P_TENANT_NAME="$TENANT_NAME"
+          export P2P_VERSION="$VERSION"
+          if [[ -n "$PROMOTION_APP_NAME" ]]; then
+            export P2P_APP_NAME="$PROMOTION_APP_NAME"
+          fi
           images="$(make --no-print-directory p2p-images)"
           [[ -n "$images" ]] || { echo "No images to promote" >&2; exit 1; }
           for image in $images; do

@@ -152,8 +152,18 @@ jobs:
               if [[ -n "$CORECTL_CONTEXT" ]]; then
                 [[ "$REGISTRY_PATH" =~ ^(fast-feedback|extended-test|prod)$ ]] || exit 1
                 [[ "$IMAGE_NAME" =~ ^[a-z0-9]+([._-][a-z0-9]+)*$ ]] || exit 1
-                version="$(skopeo list-tags --tls-verify=false --authfile "$DOCKER_CONFIG/p2p-auth.json" \
-                  "docker://${P2P_REGISTRY}/${REGISTRY_PATH}/${IMAGE_NAME}" | jq -r '.Tags[]?' \
+                tags_file="$RUNNER_TEMP/p2p-image-tags.json"
+                error_file="$RUNNER_TEMP/p2p-image-tags-error"
+                if ! skopeo list-tags --tls-verify=false --authfile "$DOCKER_CONFIG/p2p-auth.json" \
+                  "docker://${P2P_REGISTRY}/${REGISTRY_PATH}/${IMAGE_NAME}" > "$tags_file" 2> "$error_file"; then
+                  if grep -Eqi '(^|[^[:alnum:]_])name[_ ]unknown([^[:alnum:]_]|$)|repository name not known to registry' "$error_file"; then
+                    printf '{"Tags":[]}\n' > "$tags_file"
+                  else
+                    cat "$error_file" >&2
+                    exit 1
+                  fi
+                fi
+                version="$(jq -r '.Tags[]?' "$tags_file" \
                   | node "$RUNNER_TEMP/p2p-workflow-src/.github/scripts/latest-image.js")"
               else
                 if ! version=$(gcloud artifacts docker images list "${REGISTRY}/${REGISTRY_PATH}/${IMAGE_NAME}" --include-tags --sort-by=~buildTime --format=json 2>/dev/null | node "$RUNNER_TEMP/p2p-workflow-src/.github/scripts/latest-image.js"); then

@@ -79,6 +79,7 @@ jobs:
       id-token: write
     with:
       github_env: ${{ fromJson(inputs.source_matrix).include[0]['deploy_env'] }}
+      app-name: ${{ inputs.app-name }}
       tenant-name: ${{ inputs.tenant-name }}
       version: ${{ inputs.version }}
       source-stage: ${{ inputs.promotion-stage == 'prod' && 'extended-test' || 'fast-feedback' }}
