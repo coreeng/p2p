@@ -84,10 +84,7 @@ jobs:
     name: '${{ inputs.command }} (${{ inputs.github_env }})'
     runs-on: ${{ inputs.runner-label || vars.P2P_RUNNER_LABEL || 'ubuntu-24.04' }}
     environment: ${{ inputs.github_env }}
-    permissions:
-      contents: read
-      id-token: write
-      packages: write
+    # Inherit token permissions from the caller; only some callers publish packages.
     concurrency:
       group: >-
         ${{ inputs.command == 'p2p-build'
