@@ -84,6 +84,9 @@ jobs:
     name: '${{ inputs.command }} (${{ inputs.github_env }})'
     runs-on: ${{ inputs.runner-label || vars.P2P_RUNNER_LABEL || 'ubuntu-24.04' }}
     environment: ${{ inputs.github_env }}
+    permissions:
+      contents: read
+      id-token: write
     concurrency:
       group: >-
         ${{ inputs.command == 'p2p-build'
@@ -117,6 +120,21 @@ jobs:
         uses: actions/checkout@v7
         with:
           ref: ${{ inputs.dry-run == false && inputs.checkout-version || '' }}
+
+      - name: Checkout trusted P2P helpers
+        if: ${{ inputs.dry-run == false && vars.CORECTL_CONTEXT != '' }}
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .p2p-workflow-src
+
+      - name: Move trusted P2P helpers outside app workspace
+        if: ${{ inputs.dry-run == false && vars.CORECTL_CONTEXT != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mv .p2p-workflow-src "$RUNNER_TEMP/p2p-workflow-src"
 
       - name: Setup corectl
         if: ${{ inputs.dry-run == false && vars.CORECTL_CONTEXT != '' }}
@@ -188,6 +206,15 @@ jobs:
             kubectl auth can-i create subnamespaceanchors.hnc.x-k8s.io -n "$TENANT_NAME" | grep -qx yes
           fi
 
+      - name: Prepare image registry client
+        if: ${{ inputs.dry-run == false && vars.CORECTL_CONTEXT != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker_config="$RUNNER_TEMP/p2p-registry-docker"
+          install -d -m 0700 "$docker_config"
+          echo "DOCKER_CONFIG=$docker_config" >> "$GITHUB_ENV"
+
       - name: Setup Docker Buildx
         id: setup-docker-buildx
         uses: docker/setup-buildx-action@v4
@@ -220,7 +247,7 @@ jobs:
           REGISTRY_USER: ${{ secrets.container_registry_user }}
           REGISTRY_PAT: ${{ secrets.container_registry_pat }}
           REGISTRY_URL: ${{ secrets.container_registry_url }}
-        if:  ${{ env.REGISTRY_USER && env.REGISTRY_PAT }}
+        if: ${{ vars.CORECTL_CONTEXT == '' && env.REGISTRY_USER && env.REGISTRY_PAT }}
         run: |
           echo ${{ env.REGISTRY_PAT }} | docker login ${{ env.REGISTRY_URL }} -u ${{ env.REGISTRY_USER }} --password-stdin
 
@@ -266,10 +293,36 @@ jobs:
         run: |
           IFS=$'\n'
           for i in $env_vars; do
+            if [[ "$i" =~ ^CORECTL_CONTEXT= ]]; then
+              echo "Application environment variables cannot override CORECTL_CONTEXT" >&2
+              exit 1
+            fi
+            if [[ -n "$CORECTL_CONTEXT" && "$i" =~ ^(P2P_REGISTRY|REGISTRY=|TENANT_NAME=|GITHUB_REPOSITORY_ID=|DPLATFORM=|CORECTL_PORTAL_URL=|DOCKER_CONFIG=|RUNNER_TEMP=) ]]; then
+              echo "Application environment variables cannot override platform registry configuration" >&2
+              exit 1
+            fi
             i="${i%%=*}"="${i#*=}"
             echo "::add-mask::${i#*=}"
             printf '%s\n' "${i//\\/\\\\}" >> "${GITHUB_ENV}"
           done
+
+      - name: Connect to image registry
+        if: ${{ inputs.dry-run == false && vars.CORECTL_CONTEXT != '' }}
+        shell: bash
+        env:
+          EXPECTED_GITHUB_ENV: ${{ inputs.github_env }}
+        run: |
+          "$RUNNER_TEMP/p2p-workflow-src/.github/scripts/registry-connect" "$EXPECTED_GITHUB_ENV"
+
+      - name: Authenticate to image registry
+        if: ${{ inputs.dry-run == false && vars.CORECTL_CONTEXT != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${DOCKER_CONFIG:?missing isolated Docker configuration}"
+          "$RUNNER_TEMP/p2p-workflow-src/.github/scripts/registry-login" \
+            --audience "core-platform-registry:$DPLATFORM" --registry "${P2P_REGISTRY%%/*}" \
+            --skopeo-auth-file "$RUNNER_TEMP/p2p-registry-auth.json"
 
       - name: Set p2p variables
         id: setup-p2p-variables
@@ -278,7 +331,15 @@ jobs:
           export P2P_TENANT_NAME="${{ env.TENANT_NAME }}"
           export P2P_APP_NAME=${{ inputs.app-name }}
           export P2P_VERSION=${{ inputs.version }}
-          export P2P_REGISTRY=${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/tenant/${{ env.TENANT_NAME }}
+          if [[ -n "$CORECTL_CONTEXT" ]]; then
+            : "${P2P_REGISTRY:?platform registry contract is missing}"
+            if [[ "${{ inputs.command }}" != "p2p-build" ]]; then
+              echo "Cluster image pulls are not available yet" >&2
+              exit 1
+            fi
+          else
+            export P2P_REGISTRY=${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/tenant/${{ env.TENANT_NAME }}
+          fi
           export P2P_REGISTRY_FAST_FEEDBACK_PATH=fast-feedback
           export P2P_REGISTRY_EXTENDED_TEST_PATH=extended-test
           export P2P_REGISTRY_PROD_PATH=prod

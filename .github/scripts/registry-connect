@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Obtain the registry route and OCI prefix from Core Platform, not app inputs.
+set -euo pipefail
+
+: "${CORECTL_CONTEXT:?missing Core Platform context}"
+: "${DPLATFORM:?missing platform cluster}"
+: "${1:?missing GitHub environment name}"
+: "${TENANT_NAME:?missing delivery unit}"
+: "${RUNNER_TEMP:?missing runner temp directory}"
+: "${GITHUB_ENV:?missing GitHub environment file}"
+[[ "$1" == "$DPLATFORM" ]] || {
+  echo "GitHub environment must match the target cluster for registry access" >&2
+  exit 1
+}
+
+export XDG_CONFIG_HOME="$RUNNER_TEMP/corectl-ci"
+echo "XDG_CONFIG_HOME=$XDG_CONFIG_HOME" >> "$GITHUB_ENV"
+portal_args=()
+if [[ -n "${CORECTL_PORTAL_URL:-}" ]]; then
+  portal_args=(--url "$CORECTL_PORTAL_URL")
+fi
+registry_json="$(corectl p2p registry connect "$DPLATFORM" \
+  --application "$TENANT_NAME" --context "$CORECTL_CONTEXT" \
+  "${portal_args[@]}" --output json)"
+registry="$(jq -er '.registry | select(type == "string")' <<< "$registry_json")"
+cluster="$(jq -er '.cluster | select(type == "string")' <<< "$registry_json")"
+prefix="$(jq -er '.prefix | select(type == "string")' <<< "$registry_json")"
+[[ "$registry" == localhost:5000 && "$cluster" == "$DPLATFORM" ]] || {
+  echo "Invalid registry connection" >&2
+  exit 1
+}
+"$(dirname "$0")/registry-contract" "$prefix"

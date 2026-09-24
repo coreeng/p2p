@@ -70,8 +70,8 @@ The workflow inherits the token permissions passed by the caller chain. In neste
 The job runs under `environment: ${{ inputs.github_env }}`. In legacy mode it
 authenticates to the stage Artifact Registry plus the optional tenant-provided
 registry before pulling and scanning images. When the repository-level
-`CORECTL_CONTEXT` variable is set, it skips cloud-provider authentication and
-Artifact Registry login.
+`CORECTL_CONTEXT` variable is set, it reads images from the assigned Core
+Platform registry.
 
 ## Image resolution
 

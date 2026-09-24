@@ -91,7 +91,17 @@ async function resolveImages({
   }
 
   function standardRefs(images) {
-    const registry = `${env.REGION}-docker.pkg.dev/${env.PROJECT_ID}/tenant/${env.TENANT_NAME}/${stage}`;
+    const registry = env.CORECTL_CONTEXT
+      ? `${env.P2P_REGISTRY}/${stage}`
+      : `${env.REGION}-docker.pkg.dev/${env.PROJECT_ID}/tenant/${env.TENANT_NAME}/${stage}`;
+    if (env.CORECTL_CONTEXT && !env.P2P_REGISTRY) {
+      core.setFailed('platform registry prefix is required');
+      return [];
+    }
+    if (env.CORECTL_CONTEXT && images.some(img => !/^[a-z0-9]+(?:[._-][a-z0-9]+)*$/.test(img))) {
+      core.setFailed('image names must be lowercase OCI path components');
+      return [];
+    }
     return images.map(img => `${registry}/${img}:${env.VERSION}`);
   }
 
@@ -128,10 +138,22 @@ async function pullImages({
   core.setOutput('list-path', listPath);
   let pulledCount = 0;
   for (const ref of refs) {
+    const refreshRegistryLogin = () => {
+      if (!env.CORECTL_CONTEXT) return;
+      for (const key of ['RUNNER_TEMP', 'DPLATFORM', 'P2P_REGISTRY']) {
+        if (!env[key]) throw new Error(`Missing ${key} for private registry image scan`);
+      }
+      execFileSyncImpl(path.join(env.RUNNER_TEMP, 'p2p-workflow-src/.github/scripts/registry-login'), [
+        '--audience', `core-platform-registry:${env.DPLATFORM}`,
+        '--registry', env.P2P_REGISTRY.split('/')[0],
+        '--skopeo-auth-file', path.join(env.RUNNER_TEMP, 'p2p-registry-auth.json'),
+      ], { stdio: 'inherit' });
+    };
     // One inspect per ref: `{{json .}}` exposes `.manifest.manifests[]` for OCI indexes / Docker manifest
     // lists, and `.manifest.digest` + `.image.{os,architecture,variant}` for single-manifest images.
     let info;
     try {
+      refreshRegistryLogin();
       const out = execFileSyncImpl('docker', ['buildx', 'imagetools', 'inspect', ref, '--format', '{{json .}}'], { encoding: 'utf8' });
       info = JSON.parse(out);
     } catch (err) {
@@ -176,6 +198,7 @@ async function pullImages({
         continue;
       }
       core.info(`Pulling ${ref} (${platform}) @ ${digest}`);
+      refreshRegistryLogin();
       execFileSyncImpl('docker', ['pull', '--platform', platform, ref], { stdio: 'inherit' });
       fsImpl.appendFileSync(listPath, `${ref}\t${platform}\t${digest}\n`);
       pulledCount += 1;

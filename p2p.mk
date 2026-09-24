@@ -54,6 +54,21 @@ P2P_NAMESPACE_PROD ?= $(P2P_NAMESPACE)-prod
 
 P2P_IMAGE_NAMES ?= $(P2P_APP_NAME)
 
+.PHONY: p2p-registry-login
+p2p-registry-login:
+	@if [[ -n "$${CORECTL_CONTEXT:-}" ]]; then \
+		: "$${RUNNER_TEMP:?missing runner temp directory}"; \
+		: "$${DPLATFORM:?missing platform cluster}"; \
+		: "$${P2P_REGISTRY:?missing platform registry}"; \
+		"$$RUNNER_TEMP/p2p-workflow-src/.github/scripts/registry-login" \
+			--audience "core-platform-registry:$$DPLATFORM" \
+			--registry "$${P2P_REGISTRY%%/*}" \
+			--skopeo-auth-file "$$RUNNER_TEMP/p2p-registry-auth.json"; \
+	fi
+
+# Refresh short-lived registry credentials after building and before pushing.
+push-app push-functional push-nft push-integration push-extended-test: p2p-registry-login
+
 .PHONY: p2p-help
 p2p-help:
 	@echo "Usage:"

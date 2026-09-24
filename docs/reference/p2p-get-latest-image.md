@@ -1,6 +1,6 @@
 # p2p-get-latest-image.yaml
 
-> Queries an Artifact Registry repository, sorts the available image tags by semantic version, and returns the highest version.
+> Queries the selected image registry, sorts the available image tags by semantic version, and returns the highest version.
 
 ## Usage
 
@@ -28,9 +28,9 @@ jobs:
 | `github_env` | string | Yes | — | GitHub Environment to authenticate against. |
 | `registry-path` | string | No | `extended-test` | Sub-path within the tenant registry to query (e.g. `fast-feedback`, `extended-test`, `prod`). |
 | `tenant-name` | string | No | `''` | Tenant name. Falls back to the `TENANT_NAME` repository/environment variable when not set. |
-| `dry-run` | boolean | No | `false` | When `true`, skips GCP authentication and returns `0.0.0` as the version. |
+| `dry-run` | boolean | No | `false` | When `true`, skips registry lookup and returns `0.0.0` as the version. |
 | `region` | string | No | `''` | GCP region. Falls back to the `REGION` repository/environment variable, then `europe-west2`. |
-| `working-directory` | string | No | `'.'` | Accepted for caller interface compatibility; version lookup queries Artifact Registry and does not require a checkout. |
+| `working-directory` | string | No | `'.'` | Accepted for caller interface compatibility; version lookup does not read application files. |
 | `runner-label` | string | No | `''` | GitHub Actions runner label for image lookup. When empty, uses the caller's `P2P_RUNNER_LABEL` organization or repository variable, then `ubuntu-24.04`. |
 
 ## Secrets
@@ -48,7 +48,7 @@ jobs:
 
 ## SemVer sorting logic
 
-The workflow calls `gcloud artifacts docker images list` for `<registry>/<registry-path>/<image-name>`, retrieves all tags, and sorts them using the shared latest-image resolver. The resolver:
+The workflow retrieves tags for `<registry>/<registry-path>/<image-name>` and sorts them using the shared latest-image resolver. The resolver:
 
 1. Parses SemVer tags with an optional leading `v`, such as `1.2.3`, `v1.2.3`, and `1.2.3-alpha.1`.
 2. Compares tags by the normalized SemVer value, ignoring build metadata for precedence.

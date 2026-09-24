@@ -1,6 +1,6 @@
 # p2p-execute-command.yaml
 
-> Authenticates to GCP and a Kubernetes cluster, sets up the P2P environment variables, and runs a `make` target.
+> Authenticates to the selected Kubernetes cluster and image registry, sets up the P2P environment variables, and runs a `make` target.
 
 ## Usage
 
@@ -67,7 +67,7 @@ The following variables are exported to `GITHUB_ENV` before the `make` target ru
 | `P2P_TENANT_NAME` | Resolved tenant name (`tenant-name` input or `TENANT_NAME` variable). |
 | `P2P_APP_NAME` | Value of the `app-name` input. |
 | `P2P_VERSION` | Value of the `version` input. |
-| `P2P_REGISTRY` | Base Artifact Registry path: `<region>-docker.pkg.dev/<project>/tenant/<tenant>`. |
+| `P2P_REGISTRY` | Base image registry path, assigned by Core Platform when `CORECTL_CONTEXT` is set. |
 | `P2P_REGISTRY_FAST_FEEDBACK` | `P2P_REGISTRY/fast-feedback` |
 | `P2P_REGISTRY_EXTENDED_TEST` | `P2P_REGISTRY/extended-test` |
 | `P2P_REGISTRY_PROD` | `P2P_REGISTRY/prod` |

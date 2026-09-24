@@ -91,6 +91,9 @@ jobs:
   security-image-scan:
     name: security-image-scan (${{ inputs.github_env != '' && format('{0}, {1}', inputs.pipeline-stage, inputs.github_env) || inputs.pipeline-stage }})
     runs-on: ${{ inputs.runner-label || vars.P2P_RUNNER_LABEL || 'ubuntu-24.04' }}
+    permissions:
+      contents: read
+      id-token: write
     environment: ${{ inputs.security-scan-enabled && inputs.github_env || '' }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
     outputs:
@@ -109,6 +112,9 @@ jobs:
       SERVICE_ACCOUNT: p2p-${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}@${{ vars.PROJECT_ID }}.iam.gserviceaccount.com
       TENANT_NAME: ${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}
       WORKLOAD_IDENTITY_PROVIDER: projects/${{ vars.PROJECT_NUMBER }}/locations/global/workloadIdentityPools/p2p-${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}/providers/p2p-${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}
+      DPLATFORM: ${{ vars.DPLATFORM || inputs.github_env }}
+      CORECTL_CONTEXT: ${{ vars.CORECTL_CONTEXT }}
+      CORECTL_PORTAL_URL: ${{ vars.CORECTL_PORTAL_URL }}
     steps:
       - name: Checkout
         if: inputs.security-scan-enabled
@@ -132,6 +138,12 @@ jobs:
           rm -rf "$RUNNER_TEMP/p2p-workflow-src"
           mv .p2p-workflow-src "$RUNNER_TEMP/p2p-workflow-src"
 
+      - name: Setup corectl
+        if: ${{ inputs.security-scan-enabled && inputs.dry-run == false && vars.CORECTL_CONTEXT != '' }}
+        uses: $/.github/actions/setup-corectl
+        with:
+          version: ${{ vars.CORECTL_VERSION || 'latest' }}
+
       - name: Authenticate to Google Cloud
         id: auth
         if: ${{ inputs.security-scan-enabled && inputs.dry-run == false && vars.CORECTL_CONTEXT == '' }}
@@ -151,8 +163,28 @@ jobs:
           username: oauth2accesstoken
           password: ${{ steps.auth.outputs.access_token }}
 
+      - name: Connect to image registry
+        if: ${{ inputs.security-scan-enabled && inputs.dry-run == false && vars.CORECTL_CONTEXT != '' }}
+        shell: bash
+        env:
+          EXPECTED_GITHUB_ENV: ${{ inputs.github_env }}
+        run: |
+          "$RUNNER_TEMP/p2p-workflow-src/.github/scripts/registry-connect" "$EXPECTED_GITHUB_ENV"
+
+      - name: Authenticate to image registry
+        if: ${{ inputs.security-scan-enabled && inputs.dry-run == false && vars.CORECTL_CONTEXT != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          export DOCKER_CONFIG="$RUNNER_TEMP/p2p-scan-docker"
+          install -d -m 0700 "$DOCKER_CONFIG"
+          echo "DOCKER_CONFIG=$DOCKER_CONFIG" >> "$GITHUB_ENV"
+          "$RUNNER_TEMP/p2p-workflow-src/.github/scripts/registry-login" \
+            --audience "core-platform-registry:$DPLATFORM" --registry "${P2P_REGISTRY%%/*}" \
+            --skopeo-auth-file "$RUNNER_TEMP/p2p-registry-auth.json"
+
       - name: Login to tenant provided registry
-        if: ${{ inputs.security-scan-enabled && inputs.dry-run == false }}
+        if: ${{ inputs.security-scan-enabled && inputs.dry-run == false && vars.CORECTL_CONTEXT == '' }}
         env:
           REGISTRY_USER: ${{ secrets.container_registry_user }}
           REGISTRY_PAT: ${{ secrets.container_registry_pat }}

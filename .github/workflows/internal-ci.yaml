@@ -186,6 +186,16 @@ jobs:
           set -euo pipefail
           node .github/scripts/tests/image-security-ignore-report.test.js
 
+  test_private_registry_contract:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Test image registry workflows
+        run: |
+          set -euo pipefail
+          .github/scripts/tests/registry-login.test.sh
+          python3 .github/scripts/tests/registry-workflow.test.py
+
   test_image_ref_resolution:
     runs-on: ubuntu-24.04
     steps:

@@ -1,0 +1,82 @@
+name: Read promotion source images
+
+on:
+  workflow_call:
+    inputs:
+      github_env: {required: true, type: string}
+      tenant-name: {required: false, type: string, default: ''}
+      version: {required: true, type: string}
+      source-stage: {required: true, type: string}
+      checkout-version: {required: false, type: string, default: ''}
+      working-directory: {required: false, type: string, default: '.'}
+      runner-label: {required: false, type: string, default: ''}
+
+jobs:
+  read-source:
+    runs-on: ${{ inputs.runner-label || vars.P2P_RUNNER_LABEL || 'ubuntu-24.04' }}
+    environment: ${{ inputs.github_env }}
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      DPLATFORM: ${{ vars.DPLATFORM || inputs.github_env }}
+      CORECTL_CONTEXT: ${{ vars.CORECTL_CONTEXT }}
+      CORECTL_PORTAL_URL: ${{ vars.CORECTL_PORTAL_URL }}
+      TENANT_NAME: ${{ inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME }}
+      VERSION: ${{ inputs.version }}
+      SOURCE_STAGE: ${{ inputs.source-stage }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.checkout-version || '' }}
+      - uses: actions/checkout@v7
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .p2p-workflow-src
+      - name: Move trusted helpers
+        shell: bash
+        run: mv .p2p-workflow-src "$RUNNER_TEMP/p2p-workflow-src"
+      - name: Setup corectl
+        uses: $/.github/actions/setup-corectl
+        with:
+          version: ${{ vars.CORECTL_VERSION || 'latest' }}
+      - name: Connect to image registry
+        shell: bash
+        env:
+          EXPECTED_GITHUB_ENV: ${{ inputs.github_env }}
+        run: |
+          "$RUNNER_TEMP/p2p-workflow-src/.github/scripts/registry-connect" "$EXPECTED_GITHUB_ENV"
+      - name: Prepare image transfer
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes skopeo
+      - name: Collect source images
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_STAGE" =~ ^(fast-feedback|extended-test)$ ]] || exit 1
+          export DOCKER_CONFIG="$RUNNER_TEMP/p2p-source-docker"
+          install -d -m 0700 "$DOCKER_CONFIG" "$RUNNER_TEMP/p2p-source-images"
+          images="$(make --no-print-directory p2p-images)"
+          [[ -n "$images" ]] || { echo "No images to promote" >&2; exit 1; }
+          for image in $images; do
+            [[ "$image" =~ ^[a-z0-9]+([._-][a-z0-9]+)*$ ]] || exit 1
+            "$RUNNER_TEMP/p2p-workflow-src/.github/scripts/registry-login" \
+              --audience "core-platform-registry:$DPLATFORM" --registry "${P2P_REGISTRY%%/*}" \
+              --skopeo-auth-file "$RUNNER_TEMP/p2p-source-auth.json"
+            source="docker://${P2P_REGISTRY}/${SOURCE_STAGE}/${image}:${VERSION}"
+            digest="$(skopeo inspect --tls-verify=false --authfile "$RUNNER_TEMP/p2p-source-auth.json" --format '{{.Digest}}' "$source")"
+            [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || exit 1
+            skopeo copy --all --preserve-digests --src-tls-verify=false --src-authfile "$RUNNER_TEMP/p2p-source-auth.json" \
+              "$source" "oci-archive:$RUNNER_TEMP/p2p-source-images/${image}.tar"
+            printf '%s %s\n' "$image" "$digest" >> "$RUNNER_TEMP/p2p-source-images/digests.txt"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: registry-promotion-images
+          path: ${{ runner.temp }}/p2p-source-images/
+          if-no-files-found: error
+          retention-days: 1
