@@ -312,17 +312,16 @@ jobs:
         env:
           EXPECTED_GITHUB_ENV: ${{ inputs.github_env }}
         run: |
-          "$RUNNER_TEMP/p2p-workflow-src/.github/scripts/registry-connect" "$EXPECTED_GITHUB_ENV"
+          set -euo pipefail
+          corectl p2p registry connect "$DPLATFORM" --application "$TENANT_NAME" \
+            --context "$CORECTL_CONTEXT" --url "$CORECTL_PORTAL_URL" \
+            --ci-environment "$EXPECTED_GITHUB_ENV" --output env >> "$GITHUB_ENV"
 
       - name: Authenticate to image registry
         if: ${{ inputs.dry-run == false && vars.CORECTL_CONTEXT != '' }}
         shell: bash
         run: |
-          set -euo pipefail
-          : "${DOCKER_CONFIG:?missing isolated Docker configuration}"
-          "$RUNNER_TEMP/p2p-workflow-src/.github/scripts/registry-login" \
-            --audience "core-platform-registry:$DPLATFORM" --registry "${P2P_REGISTRY%%/*}" \
-            --skopeo-auth-file "$RUNNER_TEMP/p2p-registry-auth.json"
+          corectl p2p registry login "$DPLATFORM" --context "$CORECTL_CONTEXT"
 
       - name: Set p2p variables
         id: setup-p2p-variables
@@ -417,6 +416,14 @@ jobs:
           path: ${{ steps.resolve-artifacts.outputs.paths }}
           retention-days: 14
           if-no-files-found: warn
+
+      - name: Disconnect from image registry
+        if: ${{ always() && inputs.dry-run == false && vars.CORECTL_CONTEXT != '' }}
+        shell: bash
+        run: |
+          if command -v corectl >/dev/null && ! corectl p2p registry disconnect "$DPLATFORM" --context "$CORECTL_CONTEXT"; then
+            echo "::warning title=Registry cleanup failed::The image registry connection may still be active"
+          fi
 
       - name: Disconnect from cluster
         if: ${{ always() && steps.corectl-connect.outcome == 'success' }}

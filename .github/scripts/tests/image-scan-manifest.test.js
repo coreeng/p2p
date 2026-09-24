@@ -28,7 +28,7 @@ async function runPullScript(imageRefs, inspectByRef, envOverrides = {}) {
       warning: message => { warnings.push(message); },
     },
     execFileSyncImpl(command, args) {
-      if (command === path.join(tmp, 'p2p-workflow-src/.github/scripts/registry-login')) {
+      if (command === 'corectl') {
         authCalls.push(args);
         return '';
       }
@@ -170,12 +170,13 @@ async function runManifestScript({ stage, vulnLines = [], secretLines = [], vuln
     {
       CORECTL_CONTEXT: 'test/context', DPLATFORM: 'dev',
       P2P_REGISTRY: 'registry.example.com/org/du',
+      DOCKER_CONFIG: path.join(os.tmpdir(), 'registry-docker'),
     },
   );
   assert.deepStrictEqual(registryScan.failures, []);
   assert.strictEqual(registryScan.authCalls.length, 2, 'refresh credentials before inspect and pull');
-  assert.deepStrictEqual(registryScan.authCalls[0].slice(0, 4), [
-    '--audience', 'core-platform-registry:dev', '--registry', 'registry.example.com',
+  assert.deepStrictEqual(registryScan.authCalls[0], [
+    'p2p', 'registry', 'login', 'dev', '--context', 'test/context',
   ]);
 
   const mixedArtifacts = await runPullScript(

@@ -125,7 +125,12 @@ jobs:
         env:
           EXPECTED_GITHUB_ENV: ${{ inputs.github_env }}
         run: |
-          "$RUNNER_TEMP/p2p-workflow-src/.github/scripts/registry-connect" "$EXPECTED_GITHUB_ENV"
+          set -euo pipefail
+          export XDG_CONFIG_HOME="$RUNNER_TEMP/corectl-ci"
+          echo "XDG_CONFIG_HOME=$XDG_CONFIG_HOME" >> "$GITHUB_ENV"
+          corectl p2p registry connect "$DPLATFORM" --application "$TENANT_NAME" \
+            --context "$CORECTL_CONTEXT" --url "$CORECTL_PORTAL_URL" \
+            --ci-environment "$EXPECTED_GITHUB_ENV" --output env >> "$GITHUB_ENV"
 
       - name: Authenticate to image registry
         if: ${{ inputs.dry-run == false && vars.CORECTL_CONTEXT != '' }}
@@ -134,9 +139,8 @@ jobs:
           set -euo pipefail
           export DOCKER_CONFIG="$RUNNER_TEMP/p2p-latest-docker"
           install -d -m 0700 "$DOCKER_CONFIG"
-          "$RUNNER_TEMP/p2p-workflow-src/.github/scripts/registry-login" \
-            --audience "core-platform-registry:$DPLATFORM" --registry "${P2P_REGISTRY%%/*}" \
-            --skopeo-auth-file "$RUNNER_TEMP/p2p-registry-auth.json"
+          echo "DOCKER_CONFIG=$DOCKER_CONFIG" >> "$GITHUB_ENV"
+          corectl p2p registry login "$DPLATFORM" --context "$CORECTL_CONTEXT"
 
       - name: Get latest image
         id: get-latest-image
@@ -148,7 +152,7 @@ jobs:
               if [[ -n "$CORECTL_CONTEXT" ]]; then
                 [[ "$REGISTRY_PATH" =~ ^(fast-feedback|extended-test|prod)$ ]] || exit 1
                 [[ "$IMAGE_NAME" =~ ^[a-z0-9]+([._-][a-z0-9]+)*$ ]] || exit 1
-                version="$(skopeo list-tags --tls-verify=false --authfile "$RUNNER_TEMP/p2p-registry-auth.json" \
+                version="$(skopeo list-tags --tls-verify=false --authfile "$DOCKER_CONFIG/p2p-auth.json" \
                   "docker://${P2P_REGISTRY}/${REGISTRY_PATH}/${IMAGE_NAME}" | jq -r '.Tags[]?' \
                   | node "$RUNNER_TEMP/p2p-workflow-src/.github/scripts/latest-image.js")"
               else
@@ -175,3 +179,11 @@ jobs:
         run: |
           echo "Output version: ${{ steps.get-latest-image.outputs.version }}"
           echo "Found image: ${{ steps.get-latest-image.outputs.found }}"
+
+      - name: Disconnect from image registry
+        if: ${{ always() && inputs.dry-run == false && vars.CORECTL_CONTEXT != '' }}
+        shell: bash
+        run: |
+          if command -v corectl >/dev/null && ! corectl p2p registry disconnect "$DPLATFORM" --context "$CORECTL_CONTEXT"; then
+            echo "::warning title=Registry cleanup failed::The image registry connection may still be active"
+          fi

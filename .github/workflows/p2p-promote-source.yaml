@@ -46,7 +46,12 @@ jobs:
         env:
           EXPECTED_GITHUB_ENV: ${{ inputs.github_env }}
         run: |
-          "$RUNNER_TEMP/p2p-workflow-src/.github/scripts/registry-connect" "$EXPECTED_GITHUB_ENV"
+          set -euo pipefail
+          export XDG_CONFIG_HOME="$RUNNER_TEMP/corectl-ci"
+          echo "XDG_CONFIG_HOME=$XDG_CONFIG_HOME" >> "$GITHUB_ENV"
+          corectl p2p registry connect "$DPLATFORM" --application "$TENANT_NAME" \
+            --context "$CORECTL_CONTEXT" --url "$CORECTL_PORTAL_URL" \
+            --ci-environment "$EXPECTED_GITHUB_ENV" --output env >> "$GITHUB_ENV"
       - name: Prepare image transfer
         shell: bash
         run: |
@@ -64,13 +69,11 @@ jobs:
           [[ -n "$images" ]] || { echo "No images to promote" >&2; exit 1; }
           for image in $images; do
             [[ "$image" =~ ^[a-z0-9]+([._-][a-z0-9]+)*$ ]] || exit 1
-            "$RUNNER_TEMP/p2p-workflow-src/.github/scripts/registry-login" \
-              --audience "core-platform-registry:$DPLATFORM" --registry "${P2P_REGISTRY%%/*}" \
-              --skopeo-auth-file "$RUNNER_TEMP/p2p-source-auth.json"
+            corectl p2p registry login "$DPLATFORM" --context "$CORECTL_CONTEXT"
             source="docker://${P2P_REGISTRY}/${SOURCE_STAGE}/${image}:${VERSION}"
-            digest="$(skopeo inspect --tls-verify=false --authfile "$RUNNER_TEMP/p2p-source-auth.json" --format '{{.Digest}}' "$source")"
+            digest="$(skopeo inspect --tls-verify=false --authfile "$DOCKER_CONFIG/p2p-auth.json" --format '{{.Digest}}' "$source")"
             [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || exit 1
-            skopeo copy --all --preserve-digests --src-tls-verify=false --src-authfile "$RUNNER_TEMP/p2p-source-auth.json" \
+            skopeo copy --all --preserve-digests --src-tls-verify=false --src-authfile "$DOCKER_CONFIG/p2p-auth.json" \
               "$source" "oci-archive:$RUNNER_TEMP/p2p-source-images/${image}.tar"
             printf '%s %s\n' "$image" "$digest" >> "$RUNNER_TEMP/p2p-source-images/digests.txt"
           done
@@ -80,3 +83,11 @@ jobs:
           path: ${{ runner.temp }}/p2p-source-images/
           if-no-files-found: error
           retention-days: 1
+
+      - name: Disconnect from image registry
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          if command -v corectl >/dev/null && ! corectl p2p registry disconnect "$DPLATFORM" --context "$CORECTL_CONTEXT"; then
+            echo "::warning title=Registry cleanup failed::The image registry connection may still be active"
+          fi

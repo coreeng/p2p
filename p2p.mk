@@ -57,13 +57,9 @@ P2P_IMAGE_NAMES ?= $(P2P_APP_NAME)
 .PHONY: p2p-registry-login
 p2p-registry-login:
 	@if [[ -n "$${CORECTL_CONTEXT:-}" ]]; then \
-		: "$${RUNNER_TEMP:?missing runner temp directory}"; \
 		: "$${DPLATFORM:?missing platform cluster}"; \
-		: "$${P2P_REGISTRY:?missing platform registry}"; \
-		"$$RUNNER_TEMP/p2p-workflow-src/.github/scripts/registry-login" \
-			--audience "core-platform-registry:$$DPLATFORM" \
-			--registry "$${P2P_REGISTRY%%/*}" \
-			--skopeo-auth-file "$$RUNNER_TEMP/p2p-registry-auth.json"; \
+		: "$${DOCKER_CONFIG:?missing isolated Docker configuration}"; \
+		corectl p2p registry login "$$DPLATFORM" --context "$$CORECTL_CONTEXT"; \
 	fi
 
 # Refresh short-lived registry credentials after building and before pushing.

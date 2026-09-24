@@ -140,13 +140,11 @@ async function pullImages({
   for (const ref of refs) {
     const refreshRegistryLogin = () => {
       if (!env.CORECTL_CONTEXT) return;
-      for (const key of ['RUNNER_TEMP', 'DPLATFORM', 'P2P_REGISTRY']) {
+      for (const key of ['DPLATFORM', 'CORECTL_CONTEXT', 'P2P_REGISTRY', 'DOCKER_CONFIG']) {
         if (!env[key]) throw new Error(`Missing ${key} for private registry image scan`);
       }
-      execFileSyncImpl(path.join(env.RUNNER_TEMP, 'p2p-workflow-src/.github/scripts/registry-login'), [
-        '--audience', `core-platform-registry:${env.DPLATFORM}`,
-        '--registry', env.P2P_REGISTRY.split('/')[0],
-        '--skopeo-auth-file', path.join(env.RUNNER_TEMP, 'p2p-registry-auth.json'),
+      execFileSyncImpl('corectl', [
+        'p2p', 'registry', 'login', env.DPLATFORM, '--context', env.CORECTL_CONTEXT,
       ], { stdio: 'inherit' });
     };
     // One inspect per ref: `{{json .}}` exposes `.manifest.manifests[]` for OCI indexes / Docker manifest

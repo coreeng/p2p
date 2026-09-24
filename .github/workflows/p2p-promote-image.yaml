@@ -120,7 +120,12 @@ jobs:
         env:
           EXPECTED_GITHUB_ENV: ${{ inputs.dest_github_env }}
         run: |
-          "$RUNNER_TEMP/p2p-workflow-src/.github/scripts/registry-connect" "$EXPECTED_GITHUB_ENV"
+          set -euo pipefail
+          export XDG_CONFIG_HOME="$RUNNER_TEMP/corectl-ci"
+          echo "XDG_CONFIG_HOME=$XDG_CONFIG_HOME" >> "$GITHUB_ENV"
+          corectl p2p registry connect "$DPLATFORM" --application "$TENANT_NAME" \
+            --context "$CORECTL_CONTEXT" --url "$CORECTL_PORTAL_URL" \
+            --ci-environment "$EXPECTED_GITHUB_ENV" --output env >> "$GITHUB_ENV"
       - uses: actions/download-artifact@v4
         with:
           name: registry-promotion-images
@@ -141,16 +146,22 @@ jobs:
           while read -r image source_digest; do
             [[ "$image" =~ ^[a-z0-9]+([._-][a-z0-9]+)*$ ]] || exit 1
             [[ "$source_digest" =~ ^sha256:[0-9a-f]{64}$ ]] || exit 1
-            "$RUNNER_TEMP/p2p-workflow-src/.github/scripts/registry-login" \
-              --audience "core-platform-registry:$DPLATFORM" --registry "${P2P_REGISTRY%%/*}" \
-              --skopeo-auth-file "$RUNNER_TEMP/p2p-dest-auth.json"
+            corectl p2p registry login "$DPLATFORM" --context "$CORECTL_CONTEXT"
             destination="docker://${P2P_REGISTRY}/${PROMOTION_STAGE}/${image}:${VERSION}"
-            skopeo copy --all --preserve-digests --dest-tls-verify=false --dest-authfile "$RUNNER_TEMP/p2p-dest-auth.json" \
+            skopeo copy --all --preserve-digests --dest-tls-verify=false --dest-authfile "$DOCKER_CONFIG/p2p-auth.json" \
               "oci-archive:$RUNNER_TEMP/p2p-source-images/${image}.tar" "$destination"
-            digest="$(skopeo inspect --tls-verify=false --authfile "$RUNNER_TEMP/p2p-dest-auth.json" --format '{{.Digest}}' "$destination")"
+            digest="$(skopeo inspect --tls-verify=false --authfile "$DOCKER_CONFIG/p2p-auth.json" --format '{{.Digest}}' "$destination")"
             [[ "$digest" == "$source_digest" ]] || { echo "Promotion changed image digest" >&2; exit 1; }
             echo "Promoted ${P2P_REGISTRY}/${PROMOTION_STAGE}/${image}:${VERSION} (${digest})" >> "$GITHUB_STEP_SUMMARY"
           done < "$RUNNER_TEMP/p2p-source-images/digests.txt"
+
+      - name: Disconnect from image registry
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          if command -v corectl >/dev/null && ! corectl p2p registry disconnect "$DPLATFORM" --context "$CORECTL_CONTEXT"; then
+            echo "::warning title=Registry cleanup failed::The image registry connection may still be active"
+          fi
 
   promote-image:
     if: ${{ vars.CORECTL_CONTEXT == '' }}
