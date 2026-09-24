@@ -29,14 +29,6 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.checkout-version || '' }}
-      - uses: actions/checkout@v7
-        with:
-          repository: ${{ job.workflow_repository }}
-          ref: ${{ job.workflow_sha }}
-          path: .p2p-workflow-src
-      - name: Move trusted helpers
-        shell: bash
-        run: mv .p2p-workflow-src "$RUNNER_TEMP/p2p-workflow-src"
       - name: Setup corectl
         uses: $/.github/actions/setup-corectl
         with:

@@ -166,7 +166,7 @@ jobs:
             fi
             found=true
             if [ "$DRY_RUN" == false ] && { [ -z "${version:-}" ] || [ "${version}" == "null" ]; }; then
-              echo "No image tags found for ${REGISTRY}/${REGISTRY_PATH}/${IMAGE_NAME}; skipping downstream scan."
+              echo "No image tags found for ${P2P_REGISTRY:-$REGISTRY}/${REGISTRY_PATH}/${IMAGE_NAME}; skipping downstream scan."
               version=""
               found=false
             fi

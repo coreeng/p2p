@@ -4,19 +4,15 @@ paths:
       # GitHub supports $/ self-references in reusable workflows, but actionlint
       # v1.7.12 does not recognize this action reference syntax yet.
       - 'specifying action .*setup-corectl.* in invalid format'
-      - 'property "workflow_repository" is not defined in object type'
-      - 'property "workflow_sha" is not defined in object type'
   .github/workflows/p2p-resolve-targets.yaml:
     ignore:
       - 'specifying action .*setup-corectl.* in invalid format'
   .github/workflows/p2p-promote-image.yaml:
     ignore:
-      - 'property "workflow_repository" is not defined in object type'
-      - 'property "workflow_sha" is not defined in object type'
+      - 'specifying action .*setup-corectl.* in invalid format'
   .github/workflows/p2p-promote-source.yaml:
     ignore:
-      - 'property "workflow_repository" is not defined in object type'
-      - 'property "workflow_sha" is not defined in object type'
+      - 'specifying action .*setup-corectl.* in invalid format'
   .github/workflows/p2p-version.yaml:
     ignore:
       # GitHub supports queued concurrency groups, but actionlint v1.7.12
@@ -24,6 +20,7 @@ paths:
       - 'unexpected key "queue" for "concurrency" section'
   .github/workflows/p2p-get-latest-image.yaml:
     ignore:
+      - 'specifying action .*setup-corectl.* in invalid format'
       # GitHub documents job.workflow_repository/job.workflow_sha for reusable
       # workflows that need to check out their own source, but actionlint
       # v1.7.12 does not include these job context fields yet.
@@ -31,6 +28,7 @@ paths:
       - 'property "workflow_sha" is not defined in object type'
   .github/workflows/p2p-workflow-image-scan.yaml:
     ignore:
+      - 'specifying action .*setup-corectl.* in invalid format'
       # GitHub documents job.workflow_repository/job.workflow_sha for reusable
       # workflows that need to check out their own source, but actionlint
       # v1.7.12 does not include these job context fields yet.

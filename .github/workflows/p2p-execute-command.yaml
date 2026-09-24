@@ -121,21 +121,6 @@ jobs:
         with:
           ref: ${{ inputs.dry-run == false && inputs.checkout-version || '' }}
 
-      - name: Checkout trusted P2P helpers
-        if: ${{ inputs.dry-run == false && vars.CORECTL_CONTEXT != '' }}
-        uses: actions/checkout@v7
-        with:
-          repository: ${{ job.workflow_repository }}
-          ref: ${{ job.workflow_sha }}
-          path: .p2p-workflow-src
-
-      - name: Move trusted P2P helpers outside app workspace
-        if: ${{ inputs.dry-run == false && vars.CORECTL_CONTEXT != '' }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          mv .p2p-workflow-src "$RUNNER_TEMP/p2p-workflow-src"
-
       - name: Setup corectl
         if: ${{ inputs.dry-run == false && vars.CORECTL_CONTEXT != '' }}
         uses: $/.github/actions/setup-corectl
