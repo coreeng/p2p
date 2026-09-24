@@ -87,6 +87,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
+      packages: write
     concurrency:
       group: >-
         ${{ inputs.command == 'p2p-build'
