@@ -91,9 +91,6 @@ jobs:
   security-image-scan:
     name: security-image-scan (${{ inputs.github_env != '' && format('{0}, {1}', inputs.pipeline-stage, inputs.github_env) || inputs.pipeline-stage }})
     runs-on: ${{ inputs.runner-label || vars.P2P_RUNNER_LABEL || 'ubuntu-24.04' }}
-    permissions:
-      contents: read
-      id-token: write
     environment: ${{ inputs.security-scan-enabled && inputs.github_env || '' }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
     outputs:

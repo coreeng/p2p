@@ -88,6 +88,8 @@ jobs:
         if: ${{ always() }}
         shell: bash
         run: |
+          export DOCKER_CONFIG="$RUNNER_TEMP/p2p-source-docker"
           if command -v corectl >/dev/null && ! corectl p2p registry disconnect "$DPLATFORM" --context "$CORECTL_CONTEXT"; then
             echo "::warning title=Registry cleanup failed::The image registry connection may still be active"
           fi
+          rm -rf "$DOCKER_CONFIG"
