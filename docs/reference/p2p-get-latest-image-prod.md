@@ -25,7 +25,7 @@ jobs:
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `app-name` | string | No | `''` | Application used to resolve Portal targets. Defaults to `image-name`; set it when the application and image names differ. |
+| `app-name` | string | No | `''` | Application name. Defaults to `image-name`; set it when the application and image names differ. |
 | `image-name` | string | Yes | — | Name of the container image to query. |
 | `environment` | string | No | `${{ vars.PROD }}` | Legacy JSON matrix describing the GitHub environments to authenticate against. Ignored when `CORECTL_CONTEXT` is set. |
 | `registry-path` | string | No | `prod` | Sub-path within the tenant registry to query. |

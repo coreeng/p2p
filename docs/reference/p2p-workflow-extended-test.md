@@ -35,8 +35,8 @@ This workflow runs image scanning before promotion. The image scan authenticates
 | `dry-run` | `boolean` | No | `false` | When `true`, runs commands without making persistent changes. |
 | `main-branch` | `string` | No | `refs/heads/main` | Full ref of the main branch, used to gate all jobs and Slack alerts. |
 | `region` | `string` | No | `''` | Cloud region used by all make targets. Falls back to the environment's `REGION` variable, then `europe-west2`. |
-| `source` | `string` | No | `${{ vars.EXTENDED_TEST }}` | JSON matrix of deploy environments for the extended-test stage. |
-| `destination` | `string` | No | `${{ vars.PROD }}` | JSON matrix of deploy environments to promote to after tests pass. |
+| `source` | `string` | No | `${{ vars.EXTENDED_TEST }}` | JSON matrix of deploy environments for the extended-test stage. Used only when `CORECTL_CONTEXT` is unset. |
+| `destination` | `string` | No | `${{ vars.PROD }}` | JSON matrix of deploy environments to promote to after tests pass. Used only when `CORECTL_CONTEXT` is unset. |
 | `working-directory` | `string` | No | `.` | Repository path from which make targets are executed. |
 | `app-name` | `string` | No | `''` | Application name. Must equal the tenant name (each application has its own application tenant). Also scopes image security sticky PR comments so multi-app repositories do not overwrite comments between apps. |
 | `tenant-name` | `string` | No | `''` | Tenant name passed to all make targets. |
@@ -84,7 +84,12 @@ security-image-scan    (independent of run-tests; runs in parallel)
 notify-failure  (needs: resolve-targets, run-tests, security-image-scan, promote; runs on main-branch when any job fails)
 ```
 
-All jobs use a matrix derived from `source`. The `promote` job uses a matrix derived from `destination`.
+When the repository-level `CORECTL_CONTEXT` variable is set, `resolve-targets`
+uses `corectl p2p targets --application <app-name>` to obtain the configured
+application targets. Set `app-name` in this mode. The `source` and `destination`
+inputs are used only when `CORECTL_CONTEXT` is unset.
+
+Test and image-scan jobs use the resolved `extendedTest` targets. The `promote` job uses the resolved `prod` targets. In legacy mode, these matrices come from `source` and `destination`.
 
 When the repository-level `CORECTL_CONTEXT` variable is set, command jobs use
 corectl OIDC. When `CORECTL_VERSION` is unset, P2P uses the latest corectl

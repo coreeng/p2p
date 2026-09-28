@@ -40,8 +40,8 @@ Grant `pull-requests: write` when the workflow runs on pull requests so source a
 | `app-name` | `string` | No | `''` | Application name. Must equal the tenant name (each application has its own application tenant). Also scopes source and image security sticky PR comments so multi-app repositories do not overwrite comments between apps. |
 | `tenant-name` | `string` | No | `''` | Tenant name passed to all make targets. |
 | `region` | `string` | No | `''` | Cloud region used by all make targets. Falls back to the environment's `REGION` variable, then `europe-west2`. |
-| `source` | `string` | No | `${{ vars.FAST_FEEDBACK }}` | JSON matrix of deploy environments for the fast-feedback stage. |
-| `destination` | `string` | No | `${{ vars.EXTENDED_TEST }}` | JSON matrix of deploy environments to promote to after integration tests pass. |
+| `source` | `string` | No | `${{ vars.FAST_FEEDBACK }}` | JSON matrix of deploy environments for the fast-feedback stage. Used only when `CORECTL_CONTEXT` is unset. |
+| `destination` | `string` | No | `${{ vars.EXTENDED_TEST }}` | JSON matrix of deploy environments to promote to after integration tests pass. Used only when `CORECTL_CONTEXT` is unset. |
 | `working-directory` | `string` | No | `.` | Repository path from which make targets are executed. |
 | `runner-label` | `string` | No | `''` | GitHub Actions runner label for every job in the workflow. When empty, uses the caller's `P2P_RUNNER_LABEL` organization or repository variable, then `ubuntu-24.04`. |
 | `run-fastfeedback-integration-on-prs` | `boolean` | No | `false` | When `true`, runs the `integration-test` job on pull requests. Integration tests always run on main or tags. |
@@ -103,7 +103,12 @@ security-source-scan  (independent of build; runs in parallel)
 notify-failure       (needs: all jobs; runs on main-branch when any job fails)
 ```
 
-All jobs use a matrix derived from `source`. The `promote` job uses a matrix derived from `destination`. The `security-source-scan` job is not part of the matrix; it runs once per workflow. Security PR comments are scoped to `app-name`.
+When the repository-level `CORECTL_CONTEXT` variable is set, `resolve-targets`
+uses `corectl p2p targets --application <app-name>` to obtain the configured
+application targets. Set `app-name` in this mode. The `source` and `destination`
+inputs are used only when `CORECTL_CONTEXT` is unset.
+
+Command and image-scan jobs use the resolved `fastFeedback` targets. The `promote` job uses the resolved `extendedTest` targets. In legacy mode, these matrices come from `source` and `destination`. The `security-source-scan` job is not part of the matrix; it runs once per workflow. Security PR comments are scoped to `app-name`.
 
 Set the repository-level `CORECTL_CONTEXT` GitHub Actions variable (for example,
 `core-platform-integration/cecg-test`) to enable corectl OIDC. When `CORECTL_VERSION`

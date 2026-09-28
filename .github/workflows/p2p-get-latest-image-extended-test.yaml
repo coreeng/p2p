@@ -35,7 +35,7 @@ on:
         type: string
         default: ''
       app-name:
-        description: 'Application used to resolve Portal targets; defaults to image-name.'
+        description: 'Application name; defaults to image-name.'
         required: false
         type: string
         default: ''
