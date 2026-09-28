@@ -44,7 +44,7 @@ This workflow runs image scanning before deployment. The image scan authenticate
 | `dry-run` | `boolean` | No | `false` | When `true`, runs commands without making persistent changes and skips the success Slack notification. |
 | `main-branch` | `string` | No | `refs/heads/main` | Full ref of the main branch, used to gate the deploy job and Slack alerts. |
 | `region` | `string` | No | `''` | Cloud region used by the `p2p-prod` make target. Falls back to the environment's `REGION` variable, then `europe-west2`. |
-| `source` | `string` | No | `${{ vars.PROD }}` | JSON matrix of deploy environments for the prod stage. |
+| `source` | `string` | No | `${{ vars.PROD }}` | JSON matrix of deploy environments for the prod stage. Used only when `CORECTL_CONTEXT` is unset. |
 | `working-directory` | `string` | No | `.` | Repository path from which the make target is executed. |
 | `app-name` | `string` | No | `''` | Application name. Must equal the tenant name (each application has its own application tenant). Also scopes image security sticky PR comments so multi-app repositories do not overwrite comments between apps. |
 | `tenant-name` | `string` | No | `''` | Tenant name passed to the make target. |
@@ -91,6 +91,13 @@ notify-success  (needs: prod-deploy; runs on main-branch when prod-deploy succee
 ```
 
 `notify-failure` and `notify-success` are independent of each other and run after `prod-deploy` completes. Unlike other orchestrator workflows, this workflow sends a Slack notification on successful deployment as well as on failure.
+
+When the repository-level `CORECTL_CONTEXT` variable is set, `resolve-targets`
+uses `corectl p2p targets --application <app-name>` to obtain the configured
+application targets. Set `app-name` in this mode. The `source`
+input is used only when `CORECTL_CONTEXT` is unset.
+
+Image-scan and deployment jobs use the resolved `prod` targets. In legacy mode, their matrix comes from `source`.
 
 When the repository-level `CORECTL_CONTEXT` variable is set, command jobs use
 corectl OIDC. When `CORECTL_VERSION` is unset, P2P uses the latest corectl version;
