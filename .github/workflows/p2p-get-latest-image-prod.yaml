@@ -34,6 +34,11 @@ on:
         required: false
         type: string
         default: ''
+      app-name:
+        description: 'Application used to resolve Portal targets; defaults to image-name.'
+        required: false
+        type: string
+        default: ''
       image-name:
         required: true
         type: string
@@ -48,13 +53,22 @@ on:
         default: ''
 
 jobs:
+  resolve-targets:
+    if: ${{ vars.CORECTL_CONTEXT != '' && github.ref == inputs.main-branch }}
+    uses: ./.github/workflows/p2p-resolve-targets.yaml
+    with:
+      app-name: ${{ inputs.app-name || inputs.image-name }}
+      source-stage: prod
+      runner-label: ${{ inputs.runner-label }}
+
   get-latest-version:
+    needs: [resolve-targets]
     uses: ./.github/workflows/p2p-get-latest-image.yaml
-    if: success() && (github.ref == inputs.main-branch )
+    if: ${{ !cancelled() && github.ref == inputs.main-branch && (vars.CORECTL_CONTEXT == '' || needs.resolve-targets.result == 'success') }}
     secrets:
       env_vars: ${{ secrets.env_vars }}
     strategy:
-      matrix: ${{ fromJSON(inputs.environment) }}
+      matrix: ${{ fromJSON(vars.CORECTL_CONTEXT != '' && needs.resolve-targets.outputs.source || inputs.environment) }}
       fail-fast: false
     with:
       github_env: ${{ matrix.deploy_env }}
@@ -67,7 +81,7 @@ jobs:
       runner-label: ${{ inputs.runner-label }}
 
   notify-failure:
-    needs: [get-latest-version]
+    needs: [resolve-targets, get-latest-version]
     runs-on: ${{ inputs.runner-label || vars.P2P_RUNNER_LABEL || 'ubuntu-24.04' }}
     timeout-minutes: 5
     if: always() && github.ref == inputs.main-branch && contains(needs.*.result, 'failure')

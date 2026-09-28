@@ -2,6 +2,8 @@
 
 > Wraps `p2p-get-latest-image.yaml` with extended-test defaults to retrieve the latest promoted image from the `extended-test` registry path.
 
+When `CORECTL_CONTEXT` is set, the workflow resolves the application’s `extendedTest` targets from Portal. Otherwise, it uses the `environment` input. Target resolution and lookup run only on `main-branch`.
+
 ## Usage
 
 ```yaml
@@ -23,13 +25,14 @@ jobs:
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
+| `app-name` | string | No | `''` | Application used to resolve Portal targets. Defaults to `image-name`; set it when the application and image names differ. |
 | `image-name` | string | Yes | — | Name of the container image to query. |
-| `environment` | string | No | `${{ vars.EXTENDED_TEST }}` | JSON matrix string describing the GitHub environment to authenticate against. |
+| `environment` | string | No | `${{ vars.EXTENDED_TEST }}` | Legacy JSON matrix describing the GitHub environments to authenticate against. Ignored when `CORECTL_CONTEXT` is set. |
 | `registry-path` | string | No | `extended-test` | Sub-path within the tenant registry to query. |
 | `tenant-name` | string | No | `''` | Tenant name. Falls back to the `TENANT_NAME` repository/environment variable when not set. |
 | `region` | string | No | `''` | GCP region. Falls back to the `REGION` repository/environment variable, then `europe-west2`. |
-| `working-directory` | string | No | `'.'` | Accepted for caller interface compatibility; version lookup queries Artifact Registry and does not require a checkout. |
-| `dry-run` | boolean | No | `false` | When `true`, skips GCP authentication and returns `0.0.0` as the version. |
+| `working-directory` | string | No | `'.'` | Accepted for caller interface compatibility; version lookup queries the registry and does not require a checkout. |
+| `dry-run` | boolean | No | `false` | When `true`, skips registry authentication and lookup and returns `0.0.0` as the version. |
 | `main-branch` | string | No | `refs/heads/main` | The ref on which the workflow executes. The job and failure notification are skipped when the triggering ref does not match. |
 | `runner-label` | string | No | `''` | GitHub Actions runner label for every job in the workflow. When empty, uses the caller's `P2P_RUNNER_LABEL` organization or repository variable, then `ubuntu-24.04`. |
 
@@ -48,8 +51,9 @@ jobs:
 
 ## Job Graph
 
-1. `get-latest-version` — Calls `p2p-get-latest-image.yaml`. Only runs when `github.ref == main-branch`.
-2. `notify-failure` — Sends a Slack alert if `slack_webhook_url` is set and `get-latest-version` failed on the main branch. Depends on `get-latest-version`.
+1. `resolve-targets` — Resolves Portal targets when `CORECTL_CONTEXT` is set and `github.ref == main-branch`. Skipped for legacy callers.
+2. `get-latest-version` — Calls `p2p-get-latest-image.yaml` with the resolved or legacy matrix. Requires successful target resolution in Portal mode and only runs when `github.ref == main-branch`.
+3. `notify-failure` — Sends a Slack alert if `slack_webhook_url` is set and target resolution or lookup failed on the main branch.
 
 ## See also
 
