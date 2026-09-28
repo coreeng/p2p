@@ -16,6 +16,15 @@ jobs:
       github_env: fast-feedback
 ```
 
+## Managed cluster registry
+
+With `CORECTL_CONTEXT`, build targets publish through the private cluster registry
+at `127.0.0.1:5000`, and Kubernetes pulls the same image reference through the
+managed node proxy. Every enabled managed registry supports both operations.
+Deploy the matching managed cluster release and wait for its registry Deployment
+and node proxy DaemonSet before testing deployments on k3d or GKE Standard. See the
+[image registry reference](https://docs.coreplatform.io/p2p/reference/image-registry).
+
 ## Inputs
 
 | Name | Type | Required | Default | Description |
