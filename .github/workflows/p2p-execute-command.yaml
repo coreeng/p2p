@@ -315,10 +315,6 @@ jobs:
           export P2P_VERSION=${{ inputs.version }}
           if [[ -n "$CORECTL_CONTEXT" ]]; then
             : "${P2P_REGISTRY:?platform registry contract is missing}"
-            if [[ "${{ inputs.command }}" != "p2p-build" ]]; then
-              echo "Cluster image pulls are not available yet" >&2
-              exit 1
-            fi
           else
             export P2P_REGISTRY=${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/tenant/${{ env.TENANT_NAME }}
           fi
