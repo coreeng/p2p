@@ -103,6 +103,8 @@ jobs:
       contents: read
       id-token: write
     env:
+      # Registry references are fully qualified; ignore runner mirrors and legacy config.
+      CONTAINERS_REGISTRIES_CONF: /dev/null
       DPLATFORM: ${{ vars.DPLATFORM || inputs.dest_github_env }}
       CORECTL_CONTEXT: ${{ vars.CORECTL_CONTEXT }}
       CORECTL_PORTAL_URL: ${{ vars.CORECTL_PORTAL_URL }}
@@ -171,6 +173,8 @@ jobs:
     needs: [lookup]
     environment: ${{ inputs.dest_github_env }}
     env:
+      # Registry references are fully qualified; ignore runner mirrors and legacy config.
+      CONTAINERS_REGISTRIES_CONF: /dev/null
       MAKEFLAGS: ${{ inputs.make-flags || vars.P2P_MAKEFLAGS }}
       env_vars: ${{ secrets.env_vars }}
       BASE_DOMAIN: ${{ vars.BASE_DOMAIN }}

@@ -25,6 +25,8 @@ jobs:
       contents: read
       id-token: write
     env:
+      # Registry references are fully qualified; ignore runner mirrors and legacy config.
+      CONTAINERS_REGISTRIES_CONF: /dev/null
       MAKEFLAGS: ${{ inputs.make-flags || vars.P2P_MAKEFLAGS }}
       DPLATFORM: ${{ vars.DPLATFORM || inputs.github_env }}
       CORECTL_CONTEXT: ${{ vars.CORECTL_CONTEXT }}

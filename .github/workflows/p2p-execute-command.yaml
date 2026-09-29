@@ -97,6 +97,8 @@ jobs:
         || format('{0}/{1}-{2}-{3}', inputs.github_env, inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME, inputs.app-name, inputs.subnamespace) }}
       cancel-in-progress: false
     env:
+      # Registry references are fully qualified; ignore runner mirrors and legacy config.
+      CONTAINERS_REGISTRIES_CONF: /dev/null
       MAKEFLAGS: ${{ inputs.make-flags || vars.P2P_MAKEFLAGS }}
       env_vars: ${{ secrets.env_vars }}
       BASE_DOMAIN: ${{ vars.BASE_DOMAIN }}
