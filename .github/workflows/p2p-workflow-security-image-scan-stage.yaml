@@ -67,6 +67,11 @@ on:
         required: false
         type: boolean
         default: false
+      make-flags:
+        description: 'Make options; falls back to P2P_MAKEFLAGS when empty.'
+        required: false
+        type: string
+        default: ''
       runner-label:
         description: 'GitHub Actions runner label for scheduled image scan jobs.'
         required: false
@@ -119,6 +124,7 @@ jobs:
       container_registry_pat: ${{ secrets.container_registry_pat }}
       container_registry_url: ${{ secrets.container_registry_url }}
     with:
+      make-flags: ${{ inputs.make-flags }}
       pipeline-stage: ${{ inputs.pipeline-stage }}
       github_env: ${{ inputs.github_env }}
       tenant-name: ${{ inputs.tenant-name }}

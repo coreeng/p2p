@@ -64,6 +64,11 @@ on:
         required: false
         type: number
         default: 30
+      make-flags:
+        description: 'Make options; falls back to P2P_MAKEFLAGS when empty.'
+        required: false
+        type: string
+        default: ''
       runner-label:
         description: 'GitHub Actions runner label for scheduled security scan jobs.'
         required: false
@@ -115,7 +120,7 @@ jobs:
   security-resolve-anchor-image:
     name: security-resolve-anchor-image
     env:
-      MAKEFLAGS: ${{ vars.P2P_MAKEFLAGS }}
+      MAKEFLAGS: ${{ inputs.make-flags || vars.P2P_MAKEFLAGS }}
     if: inputs.security-scan-enabled
     runs-on: ${{ inputs.runner-label || vars.P2P_RUNNER_LABEL || 'ubuntu-24.04' }}
     outputs:
@@ -161,6 +166,7 @@ jobs:
       matrix: ${{ fromJSON(vars.CORECTL_CONTEXT != '' && needs.security-resolve-fast-feedback-targets.outputs.source || vars.FAST_FEEDBACK) }}
       fail-fast: false
     with:
+      make-flags: ${{ inputs.make-flags }}
       registry-path: fast-feedback
       pipeline-stage: fast-feedback
       tenant-name: ${{ inputs.tenant-name }}
@@ -193,6 +199,7 @@ jobs:
       matrix: ${{ fromJSON(vars.CORECTL_CONTEXT != '' && needs.security-resolve-extended-test-targets.outputs.source || vars.EXTENDED_TEST) }}
       fail-fast: false
     with:
+      make-flags: ${{ inputs.make-flags }}
       registry-path: extended-test
       pipeline-stage: extended-test
       tenant-name: ${{ inputs.tenant-name }}
@@ -225,6 +232,7 @@ jobs:
       matrix: ${{ fromJSON(vars.CORECTL_CONTEXT != '' && needs.security-resolve-prod-targets.outputs.source || vars.PROD) }}
       fail-fast: false
     with:
+      make-flags: ${{ inputs.make-flags }}
       registry-path: prod
       pipeline-stage: prod
       tenant-name: ${{ inputs.tenant-name }}

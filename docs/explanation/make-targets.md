@@ -36,12 +36,16 @@ See [p2p-execute-command reference](../reference/p2p-execute-command.md) and [p2
 
 ## Parallel execution
 
-To shorten builds with independent work, set the GitHub Actions variable
-`P2P_MAKEFLAGS` to `--jobs=4` (or another job limit). P2P passes it as Make's native
-`MAKEFLAGS`, which also propagates to recursive `$(MAKE)` calls. The default is
-empty: P2P adds no options when the variable is unset. See
-[Make parallelism](environment-configuration.md#make-parallelism) for variable
-scopes.
+To shorten builds with independent work, pass `make-flags: '--jobs=4'` (or another
+job limit) on the application's workflow call. Each application in a monorepo
+can select its own value alongside `runner-label`.
+
+P2P passes the non-empty input as Make's native `MAKEFLAGS`, which also propagates
+to recursive `$(MAKE)` calls. An empty input falls back to the optional
+`P2P_MAKEFLAGS` organization/repository variable. If both are empty, P2P adds no
+options. Use `make-flags: '--jobs=1'` to override a parallel fallback with serial
+execution. See [Make parallelism](environment-configuration.md#make-parallelism)
+for configuration.
 
 Make runs independent prerequisites concurrently when `--jobs` is enabled.
 Listing targets in order does not create a dependency between them: for example,

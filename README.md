@@ -74,11 +74,19 @@ Before calling the workflows, set up the following:
   | `PROD` | JSON matrix | `{"include": [{"deploy_env": "gcp-prod"}]}` |
   | `TENANT_NAME` | string | `my-tenant` |
   | `P2P_RUNNER_LABEL` | string | `ubuntu-24.04` |
-  | `P2P_MAKEFLAGS` | optional Make options | `--jobs=4` |
+  | `P2P_MAKEFLAGS` | optional default Make options | `--jobs=4` |
 
   `P2P_RUNNER_LABEL` may be defined as an organization variable for a shared default or as a repository variable for a repository-specific override. Callers may also pass the `runner-label` workflow input, which takes precedence. When none is set, P2P uses `ubuntu-24.04`.
 
-  `P2P_MAKEFLAGS` is optional and defaults to empty. P2P passes it to Make as `MAKEFLAGS` in application and platform workflows, including promotion and image discovery. Set it to `--jobs=4` to run up to four independent recipes concurrently. Declare build, push, deploy, and test dependencies in your Makefile before enabling parallel execution; see [Make parallelism](docs/explanation/make-targets.md#parallel-execution).
+  Configure Make options per application with the optional `make-flags` workflow input alongside `runner-label`:
+
+  ```yaml
+  with:
+    runner-label: ubuntu-24.04
+    make-flags: '--jobs=4'
+  ```
+
+  A non-empty `make-flags` input takes precedence over `P2P_MAKEFLAGS`, which remains an optional organization/repository fallback. Leave that variable unset to configure each application independently in a monorepo. If both settings are empty, P2P adds no Make options. Pass `--jobs=1` to select serial execution even when the fallback enables parallelism. Declare build, push, deploy, and test dependencies in your Makefile before enabling parallel execution; see [Make parallelism](docs/explanation/make-targets.md#parallel-execution).
 
 - **Per-environment variables** (set on each GitHub environment):
 

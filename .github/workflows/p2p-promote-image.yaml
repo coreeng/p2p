@@ -42,6 +42,11 @@ on:
       checkout-version:
         required: false
         type: string
+      make-flags:
+        description: 'Make options; falls back to P2P_MAKEFLAGS when empty.'
+        required: false
+        type: string
+        default: ''
       runner-label:
         description: 'GitHub Actions runner label for image promotion jobs.'
         required: false
@@ -78,6 +83,7 @@ jobs:
       contents: read
       id-token: write
     with:
+      make-flags: ${{ inputs.make-flags }}
       github_env: ${{ fromJson(inputs.source_matrix).include[0]['deploy_env'] }}
       app-name: ${{ inputs.app-name }}
       tenant-name: ${{ inputs.tenant-name }}
@@ -165,7 +171,7 @@ jobs:
     needs: [lookup]
     environment: ${{ inputs.dest_github_env }}
     env:
-      MAKEFLAGS: ${{ vars.P2P_MAKEFLAGS }}
+      MAKEFLAGS: ${{ inputs.make-flags || vars.P2P_MAKEFLAGS }}
       env_vars: ${{ secrets.env_vars }}
       BASE_DOMAIN: ${{ vars.BASE_DOMAIN }}
       INTERNAL_SERVICES_DOMAIN: ${{ vars.INTERNAL_SERVICES_DOMAIN }}

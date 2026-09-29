@@ -13,6 +13,11 @@ on:
       command:
         required: true
         type: string
+      make-flags:
+        description: 'Make options; falls back to P2P_MAKEFLAGS when empty.'
+        required: false
+        type: string
+        default: ''
       runner-label:
         description: 'GitHub Actions runner label for command execution.'
         required: false
@@ -92,7 +97,7 @@ jobs:
         || format('{0}/{1}-{2}-{3}', inputs.github_env, inputs.tenant-name != '' && inputs.tenant-name || vars.TENANT_NAME, inputs.app-name, inputs.subnamespace) }}
       cancel-in-progress: false
     env:
-      MAKEFLAGS: ${{ vars.P2P_MAKEFLAGS }}
+      MAKEFLAGS: ${{ inputs.make-flags || vars.P2P_MAKEFLAGS }}
       env_vars: ${{ secrets.env_vars }}
       BASE_DOMAIN: ${{ vars.BASE_DOMAIN }}
       INTERNAL_SERVICES_DOMAIN: ${{ vars.INTERNAL_SERVICES_DOMAIN }}

@@ -10,6 +10,11 @@ on:
       cecg-registry-secret:
         required: true
     inputs:
+      make-flags:
+        description: 'Make options; falls back to P2P_MAKEFLAGS when empty.'
+        required: false
+        type: string
+        default: ''
       environment:
         type: string
         required: true
@@ -57,6 +62,7 @@ jobs:
       cecg-registry-username: ${{ secrets.cecg-registry-username }}
       cecg-registry-secret: ${{ secrets.cecg-registry-secret }}
     with:
+      make-flags: ${{ inputs.make-flags }}
       action: validate
       name: tenants-validate
       targets: tenants-validate
@@ -74,6 +80,7 @@ jobs:
       cecg-registry-username: ${{ secrets.cecg-registry-username }}
       cecg-registry-secret: ${{ secrets.cecg-registry-secret }}
     with:
+      make-flags: ${{ inputs.make-flags }}
       action: validate
       name: environments-validate
       targets: environments-validate
@@ -103,6 +110,7 @@ jobs:
       max-parallel: 1
       matrix: ${{ fromJson(needs.matrix.outputs.matrix) }}
     with:
+      make-flags: ${{ inputs.make-flags }}
       action: features-apply
       name: ${{ matrix.feature }}
       feature: ${{ matrix.feature }}
@@ -120,6 +128,7 @@ jobs:
       cecg-registry-username: ${{ secrets.cecg-registry-username }}
       cecg-registry-secret: ${{ secrets.cecg-registry-secret }}
     with:
+      make-flags: ${{ inputs.make-flags }}
       action: tenants-apply
       name: tenants-apply
       targets: tenants-apply

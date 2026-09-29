@@ -44,6 +44,7 @@ Grant `pull-requests: write` when the workflow runs on pull requests so source a
 | `destination` | `string` | No | `${{ vars.EXTENDED_TEST }}` | JSON matrix of deploy environments to promote to after integration tests pass. Used only when `CORECTL_CONTEXT` is unset. |
 | `working-directory` | `string` | No | `.` | Repository path from which make targets are executed. |
 | `runner-label` | `string` | No | `''` | GitHub Actions runner label for every job in the workflow. When empty, uses the caller's `P2P_RUNNER_LABEL` organization or repository variable, then `ubuntu-24.04`. |
+| `make-flags` | `string` | No | `''` | Make options for this workflow, e.g. `--jobs=4`. When empty, falls back to `P2P_MAKEFLAGS`; if both are empty, adds no options. |
 | `run-fastfeedback-integration-on-prs` | `boolean` | No | `false` | When `true`, runs the `integration-test` job on pull requests. Integration tests always run on main or tags. |
 | `skip-subnamespaces-create` | `boolean` | No | `false` | Skips creating subnamespaces before running make targets. |
 | `artifacts` | `string` | No | `''` | YAML-formatted map of make target names to artifact paths. Paths matching each active command are uploaded after that command runs. |

@@ -3,6 +3,11 @@ name: Release
 on:
   workflow_call:
     inputs:
+      make-flags:
+        description: 'Make options; falls back to P2P_MAKEFLAGS when empty.'
+        required: false
+        type: string
+        default: ''
       registry:
         required: true
         type: string
@@ -49,7 +54,7 @@ jobs:
       packages: write
 
     env:
-      MAKEFLAGS: ${{ vars.P2P_MAKEFLAGS }}
+      MAKEFLAGS: ${{ inputs.make-flags || vars.P2P_MAKEFLAGS }}
       GITHUB_TOKEN: ${{ github.token }}
 
     steps:

@@ -47,6 +47,7 @@ jobs:
 | `security-scan-fail-on-non-blocking-findings` | boolean | No | `false` | Fails child policy jobs for non-blocking findings so GitHub shows red policy jobs while the umbrella workflow continues. Blocking findings always fail the workflow. |
 | `timeout-minutes` | number | No | `30` | Timeout for the `security-source-scan` job. security-image-scan jobs use their own default. |
 | `runner-label` | string | No | `''` | GitHub Actions runner label for every job in the workflow. When empty, uses the caller's `P2P_RUNNER_LABEL` organization or repository variable, then `ubuntu-24.04`. |
+| `make-flags` | string | No | `''` | Make options for this workflow, e.g. `--jobs=4`. When empty, falls back to `P2P_MAKEFLAGS`; if both are empty, adds no options. |
 
 ## Secrets
 

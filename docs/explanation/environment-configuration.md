@@ -65,18 +65,30 @@ Use an organization variable to set one runner label for multiple repositories. 
 
 ## Make parallelism
 
-Set the optional GitHub Actions variable `P2P_MAKEFLAGS` at organization or
-repository scope. P2P forwards it as Make's `MAKEFLAGS` environment
-variable in jobs that call Make, including application stages, promotion, image
-discovery, and platform workflows.
+Set the optional `make-flags` input on an application's workflow call alongside
+`runner-label`. For example:
 
-For example, `P2P_MAKEFLAGS=--jobs=4` allows up to four independent recipes to run
-concurrently; `--jobs=1` selects serial execution. If the variable is absent or
-empty, P2P adds no Make options. No workflow input is required.
+```yaml
+with:
+  runner-label: ubuntu-24.04
+  make-flags: '--jobs=4'
+```
 
-An organization value can provide a shared setting; a repository value overrides
-it. This controls Make recipes within a job. Pipeline stage dependencies and
-GitHub job concurrency keep their existing behavior.
+This allows up to four independent Make recipes to run concurrently. Applications
+in a monorepo can pass different values on their own workflow calls. P2P forwards
+the input through application stages, promotion and image discovery. Platform CI,
+CD and release workflows also accept it.
+
+A non-empty input takes precedence over the optional GitHub Actions variable
+`P2P_MAKEFLAGS` at organization or repository scope. A repository value overrides
+an organization value. If both the input and fallback are absent or empty, P2P
+adds no Make options. Leave the fallback unset to configure applications
+independently. Pass `make-flags: '--jobs=1'` to select serial execution even when
+the shared fallback enables parallelism.
+
+The resolved value is passed as Make's native `MAKEFLAGS` environment variable.
+This controls Make recipes within a job. Pipeline stage dependencies and GitHub
+job concurrency keep their existing behavior.
 
 Before opting in, declare ordering dependencies in your Makefile. See
 [Parallel execution](make-targets.md#parallel-execution) for an example.

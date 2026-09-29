@@ -31,6 +31,7 @@ and node proxy DaemonSet before testing deployments on k3d or GKE Standard. See 
 |------|------|----------|---------|-------------|
 | `command` | string | Yes | — | The `make` target to run (e.g. `p2p-build`). |
 | `runner-label` | string | No | `''` | GitHub Actions runner label for the command-execution job. When empty, uses the caller's `P2P_RUNNER_LABEL` organization or repository variable, then `ubuntu-24.04`. |
+| `make-flags` | string | No | `''` | Make options for this workflow, e.g. `--jobs=4`. When empty, falls back to `P2P_MAKEFLAGS`; if both are empty, adds no options. |
 | `github_env` | string | No | `''` | GitHub environment name used for deployment protection rules and concurrency grouping. |
 | `dry-run` | boolean | No | `false` | When `true`, skips GCP authentication, cluster setup, and the `make` invocation. |
 | `region` | string | No | `''` | GCP region. Falls back to the `REGION` repository/environment variable, then `europe-west2`. |

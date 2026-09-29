@@ -51,6 +51,11 @@ on:
         required: false
         type: string
         default: '.'
+      make-flags:
+        description: 'Make options; falls back to P2P_MAKEFLAGS when empty.'
+        required: false
+        type: string
+        default: ''
       runner-label:
         description: 'GitHub Actions runner label for fast-feedback command execution.'
         required: false
@@ -114,6 +119,7 @@ jobs:
       matrix: ${{ fromJSON(needs.resolve-targets.outputs.source) }}
       fail-fast: false
     with:
+      make-flags: ${{ inputs.make-flags }}
       command: p2p-build
       github_env: ${{ matrix.deploy_env }}
       app-name: ${{ inputs.app-name }}
@@ -153,6 +159,7 @@ jobs:
       matrix: ${{ fromJSON(needs.resolve-targets.outputs.source) }}
       fail-fast: false
     with:
+      make-flags: ${{ inputs.make-flags }}
       pipeline-stage: fast-feedback
       github_env: ${{ matrix.deploy_env }}
       tenant-name: ${{ inputs.tenant-name }}
@@ -179,6 +186,7 @@ jobs:
       matrix: ${{ fromJSON(needs.resolve-targets.outputs.source) }}
       fail-fast: false
     with:
+      make-flags: ${{ inputs.make-flags }}
       command: p2p-functional
       subnamespace: functional
       region: ${{ inputs.region }}
@@ -205,6 +213,7 @@ jobs:
       matrix: ${{ fromJSON(needs.resolve-targets.outputs.source) }}
       fail-fast: false
     with:
+      make-flags: ${{ inputs.make-flags }}
       command: p2p-nft
       subnamespace: nft
       region: ${{ inputs.region }}
@@ -232,6 +241,7 @@ jobs:
       matrix: ${{ fromJSON(needs.resolve-targets.outputs.source) }}
       fail-fast: false
     with:
+      make-flags: ${{ inputs.make-flags }}
       command: p2p-integration
       subnamespace: integration
       region: ${{ inputs.region }}
@@ -257,6 +267,7 @@ jobs:
       matrix: ${{ fromJSON(needs.resolve-targets.outputs.destination) }}
       fail-fast: false
     with:
+      make-flags: ${{ inputs.make-flags }}
       source_matrix: ${{ needs.resolve-targets.outputs.source }}
       dest_github_env: ${{ matrix.deploy_env }}
       region: ${{ inputs.region }}
