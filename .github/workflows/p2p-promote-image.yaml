@@ -165,6 +165,7 @@ jobs:
     needs: [lookup]
     environment: ${{ inputs.dest_github_env }}
     env:
+      MAKEFLAGS: ${{ vars.P2P_MAKEFLAGS }}
       env_vars: ${{ secrets.env_vars }}
       BASE_DOMAIN: ${{ vars.BASE_DOMAIN }}
       INTERNAL_SERVICES_DOMAIN: ${{ vars.INTERNAL_SERVICES_DOMAIN }}

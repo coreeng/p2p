@@ -34,6 +34,34 @@ See [p2p-execute-command reference](../reference/p2p-execute-command.md) and [p2
 | `p2p-promote-to-extended-test` | `p2p-promote-image` | Copies image from fast-feedback to extended-test registry |
 | `p2p-promote-to-prod` | `p2p-promote-image` | Copies image from extended-test to prod registry |
 
+## Parallel execution
+
+To shorten builds with independent work, set the GitHub Actions variable
+`P2P_MAKEFLAGS` to `--jobs=4` (or another job limit). P2P passes it as Make's native
+`MAKEFLAGS`, which also propagates to recursive `$(MAKE)` calls. The default is
+empty: P2P adds no options when the variable is unset. See
+[Make parallelism](environment-configuration.md#make-parallelism) for variable
+scopes.
+
+Make runs independent prerequisites concurrently when `--jobs` is enabled.
+Listing targets in order does not create a dependency between them: for example,
+`p2p-build: build-app push-app` needs `push-app: build-app` to ensure the image is
+built before it is pushed. Declare equivalent dependencies between publishing,
+deployment, and test recipes.
+
+For multiple components, each push can depend on its own build:
+
+```makefile
+.PHONY: p2p-build build-api build-ui push-api push-ui
+p2p-build: push-api push-ui
+push-api: build-api
+push-ui: build-ui
+```
+
+With `--jobs=2`, the API and UI builds can run concurrently, and each push waits
+for its corresponding build. The job limit controls Make recipes; commands within
+one recipe retain their order.
+
 ## Environment variables available to all targets
 
 The `p2p-execute-command` workflow sets the following environment variables before calling `make`:

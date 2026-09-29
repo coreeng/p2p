@@ -114,6 +114,8 @@ jobs:
   # works.
   security-resolve-anchor-image:
     name: security-resolve-anchor-image
+    env:
+      MAKEFLAGS: ${{ vars.P2P_MAKEFLAGS }}
     if: inputs.security-scan-enabled
     runs-on: ${{ inputs.runner-label || vars.P2P_RUNNER_LABEL || 'ubuntu-24.04' }}
     outputs:

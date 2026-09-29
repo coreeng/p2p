@@ -49,6 +49,7 @@ jobs:
       packages: write
 
     env:
+      MAKEFLAGS: ${{ vars.P2P_MAKEFLAGS }}
       GITHUB_TOKEN: ${{ github.token }}
 
     steps:

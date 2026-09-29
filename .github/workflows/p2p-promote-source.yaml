@@ -20,6 +20,7 @@ jobs:
       contents: read
       id-token: write
     env:
+      MAKEFLAGS: ${{ vars.P2P_MAKEFLAGS }}
       DPLATFORM: ${{ vars.DPLATFORM || inputs.github_env }}
       CORECTL_CONTEXT: ${{ vars.CORECTL_CONTEXT }}
       CORECTL_PORTAL_URL: ${{ vars.CORECTL_PORTAL_URL }}
