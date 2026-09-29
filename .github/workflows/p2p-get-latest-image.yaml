@@ -54,6 +54,8 @@ jobs:
       found: ${{ steps.get-latest-image.outputs.found }}
     environment: ${{ inputs.github_env }}
     env:
+      # Registry references are fully qualified; ignore runner mirrors and legacy config.
+      CONTAINERS_REGISTRIES_CONF: /dev/null
       BASE_DOMAIN: ${{ vars.BASE_DOMAIN }}
       INTERNAL_SERVICES_DOMAIN: ${{ vars.INTERNAL_SERVICES_DOMAIN }}
       DPLATFORM: ${{ vars.DPLATFORM || inputs.github_env }}

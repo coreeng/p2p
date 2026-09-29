@@ -54,6 +54,8 @@ jobs:
       packages: write
 
     env:
+      # Registry references are fully qualified; ignore runner mirrors and legacy config.
+      CONTAINERS_REGISTRIES_CONF: /dev/null
       MAKEFLAGS: ${{ inputs.make-flags || vars.P2P_MAKEFLAGS }}
       GITHUB_TOKEN: ${{ github.token }}
 
