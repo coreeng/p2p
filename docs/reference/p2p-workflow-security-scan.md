@@ -4,7 +4,7 @@
 
 ## Usage
 
-Add a wrapper in the application repository that calls this workflow on a daily cron and on demand. The wrapper job must declare `permissions: id-token: write` — the umbrella's `discover-version-*` children call `google-github-actions/auth@v3` for OIDC and cannot acquire the token unless the caller grants it.
+Add a wrapper in the application repository that calls this workflow on a daily cron and on demand. The wrapper must grant `id-token: write` because target resolution, image discovery, and image scanning use OIDC authentication.
 
 ```yaml
 name: scheduled-security
@@ -36,7 +36,7 @@ jobs:
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `tenant-name` | string | No | `''` | Tenant identifier passed through to child workflows. Falls back to `vars.TENANT_NAME` when empty. |
-| `app-name` | string | No | `''` | Application name passed through to child security scans so sticky PR comments are scoped per app in multi-app repositories. Scheduled wrappers should set this to the application tenant name. |
+| `app-name` | string | No | `''` | Application name used to resolve targets when `CORECTL_CONTEXT` is set and passed through to child security scans. Scheduled wrappers should set this to the application tenant name. |
 | `image-names` | string | No | `''` | Newline-, comma-, or whitespace-separated list of standard P2P image names. The first entry is the version-lookup anchor for each stage, and the full list is passed to each image scan. If empty, image scans fall back to `make p2p-images` in `working-directory`. |
 | `working-directory` | string | No | `.` | Working directory for `make p2p-images` when `image-names` is empty. |
 | `region` | string | No | `''` | GCP region. Falls back to `vars.REGION`, then `europe-west2`. |
@@ -69,12 +69,22 @@ None. Results are surfaced via:
 
 ```
 security-resolve-anchor-image
-├── security-image-scan-fast-feedback  (matrix: vars.FAST_FEEDBACK)
-├── security-image-scan-extended-test  (matrix: vars.EXTENDED_TEST)
-└── security-image-scan-prod           (matrix: vars.PROD)
+├── security-image-scan-fast-feedback  (needs: security-resolve-fast-feedback-targets)
+├── security-image-scan-extended-test  (needs: security-resolve-extended-test-targets)
+└── security-image-scan-prod           (needs: security-resolve-prod-targets)
 
-security-source-scan                                   (independent; runs in parallel)
+security-source-scan                  (independent; runs in parallel)
 ```
+
+When the repository-level `CORECTL_CONTEXT` variable is set, the three target
+resolver jobs use `corectl p2p targets --application <app-name>` to obtain the
+configured `fastFeedback`, `extendedTest`, and `prod` targets. No legacy stage
+matrix variables are needed in this mode. A failed target resolution prevents
+that stage's image lookup and scan from running and fails the workflow.
+
+When `CORECTL_CONTEXT` is unset, the target resolver jobs are skipped and image
+scans use the existing `FAST_FEEDBACK`, `EXTENDED_TEST`, and `PROD` matrices.
+Disabling security scanning also skips target resolution.
 
 Each matrix entry calls an internal stage workflow that first discovers the latest version for that stage/environment and then scans that exact version. The security-source-scan job runs in parallel with the per-stage matrices. For source scans, `secret-scan-scope: full-history` applies to repository-wide TruffleHog git scanning; Trivy scans the current checked-out branch tree and is not limited to `working-directory`. The `security-scan-blocking-severity` input is passed to every child scan. Its default `off` keeps scheduled scans report-only; setting it to `low`, `medium`, `high`, or `critical` makes findings at or above that severity fail the umbrella workflow. Below-threshold findings are reported without failing policy jobs by default; set `security-scan-fail-on-non-blocking-findings: true` to show red child policy jobs for those findings while the umbrella workflow continues. Set `security-scan-enabled: false` to disable scheduled scanner execution and policy jobs entirely.
 

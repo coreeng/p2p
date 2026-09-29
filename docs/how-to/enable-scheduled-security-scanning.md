@@ -32,16 +32,24 @@ jobs:
       security-scan-blocking-severity: 'off'
 ```
 
-`id-token: write` is required because the image discovery and image scan jobs authenticate to Google Cloud with OIDC.
+`id-token: write` is required for OIDC authentication in target resolution, image discovery, and image scan jobs.
 
 ## 2. What gets scanned
 
 Each scheduled run starts these scans:
 
 - source security scan over the repository's reachable git history for secrets and current source tree for dependency vulnerabilities;
-- latest fast-feedback images for each environment in `vars.FAST_FEEDBACK`;
-- latest extended-test images for each environment in `vars.EXTENDED_TEST`;
-- latest production images for each environment in `vars.PROD`.
+- latest fast-feedback images;
+- latest extended-test images;
+- latest production images.
+
+When the repository-level `CORECTL_CONTEXT` variable is set, corectl resolves
+these environments from the configured application targets. Set `app-name`
+on the wrapper call. The existing context and optional `CORECTL_PORTAL_URL`
+settings used by the delivery workflows also apply to scheduled scans.
+
+When `CORECTL_CONTEXT` is unset, image scans use the existing `FAST_FEEDBACK`,
+`EXTENDED_TEST`, and `PROD` GitHub Actions variables.
 
 The source scan uses TruffleHog for committed secrets and Trivy for source dependency vulnerabilities. In scheduled scans, `full-history` applies to TruffleHog git scanning; Trivy scans the current branch's checked-out source tree. The image scans use Trivy for image vulnerabilities and TruffleHog for embedded image secrets.
 

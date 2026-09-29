@@ -85,6 +85,30 @@ jobs:
       timeout-minutes: ${{ inputs.timeout-minutes }}
       runner-label: ${{ inputs.runner-label }}
 
+  security-resolve-fast-feedback-targets:
+    if: ${{ inputs.security-scan-enabled && vars.CORECTL_CONTEXT != '' }}
+    uses: ./.github/workflows/p2p-resolve-targets.yaml
+    with:
+      app-name: ${{ inputs.app-name }}
+      source-stage: fastFeedback
+      runner-label: ${{ inputs.runner-label }}
+
+  security-resolve-extended-test-targets:
+    if: ${{ inputs.security-scan-enabled && vars.CORECTL_CONTEXT != '' }}
+    uses: ./.github/workflows/p2p-resolve-targets.yaml
+    with:
+      app-name: ${{ inputs.app-name }}
+      source-stage: extendedTest
+      runner-label: ${{ inputs.runner-label }}
+
+  security-resolve-prod-targets:
+    if: ${{ inputs.security-scan-enabled && vars.CORECTL_CONTEXT != '' }}
+    uses: ./.github/workflows/p2p-resolve-targets.yaml
+    with:
+      app-name: ${{ inputs.app-name }}
+      source-stage: prod
+      runner-label: ${{ inputs.runner-label }}
+
   # Resolve a single anchor image used to look up the latest version per
   # stage. All p2p images in a release share the same version, so any image
   # works.
@@ -120,8 +144,8 @@ jobs:
           echo "Anchor image for version discovery: $anchor"
 
   security-image-scan-fast-feedback:
-    needs: [security-resolve-anchor-image]
-    if: inputs.security-scan-enabled
+    needs: [security-resolve-anchor-image, security-resolve-fast-feedback-targets]
+    if: ${{ !cancelled() && inputs.security-scan-enabled && needs.security-resolve-anchor-image.result == 'success' && (vars.CORECTL_CONTEXT == '' || needs.security-resolve-fast-feedback-targets.result == 'success') }}
     uses: ./.github/workflows/p2p-workflow-security-image-scan-stage.yaml
     permissions:
       contents: read
@@ -132,7 +156,7 @@ jobs:
       container_registry_pat: ${{ secrets.container_registry_pat }}
       container_registry_url: ${{ secrets.container_registry_url }}
     strategy:
-      matrix: ${{ fromJSON(vars.FAST_FEEDBACK) }}
+      matrix: ${{ fromJSON(vars.CORECTL_CONTEXT != '' && needs.security-resolve-fast-feedback-targets.outputs.source || vars.FAST_FEEDBACK) }}
       fail-fast: false
     with:
       registry-path: fast-feedback
@@ -152,8 +176,8 @@ jobs:
       runner-label: ${{ inputs.runner-label }}
 
   security-image-scan-extended-test:
-    needs: [security-resolve-anchor-image]
-    if: inputs.security-scan-enabled
+    needs: [security-resolve-anchor-image, security-resolve-extended-test-targets]
+    if: ${{ !cancelled() && inputs.security-scan-enabled && needs.security-resolve-anchor-image.result == 'success' && (vars.CORECTL_CONTEXT == '' || needs.security-resolve-extended-test-targets.result == 'success') }}
     uses: ./.github/workflows/p2p-workflow-security-image-scan-stage.yaml
     permissions:
       contents: read
@@ -164,7 +188,7 @@ jobs:
       container_registry_pat: ${{ secrets.container_registry_pat }}
       container_registry_url: ${{ secrets.container_registry_url }}
     strategy:
-      matrix: ${{ fromJSON(vars.EXTENDED_TEST) }}
+      matrix: ${{ fromJSON(vars.CORECTL_CONTEXT != '' && needs.security-resolve-extended-test-targets.outputs.source || vars.EXTENDED_TEST) }}
       fail-fast: false
     with:
       registry-path: extended-test
@@ -184,8 +208,8 @@ jobs:
       runner-label: ${{ inputs.runner-label }}
 
   security-image-scan-prod:
-    needs: [security-resolve-anchor-image]
-    if: inputs.security-scan-enabled
+    needs: [security-resolve-anchor-image, security-resolve-prod-targets]
+    if: ${{ !cancelled() && inputs.security-scan-enabled && needs.security-resolve-anchor-image.result == 'success' && (vars.CORECTL_CONTEXT == '' || needs.security-resolve-prod-targets.result == 'success') }}
     uses: ./.github/workflows/p2p-workflow-security-image-scan-stage.yaml
     permissions:
       contents: read
@@ -196,7 +220,7 @@ jobs:
       container_registry_pat: ${{ secrets.container_registry_pat }}
       container_registry_url: ${{ secrets.container_registry_url }}
     strategy:
-      matrix: ${{ fromJSON(vars.PROD) }}
+      matrix: ${{ fromJSON(vars.CORECTL_CONTEXT != '' && needs.security-resolve-prod-targets.outputs.source || vars.PROD) }}
       fail-fast: false
     with:
       registry-path: prod

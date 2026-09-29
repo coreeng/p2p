@@ -231,7 +231,7 @@ jobs:
 
           app_name = 'app-name: $' + '{{ inputs.app-name }}'
           app_name_count = workflow.count(app_name)
-          assert app_name_count == 4, f'expected source plus 3 scheduled app-name pass-throughs, got {app_name_count}'
+          assert app_name_count == 7, f'expected source, 3 target resolvers, and 3 scheduled app-name pass-throughs, got {app_name_count}'
 
           tenant_name = 'tenant-name: $' + '{{ inputs.tenant-name }}'
           tenant_name_count = workflow.count(tenant_name)
@@ -265,9 +265,10 @@ jobs:
               'extended-test-github-env',
               'prod-github-env',
           ):
-              assert f'{name}:' not in workflow, f'{name} should be derived from repository variables'
-          for var in ('FAST_FEEDBACK', 'EXTENDED_TEST', 'PROD'):
-              assert f'matrix: $' + f'{{{{ fromJSON(vars.{var}) }}}}' in workflow, f'missing matrix for vars.{var}'
+              assert f'{name}:' not in workflow, f'{name} should be derived from configured targets'
+          for stage, var in (('fast-feedback', 'FAST_FEEDBACK'), ('extended-test', 'EXTENDED_TEST'), ('prod', 'PROD')):
+              matrix = "matrix: $" + "{{ fromJSON(vars.CORECTL_CONTEXT != '' && needs.security-resolve-" + stage + "-targets.outputs.source || vars." + var + ") }}"
+              assert matrix in workflow, f'missing corectl/legacy matrix for {stage}'
           assert workflow.count('github_env: $' + '{{ matrix.deploy_env }}') == 3
           PY
 
