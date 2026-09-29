@@ -50,6 +50,7 @@ This workflow runs image scanning before deployment. The image scan authenticate
 | `tenant-name` | `string` | No | `''` | Tenant name passed to the make target. |
 | `skip-subnamespaces-create` | `boolean` | No | `false` | Skips creating subnamespaces before running the make target. |
 | `runner-label` | `string` | No | `''` | GitHub Actions runner label for every job in the workflow. When empty, uses the caller's `P2P_RUNNER_LABEL` organization or repository variable, then `ubuntu-24.04`. |
+| `make-flags` | `string` | No | `''` | Make options for this workflow, e.g. `--jobs=4`. When empty, falls back to `P2P_MAKEFLAGS`; if both are empty, adds no options. |
 | `security-scan-blocking-severity` | `string` | No | `off` | Minimum security-image-scan finding severity that blocks the workflow: `off`, `low`, `medium`, `high`, or `critical`. Verified image secrets are treated as `critical`. The policy job fails only for blocking findings unless `security-scan-fail-on-non-blocking-findings` is enabled. |
 | `security-scan-enabled` | `boolean` | No | `true` | Runs managed image security scans. Set to `false` as an escape hatch to skip image security scanning and policy enforcement while keeping deployment dependencies unblocked. |
 | `security-scan-fail-on-non-blocking-findings` | `boolean` | No | `false` | Fails security policy jobs for non-blocking findings so GitHub shows red policy jobs while the workflow continues. Blocking findings always fail the workflow. |

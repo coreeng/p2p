@@ -60,6 +60,7 @@ jobs:
     with:
       dry-run: true
       runner-label: ubuntu-24.04
+      make-flags: '--jobs=2'
       run-fastfeedback-integration-on-prs: true
       version: ${{ needs.test_version.outputs.version }}
 
@@ -81,6 +82,7 @@ jobs:
       image-names: p2p
       dry-run: true
       runner-label: ubuntu-24.04
+      make-flags: '--jobs=2'
       security-scan-blocking-severity: off
       timeout-minutes: 10
 
@@ -356,6 +358,7 @@ jobs:
       dry-run: true
       main-branch: ${{ github.ref }}
       runner-label: ubuntu-24.04
+      make-flags: '--jobs=2'
       version: ${{ needs.get_image_extended_test.outputs.version }}
 
   get_image_prod:
@@ -379,4 +382,5 @@ jobs:
       dry-run: true
       main-branch: ${{ github.ref }}
       runner-label: ubuntu-24.04
+      make-flags: '--jobs=1'
       version: ${{ needs.get_image_prod.outputs.version }}

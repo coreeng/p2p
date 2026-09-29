@@ -78,6 +78,11 @@ on:
         required: false
         type: string
         default: ''
+      make-flags:
+        description: 'Make options; falls back to P2P_MAKEFLAGS when empty.'
+        required: false
+        type: string
+        default: ''
       runner-label:
         description: 'GitHub Actions runner label for extended-test jobs.'
         required: false
@@ -108,6 +113,7 @@ jobs:
       matrix: ${{ fromJSON(needs.resolve-targets.outputs.source) }}
       fail-fast: false
     with:
+      make-flags: ${{ inputs.make-flags }}
       command: p2p-extended-test
       subnamespace: extended
       region: ${{ inputs.region }}
@@ -138,6 +144,7 @@ jobs:
       matrix: ${{ fromJSON(needs.resolve-targets.outputs.source) }}
       fail-fast: false
     with:
+      make-flags: ${{ inputs.make-flags }}
       pipeline-stage: extended-test
       github_env: ${{ matrix.deploy_env }}
       tenant-name: ${{ inputs.tenant-name }}
@@ -162,6 +169,7 @@ jobs:
       matrix: ${{ fromJSON(needs.resolve-targets.outputs.destination) }}
       fail-fast: false
     with:
+      make-flags: ${{ inputs.make-flags }}
       source_matrix: ${{ needs.resolve-targets.outputs.source }}
       dest_github_env: ${{ matrix.deploy_env }}
       region: ${{ inputs.region }}

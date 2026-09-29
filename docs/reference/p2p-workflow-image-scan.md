@@ -26,6 +26,7 @@ Internal workflow called by [`p2p-workflow-fastfeedback`](p2p-workflow-fastfeedb
 | `ignore-unfixed` | boolean | No | `true` | When `true`, passes `--ignore-unfixed` to Trivy — only vulnerabilities with a fixed version are reported. |
 | `timeout-minutes` | number | No | `20` | Job timeout. |
 | `runner-label` | string | No | `''` | GitHub Actions runner label for every image security job. When empty, uses the caller's `P2P_RUNNER_LABEL` organization or repository variable, then `ubuntu-24.04`. |
+| `make-flags` | string | No | `''` | Make options for this workflow, e.g. `--jobs=4`. When empty, falls back to `P2P_MAKEFLAGS`; if both are empty, adds no options. |
 
 ## Secrets
 

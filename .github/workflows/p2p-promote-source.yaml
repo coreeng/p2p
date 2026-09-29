@@ -10,6 +10,11 @@ on:
       source-stage: {required: true, type: string}
       checkout-version: {required: false, type: string, default: ''}
       working-directory: {required: false, type: string, default: '.'}
+      make-flags:
+        description: 'Make options; falls back to P2P_MAKEFLAGS when empty.'
+        required: false
+        type: string
+        default: ''
       runner-label: {required: false, type: string, default: ''}
 
 jobs:
@@ -20,6 +25,7 @@ jobs:
       contents: read
       id-token: write
     env:
+      MAKEFLAGS: ${{ inputs.make-flags || vars.P2P_MAKEFLAGS }}
       DPLATFORM: ${{ vars.DPLATFORM || inputs.github_env }}
       CORECTL_CONTEXT: ${{ vars.CORECTL_CONTEXT }}
       CORECTL_PORTAL_URL: ${{ vars.CORECTL_PORTAL_URL }}

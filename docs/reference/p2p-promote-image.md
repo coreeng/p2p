@@ -32,6 +32,7 @@ jobs:
 | `checkout-version` | string | No | `''` | Git ref to check out. Ignored when `dry-run` is `true`; the workflow checks out the default ref. |
 | `dry-run` | boolean | No | `false` | When `true`, skips promotion. |
 | `runner-label` | string | No | `''` | GitHub Actions runner label for every promotion job. When empty, uses the caller's `P2P_RUNNER_LABEL` organization or repository variable, then `ubuntu-24.04`. |
+| `make-flags` | string | No | `''` | Make options for this workflow, e.g. `--jobs=4`. When empty, falls back to `P2P_MAKEFLAGS`; if both are empty, adds no options. |
 
 ## Secrets
 

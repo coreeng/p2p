@@ -63,6 +63,36 @@ Every primary P2P workflow accepts an optional `runner-label` input. When it is 
 
 Use an organization variable to set one runner label for multiple repositories. Restrict the variable to selected repositories while rolling out a new runner, then widen access when those workflows have passed.
 
+## Make parallelism
+
+Set the optional `make-flags` input on an application's workflow call alongside
+`runner-label`. For example:
+
+```yaml
+with:
+  runner-label: ubuntu-24.04
+  make-flags: '--jobs=4'
+```
+
+This allows up to four independent Make recipes to run concurrently. Applications
+in a monorepo can pass different values on their own workflow calls. P2P forwards
+the input through application stages, promotion and image discovery. Platform CI,
+CD and release workflows also accept it.
+
+A non-empty input takes precedence over the optional GitHub Actions variable
+`P2P_MAKEFLAGS` at organization or repository scope. A repository value overrides
+an organization value. If both the input and fallback are absent or empty, P2P
+adds no Make options. Leave the fallback unset to configure applications
+independently. Pass `make-flags: '--jobs=1'` to select serial execution even when
+the shared fallback enables parallelism.
+
+The resolved value is passed as Make's native `MAKEFLAGS` environment variable.
+This controls Make recipes within a job. Pipeline stage dependencies and GitHub
+job concurrency keep their existing behavior.
+
+Before opting in, declare ordering dependencies in your Makefile. See
+[Parallel execution](make-targets.md#parallel-execution) for an example.
+
 ## Per-environment variables
 
 Each GitHub environment carries variables that describe the target cloud project and cluster. The `p2p-execute-command` workflow reads these automatically.

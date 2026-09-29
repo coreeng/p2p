@@ -12,6 +12,11 @@ on:
         description: 'The secret for the GHCR registry to pull the Core Platform image from'
         required: true
     inputs:
+      make-flags:
+        description: 'Make options; falls back to P2P_MAKEFLAGS when empty.'
+        required: false
+        type: string
+        default: ''
       name:
         required: true
         type: string
@@ -44,6 +49,7 @@ jobs:
       cancel-in-progress: false
 
     env:
+      MAKEFLAGS: ${{ inputs.make-flags || vars.P2P_MAKEFLAGS }}
       env_vars: ${{ secrets.env_vars }}
       GITHUB_TOKEN: ${{ github.token }}
       ENV: ${{ inputs.environment }}

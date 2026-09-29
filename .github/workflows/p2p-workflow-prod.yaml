@@ -70,6 +70,11 @@ on:
         required: false
         type: boolean
         default: false
+      make-flags:
+        description: 'Make options; falls back to P2P_MAKEFLAGS when empty.'
+        required: false
+        type: string
+        default: ''
       runner-label:
         description: 'GitHub Actions runner label for production jobs.'
         required: false
@@ -120,6 +125,7 @@ jobs:
       matrix: ${{ fromJSON(needs.resolve-targets.outputs.source) }}
       fail-fast: false
     with:
+      make-flags: ${{ inputs.make-flags }}
       pipeline-stage: prod
       github_env: ${{ matrix.deploy_env }}
       tenant-name: ${{ inputs.tenant-name }}
@@ -148,6 +154,7 @@ jobs:
       matrix: ${{ fromJSON(needs.resolve-targets.outputs.source) }}
       fail-fast: false
     with:
+      make-flags: ${{ inputs.make-flags }}
       command: p2p-prod
       subnamespace: prod
       region: ${{ inputs.region }}
