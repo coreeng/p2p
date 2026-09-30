@@ -110,7 +110,6 @@ jobs:
         name: Prepare workspace
         run: |
           mv "${GITHUB_WORKSPACE}/environments" "/app/environments"
-          mv "${GITHUB_WORKSPACE}/tenants" "/app/tenants"
 
       - name: Decode environment variables
         shell: bash
