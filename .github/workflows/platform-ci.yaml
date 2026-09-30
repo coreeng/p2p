@@ -37,7 +37,6 @@ jobs:
       id-token: write
       pull-requests: read
     outputs:
-      tenants: ${{ steps.filter.outputs.tenants }}
       environments: ${{ steps.filter.outputs.environments }}
     steps:
       - id: checkout
@@ -47,28 +46,8 @@ jobs:
         id: filter
         with:
           filters: |
-            tenants:
-              - 'tenants/**'
             environments:
               - 'environments/**'
-
-  tenants-validate:
-    name: tenants-validate
-    needs: [changes]
-    uses: ./.github/workflows/platform-execute-command.yaml
-    if: ${{ inputs.release_build == true || needs.changes.outputs.environments == 'true' }}
-    secrets:
-      env_vars: ${{ secrets.env_vars }}
-      cecg-registry-username: ${{ secrets.cecg-registry-username }}
-      cecg-registry-secret: ${{ secrets.cecg-registry-secret }}
-    with:
-      make-flags: ${{ inputs.make-flags }}
-      action: validate
-      name: tenants-validate
-      targets: tenants-validate
-      environment: ${{ inputs.environment }}
-      platform: ${{ inputs.platform }}
-      release: ${{ inputs.release }}
 
   environments-validate:
     name: environments-validate
@@ -114,24 +93,6 @@ jobs:
       action: features-plan
       name: ${{ matrix.feature }}
       feature: ${{ matrix.feature }}
-      environment: ${{ inputs.environment }}
-      platform: ${{ inputs.platform }}
-      release: ${{ inputs.release }}
-
-  tenants:
-    name: tenants-plan
-    uses: ./.github/workflows/platform-execute-command.yaml
-    needs: [changes]
-    if: ${{ inputs.release_build == false && needs.changes.outputs.environments != 'true' && needs.changes.outputs.tenants == 'true' }}
-    secrets:
-      env_vars: ${{ secrets.env_vars }}
-      cecg-registry-username: ${{ secrets.cecg-registry-username }}
-      cecg-registry-secret: ${{ secrets.cecg-registry-secret }}
-    with:
-      make-flags: ${{ inputs.make-flags }}
-      action: tenants-plan
-      name: tenants-plan
-      targets: tenants-plan
       environment: ${{ inputs.environment }}
       platform: ${{ inputs.platform }}
       release: ${{ inputs.release }}
