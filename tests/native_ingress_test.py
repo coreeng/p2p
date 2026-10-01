@@ -17,7 +17,7 @@ def script(name):
 
 class NativeIngressContract(unittest.TestCase):
     def execute(self, enabled, compatible=True):
-        with tempfile.TemporaryDirectory(prefix="p2p-ingress-", dir="/tmp/opencode") as directory:
+        with tempfile.TemporaryDirectory(prefix="p2p-ingress-") as directory:
             root = Path(directory)
             (root / "app.yaml").write_text(f"config:\n  ingress:\n    enabled: {enabled}\n")
             (root / "make").write_text("#!/bin/bash\nexit " + ("0" if compatible else "1") + "\n")
@@ -57,7 +57,27 @@ class NativeIngressContract(unittest.TestCase):
         self.assertEqual(calls, "")
 
     def test_resolved_variables_are_protected(self):
-        self.assertRegex(script("Decode environment variables"), re.escape("P2P_INGRESS|BASE_DOMAIN=|MAKEFLAGS="))
+        self.assertRegex(script("Decode environment variables"), re.escape("P2P_INGRESS|BASE_DOMAIN=|MAKEFLAGS=|GNUMAKEFLAGS="))
+
+    def test_native_make_override_channels_are_rejected(self):
+        guard = script("Validate native Make configuration")
+        for channel in ("P2P_NATIVE_COMMAND", "MAKEFLAGS", "GNUMAKEFLAGS", "MFLAGS"):
+            for value in ("P2P_INGRESS_DOMAIN=other.example", "P2P_INGRESS_CLASS=nginx",
+                          "P2P_INGRESS_ENABLED=false", "P2P_INGRESS_MODE=EXISTING_INGRESS",
+                          "p2p_ingress_args=ignored", "p2p_nft_endpoint=ingress",
+                          "CORECTL_CONTEXT=", "--eval=ignored", "-e", "-fother.mk"):
+                with self.subTest(channel=channel, value=value):
+                    env = dict(os.environ, P2P_NATIVE_COMMAND="deploy-functional", MAKEFLAGS="", GNUMAKEFLAGS="", MFLAGS="")
+                    env[channel] = value
+                    result = subprocess.run(["bash", "-c", guard], env=env, capture_output=True, text=True)
+                    self.assertNotEqual(result.returncode, 0, value)
+
+    def test_ordinary_native_make_configuration_is_allowed(self):
+        env = dict(os.environ, P2P_NATIVE_COMMAND="deploy-functional p2p_version=abc123",
+                   MAKEFLAGS="-j4 --no-print-directory", GNUMAKEFLAGS="", MFLAGS="")
+        result = subprocess.run(["bash", "-c", script("Validate native Make configuration")],
+                                env=env, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
 
 
 if __name__ == "__main__":
