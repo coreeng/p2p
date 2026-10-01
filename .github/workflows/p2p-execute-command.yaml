@@ -288,7 +288,7 @@ jobs:
               echo "Application environment variables cannot override CORECTL_CONTEXT" >&2
               exit 1
             fi
-            if [[ -n "$CORECTL_CONTEXT" && "$i" =~ ^(P2P_REGISTRY|REGISTRY=|TENANT_NAME=|GITHUB_REPOSITORY_ID=|DPLATFORM=|CORECTL_PORTAL_URL=|DOCKER_CONFIG=|RUNNER_TEMP=) ]]; then
+            if [[ -n "$CORECTL_CONTEXT" && "$i" =~ ^(P2P_INGRESS|BASE_DOMAIN=|MAKEFLAGS=|P2P_REGISTRY|REGISTRY=|TENANT_NAME=|GITHUB_REPOSITORY_ID=|DPLATFORM=|CORECTL_PORTAL_URL=|DOCKER_CONFIG=|RUNNER_TEMP=) ]]; then
               echo "Application environment variables cannot override platform registry configuration" >&2
               exit 1
             fi
@@ -307,6 +307,29 @@ jobs:
           corectl p2p registry connect "$DPLATFORM" --application "$TENANT_NAME" \
             --context "$CORECTL_CONTEXT" --url "$CORECTL_PORTAL_URL" \
             --ci-environment "$EXPECTED_GITHUB_ENV" --output env >> "$GITHUB_ENV"
+
+      - name: Resolve application ingress
+        if: ${{ inputs.dry-run == false && vars.CORECTL_CONTEXT != '' }}
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          set -euo pipefail
+          enabled=$(yq -r '.config.ingress.enabled // false' app.yaml)
+          yq -e '(.config.ingress.enabled == null) or ((.config.ingress.enabled | tag) == "!!bool")' app.yaml >/dev/null
+          case "$enabled" in
+            true)
+              if ! make -n p2p-native-ingress-contract >/dev/null; then
+                echo 'Update the generated Makefile to the native ingress deployment contract before enabling ingress' >&2
+                exit 1
+              fi
+              corectl p2p ingress "$DPLATFORM" --application "$TENANT_NAME" \
+                --context "$CORECTL_CONTEXT" --url "$CORECTL_PORTAL_URL" --output env >> "$GITHUB_ENV"
+              ;;
+            false)
+              printf '%s\n' P2P_INGRESS_ENABLED=false P2P_INGRESS_MODE=DISABLED P2P_INGRESS_DOMAIN= P2P_INGRESS_CLASS= >> "$GITHUB_ENV"
+              ;;
+            *) echo 'config.ingress.enabled must be boolean' >&2; exit 1 ;;
+          esac
 
       - name: Authenticate to image registry
         if: ${{ inputs.dry-run == false && vars.CORECTL_CONTEXT != '' }}
