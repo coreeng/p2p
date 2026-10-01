@@ -65,7 +65,8 @@ class NativeIngressContract(unittest.TestCase):
             for value in ("P2P_INGRESS_DOMAIN=other.example", "P2P_INGRESS_CLASS=nginx",
                           "P2P_INGRESS_ENABLED=false", "P2P_INGRESS_MODE=EXISTING_INGRESS",
                           "p2p_ingress_args=ignored", "p2p_nft_endpoint=ingress",
-                          "CORECTL_CONTEXT=", "--eval=ignored", "-e", "-fother.mk"):
+                          "CORECTL_CONTEXT=", "MAKEFILES=other.mk", "MAKEFLAGS=-e", "--eval=ignored", "-e", "-fother.mk",
+                          "deploy-functional X=1;P2P_INGRESS_DOMAIN=other.example make deploy-functional"):
                 with self.subTest(channel=channel, value=value):
                     env = dict(os.environ, P2P_NATIVE_COMMAND="deploy-functional", MAKEFLAGS="", GNUMAKEFLAGS="", MFLAGS="")
                     env[channel] = value
@@ -78,6 +79,27 @@ class NativeIngressContract(unittest.TestCase):
         result = subprocess.run(["bash", "-c", script("Validate native Make configuration")],
                                 env=env, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_native_execution_passes_literal_make_arguments(self):
+        with tempfile.TemporaryDirectory(prefix="p2p-execute-") as directory:
+            root=Path(directory)
+            (root / "make").write_text('#!/bin/bash\nprintf "%s\\n" "$@" > "$CALLS"\n')
+            (root / "make").chmod(0o755)
+            env=dict(os.environ,PATH=directory+":"+os.environ["PATH"],CORECTL_CONTEXT="core-platform/engineering",
+                     P2P_NATIVE_COMMAND="deploy-functional X=1;P2P_INGRESS_DOMAIN=other.example make deploy-functional",CALLS=str(root/"calls"))
+            execution=script("Run make ${{ inputs.command }}").replace("make ${{ inputs.command }}", "exit 99")
+            result=subprocess.run(["bash","-c",execution],cwd=root,env=env,capture_output=True,text=True)
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertEqual((root/"calls").read_text().splitlines(),["deploy-functional","X=1;P2P_INGRESS_DOMAIN=other.example","make","deploy-functional"])
+
+    def test_runner_additional_makefile_is_rejected(self):
+        with tempfile.TemporaryDirectory(prefix="p2p-makefiles-") as directory:
+            extra=Path(directory)/"extra.mk"
+            extra.write_text('CORECTL_CONTEXT :=\nBASE_DOMAIN := other.example\n')
+            env=dict(os.environ,P2P_NATIVE_COMMAND="deploy-functional",MAKEFILES=str(extra),MAKEFLAGS="",GNUMAKEFLAGS="",MFLAGS="")
+            result=subprocess.run(["bash","-c",script("Validate native Make configuration")],env=env,capture_output=True,text=True)
+            self.assertNotEqual(result.returncode,0)
+            self.assertIn("MAKEFILES",result.stderr)
 
 
 if __name__ == "__main__":
