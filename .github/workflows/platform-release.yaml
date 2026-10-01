@@ -30,22 +30,6 @@ on:
         value: ${{ jobs.generate.outputs.digest }}
 
 jobs:
-  publish-pkg:
-    runs-on: ubuntu-24.04
-    if: github.ref_type == 'tag'
-    permissions:
-      contents: write
-    steps:
-      - id: checkout
-        name: Checkout
-        uses: actions/checkout@v7
-
-      - id: publish-pkg
-        name: Publish go pkg
-        run: |
-          git tag "pkg/${{ github.ref_name }}"
-          git push origin "pkg/${{ github.ref_name }}"
-
   generate:
     runs-on: ubuntu-24.04
 
