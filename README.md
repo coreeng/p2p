@@ -56,10 +56,11 @@ stop execution without partial environment output or domain fallback.
 | `P2P_REGISTRY` | Prepared registry image prefix |
 | `P2P_REGISTRY_FAST_FEEDBACK`, `P2P_REGISTRY_EXTENDED_TEST`, `P2P_REGISTRY_PROD` | Stage registry prefixes, with corresponding `_PATH` variables |
 | `P2P_NAMESPACE` and stage-specific `P2P_NAMESPACE_*` | Application/component namespace and stage namespaces |
-| `P2P_INGRESS_ENABLED` | Boolean application ingress intent |
 | `P2P_INGRESS_DOMAIN`, `P2P_INGRESS_CLASS` | Target cluster domain/class; empty when ingress is disabled |
 
-Templates consume the environment in ordinary deployment YAML. The ingress
+Templates consume domain/class environment variables in ordinary deployment YAML.
+Ingress enablement is read directly from `config.ingress.enabled` in `app.yaml`;
+corectl reads the same boolean to decide whether to resolve a profile. The ingress
 contract requires no preparation target, compatibility marker or exchanged file.
 All automated template tests use fixed Service routing, including NFT; browser
 routing is verified separately. Shared Make defaults preserve standalone/legacy

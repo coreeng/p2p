@@ -17,7 +17,7 @@ class P2PEnvironmentContract(unittest.TestCase):
     def test_preparation_delegates_to_corectl_and_exports_environment(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            (root / "corectl").write_text('#!/bin/bash\nprintf "%s\\n" "$@" > "$CALLS"\nprintf "%s\\n" P2P_REGISTRY=registry P2P_INGRESS_ENABLED=true P2P_INGRESS_DOMAIN=trial.localhost P2P_INGRESS_CLASS=traefik\n')
+            (root / "corectl").write_text('#!/bin/bash\nprintf "%s\\n" "$@" > "$CALLS"\nprintf "%s\\n" P2P_REGISTRY=registry P2P_INGRESS_DOMAIN=trial.localhost P2P_INGRESS_CLASS=traefik\n')
             (root / "corectl").chmod(0o755)
             env = dict(os.environ, PATH=directory+":"+os.environ["PATH"], CALLS=str(root/"calls"),
                        GITHUB_ENV=str(root/"environment"), DPLATFORM="trial", TENANT_NAME="shop",

@@ -55,7 +55,6 @@ P2P_NAMESPACE_PROD ?= $(P2P_NAMESPACE)-prod
 P2P_IMAGE_NAMES ?= $(P2P_APP_NAME)
 
 # Established environment contract; defaults preserve standalone/legacy use.
-export P2P_INGRESS_ENABLED ?= $(if $(filter true,$(p2p_app_config_ingress_enabled)),true,false)
 export P2P_INGRESS_DOMAIN ?= $(BASE_DOMAIN)
 export P2P_INGRESS_CLASS ?=
 P2P_SOURCE_REGISTRY ?= $(SOURCE_REGISTRY)
