@@ -54,22 +54,11 @@ P2P_NAMESPACE_PROD ?= $(P2P_NAMESPACE)-prod
 
 P2P_IMAGE_NAMES ?= $(P2P_APP_NAME)
 
-# Cluster settings are resolved once per deployment, outside generated Makefiles.
-ifneq ($(filter command line,$(origin CORECTL_CONTEXT)),)
-$(error Context must come from the environment, not Make command variables)
-endif
-ifneq ($(CORECTL_CONTEXT),)
-ifneq ($(filter command line,$(origin BASE_DOMAIN) $(origin P2P_INGRESS_DOMAIN) $(origin P2P_INGRESS_CLASS) $(origin P2P_INGRESS_ENABLED) $(origin P2P_INGRESS_MODE)),)
-$(error Ingress settings must come from the cluster profile, not Make command variables)
-endif
-endif
-override p2p_deployment_values := .p2p-deployment-values.yaml
-
-.PHONY: p2p-prepare-deployment-values
-p2p-prepare-deployment-values:
-	rm -f .p2p-deployment-values.yaml
-	curl -fsSL https://raw.githubusercontent.com/coreeng/p2p/v1/scripts/prepare-deployment-values.py -o .p2p-deployment-values.py
-	python3 .p2p-deployment-values.py --output .p2p-deployment-values.yaml
+# Established environment contract; defaults preserve standalone/legacy use.
+export P2P_INGRESS_ENABLED ?= $(if $(filter true,$(p2p_app_config_ingress_enabled)),true,false)
+export P2P_INGRESS_DOMAIN ?= $(BASE_DOMAIN)
+export P2P_INGRESS_CLASS ?=
+P2P_SOURCE_REGISTRY ?= $(SOURCE_REGISTRY)
 
 .PHONY: p2p-registry-login
 p2p-registry-login:
@@ -134,8 +123,8 @@ p2p-images:
 p2p-promote-to-extended-test:
 	$(foreach image, $(P2P_IMAGE_NAMES), \
 		skopeo copy --all --preserve-digests \
-			docker://$(SOURCE_REGISTRY)/$(P2P_REGISTRY_FAST_FEEDBACK_PATH)/$(image):$(P2P_VERSION) \
-			docker://$(REGISTRY)/$(P2P_REGISTRY_EXTENDED_TEST_PATH)/$(image):$(P2P_VERSION) \
+		docker://$(P2P_SOURCE_REGISTRY)/$(P2P_REGISTRY_FAST_FEEDBACK_PATH)/$(image):$(P2P_VERSION) \
+		docker://$(P2P_REGISTRY)/$(P2P_REGISTRY_EXTENDED_TEST_PATH)/$(image):$(P2P_VERSION) \
 	;)
 
 .PHONY: p2p-extended-test ## Run extended tests
@@ -150,8 +139,8 @@ p2p-promote-to-extended-test:
 p2p-promote-to-prod:
 	$(foreach image, $(P2P_IMAGE_NAMES), \
 		skopeo copy --all --preserve-digests \
-			docker://$(SOURCE_REGISTRY)/$(P2P_REGISTRY_EXTENDED_TEST_PATH)/$(image):$(P2P_VERSION) \
-			docker://$(REGISTRY)/$(P2P_REGISTRY_PROD_PATH)/$(image):$(P2P_VERSION) \
+		docker://$(P2P_SOURCE_REGISTRY)/$(P2P_REGISTRY_EXTENDED_TEST_PATH)/$(image):$(P2P_VERSION) \
+		docker://$(P2P_REGISTRY)/$(P2P_REGISTRY_PROD_PATH)/$(image):$(P2P_VERSION) \
 	;)
 
 .PHONY: p2p-prod ## Deploy to prod

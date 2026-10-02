@@ -3,7 +3,6 @@ projectDir := $(realpath $(dir $(firstword $(MAKEFILE_LIST))))
 .PHONY: test-native-ingress
 test-native-ingress:
 	python3 tests/native_ingress_test.py
-	python3 tests/deployment_values_test.py
 
 .PHONY: lint-native-ingress
 lint-native-ingress:

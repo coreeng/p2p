@@ -297,66 +297,22 @@ jobs:
             printf '%s\n' "${i//\\/\\\\}" >> "${GITHUB_ENV}"
           done
 
-      - name: Connect to image registry
-        if: ${{ inputs.dry-run == false && vars.CORECTL_CONTEXT != '' }}
-        shell: bash
-        env:
-          EXPECTED_GITHUB_ENV: ${{ inputs.github_env }}
-        run: |
-          set -euo pipefail
-          corectl p2p registry connect "$DPLATFORM" --application "$TENANT_NAME" \
-            --context "$CORECTL_CONTEXT" --url "$CORECTL_PORTAL_URL" \
-            --ci-environment "$EXPECTED_GITHUB_ENV" --output env >> "$GITHUB_ENV"
-
-      - name: Validate native Make configuration
-        if: ${{ inputs.dry-run == false && vars.CORECTL_CONTEXT != '' }}
-        shell: bash
-        env:
-          P2P_NATIVE_COMMAND: ${{ inputs.command }}
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import os, re, shlex
-          protected = re.compile(r'^(P2P_INGRESS.*|CORECTL_CONTEXT|BASE_DOMAIN|MAKEFILES|MAKEFLAGS|GNUMAKEFLAGS|MFLAGS|p2p_deployment_values|p2p_ingress_args|p2p_nft_endpoint|p2p_app_config_ingress_enabled)$')
-          if os.environ.get('MAKEFILES'):
-              raise SystemExit('Native execution cannot load additional MAKEFILES')
-          safe_option = re.compile(r'^(?:-[jks]+[0-9]*|--jobs(?:=[0-9]+)?|--silent|--keep-going|--no-print-directory|--trace)$')
-          for channel in ('P2P_NATIVE_COMMAND', 'MAKEFLAGS', 'GNUMAKEFLAGS', 'MFLAGS'):
-              for token in shlex.split(os.environ.get(channel, '')):
-                  assignment = re.match(r'^([A-Za-z_][A-Za-z0-9_]*)(?::|\+|\?)?=', token)
-                  if assignment:
-                      if protected.fullmatch(assignment[1]) or any(c in token for c in '$`;|&<>\n'):
-                          raise SystemExit(f'{channel} cannot override native ingress configuration')
-                  elif token.startswith('-'):
-                      if not safe_option.fullmatch(token):
-                          raise SystemExit(f'{channel} contains an unsupported native Make option')
-                  elif channel == 'P2P_NATIVE_COMMAND':
-                      if not re.fullmatch(r'[A-Za-z0-9_./%-]+', token):
-                          raise SystemExit('Native Make command must contain target names or ordinary assignments')
-                  elif not re.fullmatch(r'[jks]+[0-9]*|[0-9]+|--', token):
-                      raise SystemExit(f'{channel} contains unsupported native Make flags')
-          PY
-
-      - name: Validate application ingress contract
+      - name: Prepare P2P environment
         if: ${{ inputs.dry-run == false && vars.CORECTL_CONTEXT != '' }}
         shell: bash
         working-directory: ${{ inputs.working-directory }}
+        env:
+          EXPECTED_GITHUB_ENV: ${{ inputs.github_env }}
+          P2P_PREPARE_APP_NAME: ${{ inputs.app-name }}
+          P2P_PREPARE_VERSION: ${{ inputs.version }}
+          P2P_PREPARE_COMMAND: ${{ inputs.command }}
         run: |
           set -euo pipefail
-          enabled=$(yq -r '.config.ingress.enabled // false' app.yaml)
-          yq -e '(.config.ingress.enabled == null) or ((.config.ingress.enabled | tag) == "!!bool")' app.yaml >/dev/null
-          case "$enabled" in
-            true)
-              if ! make -n p2p-deployment-values-contract >/dev/null; then
-                echo 'Update the generated Makefile to consume P2P deployment values before enabling ingress' >&2
-                exit 1
-              fi
-              ;;
-            false)
-              :
-              ;;
-            *) echo 'config.ingress.enabled must be boolean' >&2; exit 1 ;;
-          esac
+          corectl p2p prepare "$DPLATFORM" --application "$TENANT_NAME" \
+            --app-name "$P2P_PREPARE_APP_NAME" --version "$P2P_PREPARE_VERSION" \
+            --command "$P2P_PREPARE_COMMAND" \
+            --context "$CORECTL_CONTEXT" --url "$CORECTL_PORTAL_URL" \
+            --ci-environment "$EXPECTED_GITHUB_ENV" --output env >> "$GITHUB_ENV"
 
       - name: Authenticate to image registry
         if: ${{ inputs.dry-run == false && vars.CORECTL_CONTEXT != '' }}
@@ -366,6 +322,7 @@ jobs:
 
       - name: Set p2p variables
         id: setup-p2p-variables
+        if: ${{ vars.CORECTL_CONTEXT == '' }}
         run: |
           env | grep "^P2P_" | sort
           export P2P_TENANT_NAME="${{ env.TENANT_NAME }}"
@@ -404,10 +361,7 @@ jobs:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ steps.auth.outputs.credentials_file_path }}
         run: |
           if [[ -n "$CORECTL_CONTEXT" ]]; then
-            python3 - <<'PY'
-          import os, shlex, subprocess
-          subprocess.run(['make', *shlex.split(os.environ['P2P_NATIVE_COMMAND'])], check=True)
-          PY
+            corectl p2p run --command "$P2P_NATIVE_COMMAND"
           else
             make ${{ inputs.command }}
           fi

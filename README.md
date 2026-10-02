@@ -35,27 +35,41 @@ jobs:
 
 ## Workflows
 
-### Application deployment values
+### Application deployment environment
 
-Web application deployments use the shared `p2p-prepare-deployment-values` Make
-target. It reads `config.ingress.enabled` from `app.yaml` and writes
-`.p2p-deployment-values.yaml`. When ingress is enabled and `CORECTL_CONTEXT` is
-set, corectl resolves the assigned `DPLATFORM` cluster profile for the application
-identified by `TENANT_NAME`. Missing or invalid profiles stop deployment without
-falling back to `BASE_DOMAIN`. Disabled ingress requires no profile lookup.
-Execution without a Context retains the existing `BASE_DOMAIN` input.
+P2P prepares its environment with one corectl call:
 
-Consumers add `p2p-prepare-deployment-values` as a prerequisite of their deployment
-target and `-f "$(p2p_deployment_values)"` as the final Helm values argument. They
-also declare a no-op `p2p-deployment-values-contract` target so the workflow can
-reject older consumers before enabled ingress deployment. The matching shared
-Makefile and helper are published together under `v1`.
+```bash
+corectl p2p prepare "$DPLATFORM" --application "$TENANT_NAME" \
+  --app-name "$P2P_APP_NAME" --version "$P2P_VERSION" \
+  --context "$CORECTL_CONTEXT" --output env >> "$GITHUB_ENV"
+```
 
-The prepared overlay fixes automated tests to Service routing, including NFT,
-and disables optional ingress scenarios on every cluster kind. Browser routing
-is verified separately. Preparation removes stale values before resolving and
-atomically writes the replacement after validation. Ignore both generated
-`.p2p-deployment-values.yaml` and downloaded `.p2p-deployment-values.py` in Git.
+Corectl reads `config.ingress.enabled` from `app.yaml`, resolves enabled ingress
+for the assigned cluster, establishes the registry connection and emits only
+`P2P_*` settings. Disabled ingress skips profile lookup. Missing/invalid settings
+stop execution without partial environment output or domain fallback.
+
+| Variables | Contract |
+|---|---|
+| `P2P_TENANT_NAME`, `P2P_APP_NAME`, `P2P_VERSION` | Established application/component and image version inputs |
+| `P2P_REGISTRY` | Prepared registry image prefix |
+| `P2P_REGISTRY_FAST_FEEDBACK`, `P2P_REGISTRY_EXTENDED_TEST`, `P2P_REGISTRY_PROD` | Stage registry prefixes, with corresponding `_PATH` variables |
+| `P2P_NAMESPACE` and stage-specific `P2P_NAMESPACE_*` | Application/component namespace and stage namespaces |
+| `P2P_INGRESS_ENABLED` | Boolean application ingress intent |
+| `P2P_INGRESS_DOMAIN`, `P2P_INGRESS_CLASS` | Target cluster domain/class; empty when ingress is disabled |
+
+Templates consume the environment in ordinary deployment YAML. The ingress
+contract requires no preparation target, compatibility marker or exchanged file.
+All automated template tests use fixed Service routing, including NFT; browser
+routing is verified separately. Shared Make defaults preserve standalone/legacy
+ingress configuration when no prepared environment is supplied.
+
+Corectl also owns Make-argument validation and literal execution through
+`corectl p2p run --command "$COMMAND"`. The workflow contains no Python deployment
+or argument-handling implementation. Registry credential refresh and teardown
+retain their existing commands. Install compatible corectl before adopting the
+workflow, and explicitly update existing generated consumers to use ingress env.
 
 ### Primary Workflows
 
