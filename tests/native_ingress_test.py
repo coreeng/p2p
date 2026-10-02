@@ -28,22 +28,22 @@ class NativeIngressContract(unittest.TestCase):
                        GITHUB_ENV=str(root / "environment"), CALLS=str(root / "calls"),
                        DPLATFORM="trial", TENANT_NAME="hello", CORECTL_CONTEXT="core-platform/engineering",
                        CORECTL_PORTAL_URL="https://portal.example.com")
-            result = subprocess.run(["bash", "-c", script("Resolve application ingress")], cwd=root,
+            result = subprocess.run(["bash", "-c", script("Validate application ingress contract")], cwd=root,
                                     env=env, text=True, capture_output=True)
             return result, (root / "calls").read_text() if (root / "calls").exists() else "", \
                 (root / "environment").read_text() if (root / "environment").exists() else ""
 
-    def test_enabled_resolves_exact_target_and_application(self):
+    def test_enabled_compatible_consumer_is_allowed(self):
         result, calls, env = self.execute("true")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("p2p ingress trial --application hello --context core-platform/engineering", calls)
-        self.assertIn("P2P_INGRESS_MODE=LOCAL_HTTP", env)
+        self.assertEqual(calls, "")
+        self.assertEqual(env, "")
 
     def test_disabled_needs_no_profile_lookup(self):
         result, calls, env = self.execute("false", compatible=False)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(calls, "")
-        self.assertIn("P2P_INGRESS_MODE=DISABLED", env)
+        self.assertEqual(env, "")
 
     def test_old_consumer_fails_before_lookup(self):
         result, calls, env = self.execute("true", compatible=False)
@@ -64,7 +64,7 @@ class NativeIngressContract(unittest.TestCase):
         for channel in ("P2P_NATIVE_COMMAND", "MAKEFLAGS", "GNUMAKEFLAGS", "MFLAGS"):
             for value in ("P2P_INGRESS_DOMAIN=other.example", "P2P_INGRESS_CLASS=nginx",
                           "P2P_INGRESS_ENABLED=false", "P2P_INGRESS_MODE=EXISTING_INGRESS",
-                          "p2p_ingress_args=ignored", "p2p_nft_endpoint=ingress",
+                           "p2p_ingress_args=ignored", "p2p_nft_endpoint=ingress", "p2p_deployment_values=other.yaml",
                           "CORECTL_CONTEXT=", "MAKEFILES=other.mk", "MAKEFLAGS=-e", "--eval=ignored", "-e", "-fother.mk",
                           "deploy-functional X=1;P2P_INGRESS_DOMAIN=other.example make deploy-functional"):
                 with self.subTest(channel=channel, value=value):

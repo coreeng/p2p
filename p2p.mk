@@ -54,6 +54,23 @@ P2P_NAMESPACE_PROD ?= $(P2P_NAMESPACE)-prod
 
 P2P_IMAGE_NAMES ?= $(P2P_APP_NAME)
 
+# Cluster settings are resolved once per deployment, outside generated Makefiles.
+ifneq ($(filter command line,$(origin CORECTL_CONTEXT)),)
+$(error Context must come from the environment, not Make command variables)
+endif
+ifneq ($(CORECTL_CONTEXT),)
+ifneq ($(filter command line,$(origin BASE_DOMAIN) $(origin P2P_INGRESS_DOMAIN) $(origin P2P_INGRESS_CLASS) $(origin P2P_INGRESS_ENABLED) $(origin P2P_INGRESS_MODE)),)
+$(error Ingress settings must come from the cluster profile, not Make command variables)
+endif
+endif
+override p2p_deployment_values := .p2p-deployment-values.yaml
+
+.PHONY: p2p-prepare-deployment-values
+p2p-prepare-deployment-values:
+	rm -f .p2p-deployment-values.yaml
+	curl -fsSL https://raw.githubusercontent.com/coreeng/p2p/v1/scripts/prepare-deployment-values.py -o .p2p-deployment-values.py
+	python3 .p2p-deployment-values.py --output .p2p-deployment-values.yaml
+
 .PHONY: p2p-registry-login
 p2p-registry-login:
 	@if [[ -n "$${CORECTL_CONTEXT:-}" ]]; then \

@@ -317,7 +317,7 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           import os, re, shlex
-          protected = re.compile(r'^(P2P_INGRESS.*|CORECTL_CONTEXT|BASE_DOMAIN|MAKEFILES|MAKEFLAGS|GNUMAKEFLAGS|MFLAGS|p2p_ingress_args|p2p_nft_endpoint|p2p_app_config_ingress_enabled)$')
+          protected = re.compile(r'^(P2P_INGRESS.*|CORECTL_CONTEXT|BASE_DOMAIN|MAKEFILES|MAKEFLAGS|GNUMAKEFLAGS|MFLAGS|p2p_deployment_values|p2p_ingress_args|p2p_nft_endpoint|p2p_app_config_ingress_enabled)$')
           if os.environ.get('MAKEFILES'):
               raise SystemExit('Native execution cannot load additional MAKEFILES')
           safe_option = re.compile(r'^(?:-[jks]+[0-9]*|--jobs(?:=[0-9]+)?|--silent|--keep-going|--no-print-directory|--trace)$')
@@ -337,7 +337,7 @@ jobs:
                       raise SystemExit(f'{channel} contains unsupported native Make flags')
           PY
 
-      - name: Resolve application ingress
+      - name: Validate application ingress contract
         if: ${{ inputs.dry-run == false && vars.CORECTL_CONTEXT != '' }}
         shell: bash
         working-directory: ${{ inputs.working-directory }}
@@ -347,15 +347,13 @@ jobs:
           yq -e '(.config.ingress.enabled == null) or ((.config.ingress.enabled | tag) == "!!bool")' app.yaml >/dev/null
           case "$enabled" in
             true)
-              if ! make -n p2p-native-ingress-contract >/dev/null; then
-                echo 'Update the generated Makefile to the native ingress deployment contract before enabling ingress' >&2
+              if ! make -n p2p-deployment-values-contract >/dev/null; then
+                echo 'Update the generated Makefile to consume P2P deployment values before enabling ingress' >&2
                 exit 1
               fi
-              corectl p2p ingress "$DPLATFORM" --application "$TENANT_NAME" \
-                --context "$CORECTL_CONTEXT" --url "$CORECTL_PORTAL_URL" --output env >> "$GITHUB_ENV"
               ;;
             false)
-              printf '%s\n' P2P_INGRESS_ENABLED=false P2P_INGRESS_MODE=DISABLED P2P_INGRESS_DOMAIN= P2P_INGRESS_CLASS= >> "$GITHUB_ENV"
+              :
               ;;
             *) echo 'config.ingress.enabled must be boolean' >&2; exit 1 ;;
           esac

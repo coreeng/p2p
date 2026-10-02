@@ -35,6 +35,28 @@ jobs:
 
 ## Workflows
 
+### Application deployment values
+
+Web application deployments use the shared `p2p-prepare-deployment-values` Make
+target. It reads `config.ingress.enabled` from `app.yaml` and writes
+`.p2p-deployment-values.yaml`. When ingress is enabled and `CORECTL_CONTEXT` is
+set, corectl resolves the assigned `DPLATFORM` cluster profile for the application
+identified by `TENANT_NAME`. Missing or invalid profiles stop deployment without
+falling back to `BASE_DOMAIN`. Disabled ingress requires no profile lookup.
+Execution without a Context retains the existing `BASE_DOMAIN` input.
+
+Consumers add `p2p-prepare-deployment-values` as a prerequisite of their deployment
+target and `-f "$(p2p_deployment_values)"` as the final Helm values argument. They
+also declare a no-op `p2p-deployment-values-contract` target so the workflow can
+reject older consumers before enabled ingress deployment. The matching shared
+Makefile and helper are published together under `v1`.
+
+The prepared overlay fixes automated tests to Service routing, including NFT,
+and disables optional ingress scenarios on every cluster kind. Browser routing
+is verified separately. Preparation removes stale values before resolving and
+atomically writes the replacement after validation. Ignore both generated
+`.p2p-deployment-values.yaml` and downloaded `.p2p-deployment-values.py` in Git.
+
 ### Primary Workflows
 
 | Workflow | Purpose |
