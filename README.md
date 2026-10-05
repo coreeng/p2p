@@ -47,7 +47,11 @@ corectl p2p prepare "$DPLATFORM" --application "$TENANT_NAME" \
 
 Corectl reads `config.ingress.enabled` from `app.yaml`, resolves enabled ingress
 for the assigned cluster, establishes the registry connection and emits only
-`P2P_*` settings. Disabled ingress skips profile lookup. Missing/invalid settings
+`P2P_*` settings. Disabled ingress skips profile lookup. An authorized target with
+no profile returns `UNCONFIGURED`: corectl warns on stderr and continues with empty
+domain/class, preserving the application's toggle. Application chart 0.17.1 or later
+skips Ingress rendering without a domain while application/Service deployment and
+Service tests continue. Invalid settings
 stop execution without partial environment output or domain fallback.
 
 | Variables | Contract |
@@ -56,7 +60,7 @@ stop execution without partial environment output or domain fallback.
 | `P2P_REGISTRY` | Prepared registry image prefix |
 | `P2P_REGISTRY_FAST_FEEDBACK`, `P2P_REGISTRY_EXTENDED_TEST`, `P2P_REGISTRY_PROD` | Stage registry prefixes, with corresponding `_PATH` variables |
 | `P2P_NAMESPACE` and stage-specific `P2P_NAMESPACE_*` | Application/component namespace and stage namespaces |
-| `P2P_INGRESS_DOMAIN`, `P2P_INGRESS_CLASS` | Target cluster domain/class; empty when ingress is disabled |
+| `P2P_INGRESS_DOMAIN`, `P2P_INGRESS_CLASS` | Target cluster domain/class; empty when ingress is disabled or unconfigured |
 
 Templates consume domain/class environment variables in ordinary deployment YAML.
 Ingress enablement is read directly from `config.ingress.enabled` in `app.yaml`;
