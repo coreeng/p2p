@@ -233,15 +233,15 @@ jobs:
         if: ${{ inputs.security-scan-enabled && inputs.dry-run == false }}
         uses: aquasecurity/setup-trivy@v0.3.1
         with:
-          version: v0.74.0
+          version: v0.75.0
           cache: true
 
       - name: Install TruffleHog
         if: ${{ inputs.security-scan-enabled && inputs.dry-run == false }}
         shell: bash
         run: |
-          curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/v3.97.4/scripts/install.sh \
-            | sh -s -- -b "$RUNNER_TEMP" v3.97.4
+          curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/v3.99.0/scripts/install.sh \
+            | sh -s -- -b "$RUNNER_TEMP" v3.99.0
           echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
 
       - id: scan
