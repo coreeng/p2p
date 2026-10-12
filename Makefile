@@ -1,4 +1,12 @@
 projectDir := $(realpath $(dir $(firstword $(MAKEFILE_LIST))))
+.DEFAULT_GOAL := help
+.PHONY: test-native-ingress
+test-native-ingress:
+	python3 tests/native_ingress_test.py
+
+.PHONY: lint-native-ingress
+lint-native-ingress:
+	actionlint .github/workflows/p2p-execute-command.yaml
 os := $(shell uname)
 
 .PHONY: help
@@ -61,4 +69,3 @@ p2p-promote-to-prod:
 .PHONY: test-var-print
 test-var-print :## Test task
 	echo $${TEST_VARIABLE}
-

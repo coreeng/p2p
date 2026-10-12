@@ -288,7 +288,7 @@ jobs:
               echo "Application environment variables cannot override CORECTL_CONTEXT" >&2
               exit 1
             fi
-            if [[ -n "$CORECTL_CONTEXT" && "$i" =~ ^(P2P_REGISTRY|REGISTRY=|TENANT_NAME=|GITHUB_REPOSITORY_ID=|DPLATFORM=|CORECTL_PORTAL_URL=|DOCKER_CONFIG=|RUNNER_TEMP=) ]]; then
+            if [[ -n "$CORECTL_CONTEXT" && "$i" =~ ^(P2P_INGRESS|BASE_DOMAIN=|MAKEFLAGS=|GNUMAKEFLAGS=|MFLAGS=|MAKEFILES=|p2p_ingress_args=|p2p_nft_endpoint=|p2p_app_config_ingress_enabled=|P2P_REGISTRY|REGISTRY=|TENANT_NAME=|GITHUB_REPOSITORY_ID=|DPLATFORM=|CORECTL_PORTAL_URL=|DOCKER_CONFIG=|RUNNER_TEMP=) ]]; then
               echo "Application environment variables cannot override platform registry configuration" >&2
               exit 1
             fi
@@ -297,14 +297,20 @@ jobs:
             printf '%s\n' "${i//\\/\\\\}" >> "${GITHUB_ENV}"
           done
 
-      - name: Connect to image registry
+      - name: Prepare P2P environment
         if: ${{ inputs.dry-run == false && vars.CORECTL_CONTEXT != '' }}
         shell: bash
+        working-directory: ${{ inputs.working-directory }}
         env:
           EXPECTED_GITHUB_ENV: ${{ inputs.github_env }}
+          P2P_PREPARE_APP_NAME: ${{ inputs.app-name }}
+          P2P_PREPARE_VERSION: ${{ inputs.version }}
+          P2P_PREPARE_COMMAND: ${{ inputs.command }}
         run: |
           set -euo pipefail
-          corectl p2p registry connect "$DPLATFORM" --application "$TENANT_NAME" \
+          corectl p2p prepare "$DPLATFORM" --application "$TENANT_NAME" \
+            --app-name "$P2P_PREPARE_APP_NAME" --version "$P2P_PREPARE_VERSION" \
+            --command "$P2P_PREPARE_COMMAND" \
             --context "$CORECTL_CONTEXT" --url "$CORECTL_PORTAL_URL" \
             --ci-environment "$EXPECTED_GITHUB_ENV" --output env >> "$GITHUB_ENV"
 
@@ -316,6 +322,7 @@ jobs:
 
       - name: Set p2p variables
         id: setup-p2p-variables
+        if: ${{ vars.CORECTL_CONTEXT == '' }}
         run: |
           env | grep "^P2P_" | sort
           export P2P_TENANT_NAME="${{ env.TENANT_NAME }}"
@@ -349,10 +356,15 @@ jobs:
         if: ${{ inputs.dry-run == false }}
         working-directory: ${{ inputs.working-directory }}
         env:
+          P2P_NATIVE_COMMAND: ${{ inputs.command }}
           GITHUB_TOKEN: ${{ github.token }}
           GOOGLE_APPLICATION_CREDENTIALS: ${{ steps.auth.outputs.credentials_file_path }}
         run: |
-          make ${{ inputs.command }}
+          if [[ -n "$CORECTL_CONTEXT" ]]; then
+            corectl p2p run --command "$P2P_NATIVE_COMMAND"
+          else
+            make ${{ inputs.command }}
+          fi
 
       - name: Resolve artifact paths
         id: resolve-artifacts

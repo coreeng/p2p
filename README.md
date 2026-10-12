@@ -35,6 +35,47 @@ jobs:
 
 ## Workflows
 
+### Application deployment environment
+
+P2P prepares its environment with one corectl call:
+
+```bash
+corectl p2p prepare "$DPLATFORM" --application "$TENANT_NAME" \
+  --app-name "$P2P_APP_NAME" --version "$P2P_VERSION" \
+  --context "$CORECTL_CONTEXT" --output env >> "$GITHUB_ENV"
+```
+
+Corectl reads `config.ingress.enabled` from `app.yaml`, resolves enabled ingress
+for the assigned cluster, establishes the registry connection and emits only
+`P2P_*` settings. Disabled ingress skips profile lookup. An authorized target with
+no profile returns `UNCONFIGURED`: corectl warns on stderr and continues with empty
+domain/class, preserving the application's toggle. Application chart 0.17.1 or later
+skips Ingress rendering without a domain while application/Service deployment and
+Service tests continue. Invalid settings
+stop execution without partial environment output or domain fallback.
+
+| Variables | Contract |
+|---|---|
+| `P2P_TENANT_NAME`, `P2P_APP_NAME`, `P2P_VERSION` | Established application/component and image version inputs |
+| `P2P_REGISTRY` | Prepared registry image prefix |
+| `P2P_REGISTRY_FAST_FEEDBACK`, `P2P_REGISTRY_EXTENDED_TEST`, `P2P_REGISTRY_PROD` | Stage registry prefixes, with corresponding `_PATH` variables |
+| `P2P_NAMESPACE` and stage-specific `P2P_NAMESPACE_*` | Application/component namespace and stage namespaces |
+| `P2P_INGRESS_DOMAIN`, `P2P_INGRESS_CLASS` | Target cluster domain/class; empty when ingress is disabled or unconfigured |
+
+Templates consume domain/class environment variables in ordinary deployment YAML.
+Ingress enablement is read directly from `config.ingress.enabled` in `app.yaml`;
+corectl reads the same boolean to decide whether to resolve a profile. The ingress
+contract requires no preparation target, compatibility marker or exchanged file.
+All automated template tests use fixed Service routing, including NFT; browser
+routing is verified separately. Shared Make defaults preserve standalone/legacy
+ingress configuration when no prepared environment is supplied.
+
+Corectl also owns Make-argument validation and literal execution through
+`corectl p2p run --command "$COMMAND"`. The workflow contains no Python deployment
+or argument-handling implementation. Registry credential refresh and teardown
+retain their existing commands. Install compatible corectl before adopting the
+workflow, and explicitly update existing generated consumers to use ingress env.
+
 ### Primary Workflows
 
 | Workflow | Purpose |
