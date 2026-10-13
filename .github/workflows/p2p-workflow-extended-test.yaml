@@ -115,6 +115,7 @@ jobs:
     with:
       make-flags: ${{ inputs.make-flags }}
       command: p2p-extended-test
+      ingress-hostname: ${{ matrix.ingress['extended-test'].hostname }}
       subnamespace: extended
       region: ${{ inputs.region }}
       github_env: ${{ matrix.deploy_env }}

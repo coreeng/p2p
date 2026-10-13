@@ -25,6 +25,19 @@ Deploy the matching managed cluster release and wait for its registry Deployment
 and node proxy DaemonSet before testing deployments on k3d or GKE Standard. See the
 [image registry reference](https://docs.coreplatform.io/p2p/reference/image-registry).
 
+## Managed application ingress
+
+With `CORECTL_CONTEXT`, application deployment commands inspect `app.yaml` before
+cluster connection or namespace creation. Enabled type `portal` requires the
+executing step's resolved hostname; the chart selects `core-platform-portal`. Type
+`public` uses the application's ordinary chart ingress configuration and does not
+require Portal metadata. The target must already provide the matching public
+controller and DNS/TLS setup; this workflow does not install them. Untyped ingress retains its existing behavior.
+Unknown explicit enabled types fail clearly. Disabled ingress requires neither
+metadata nor a ready ingress controller. Build commands and the existing legacy
+authentication path retain their behavior. Application environment secrets cannot
+override ingress target fields.
+
 ## Inputs
 
 | Name | Type | Required | Default | Description |
@@ -32,6 +45,7 @@ and node proxy DaemonSet before testing deployments on k3d or GKE Standard. See 
 | `command` | string | Yes | — | The `make` target to run (e.g. `p2p-build`). |
 | `runner-label` | string | No | `''` | GitHub Actions runner label for the command-execution job. When empty, uses the caller's `P2P_RUNNER_LABEL` organization or repository variable, then `ubuntu-24.04`. |
 | `make-flags` | string | No | `''` | Make options for this workflow, e.g. `--jobs=4`. When empty, falls back to `P2P_MAKEFLAGS`; if both are empty, adds no options. |
+| `ingress-hostname` | string | No | `''` | Exact allocated hostname for the executing deployment step. Required by enabled native Portal ingress. |
 | `github_env` | string | No | `''` | GitHub environment name used for deployment protection rules and concurrency grouping. |
 | `dry-run` | boolean | No | `false` | When `true`, skips GCP authentication, cluster setup, and the `make` invocation. |
 | `region` | string | No | `''` | GCP region. Falls back to the `REGION` repository/environment variable, then `europe-west2`. |
@@ -76,6 +90,7 @@ The following variables are exported to `GITHUB_ENV` before the `make` target ru
 |----------|-------|
 | `P2P_TENANT_NAME` | Resolved tenant name (`tenant-name` input or `TENANT_NAME` variable). |
 | `P2P_APP_NAME` | Value of the `app-name` input. |
+| `P2P_INGRESS_HOSTNAME` | Resolved `ingress-hostname` input; never constructed from `BASE_DOMAIN`. |
 | `P2P_VERSION` | Value of the `version` input. |
 | `P2P_REGISTRY` | Base image registry path, assigned by Core Platform when `CORECTL_CONTEXT` is set. |
 | `P2P_REGISTRY_FAST_FEEDBACK` | `P2P_REGISTRY/fast-feedback` |

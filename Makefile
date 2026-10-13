@@ -62,3 +62,9 @@ p2p-promote-to-prod:
 test-var-print :## Test task
 	echo $${TEST_VARIABLE}
 
+.PHONY: test-ingress lint-workflows
+test-ingress: ## Validate managed application ingress metadata and deployment preflight
+	python3 .github/scripts/tests/ingress-workflow.test.py
+
+lint-workflows: ## Validate reusable GitHub Actions workflows
+	actionlint
