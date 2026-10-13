@@ -188,6 +188,7 @@ jobs:
     with:
       make-flags: ${{ inputs.make-flags }}
       command: p2p-functional
+      ingress-hostname: ${{ matrix.ingress.functional.hostname }}
       subnamespace: functional
       region: ${{ inputs.region }}
       github_env: ${{ matrix.deploy_env }}
@@ -215,6 +216,7 @@ jobs:
     with:
       make-flags: ${{ inputs.make-flags }}
       command: p2p-nft
+      ingress-hostname: ${{ matrix.ingress.nft.hostname }}
       subnamespace: nft
       region: ${{ inputs.region }}
       github_env: ${{ matrix.deploy_env }}
@@ -243,6 +245,7 @@ jobs:
     with:
       make-flags: ${{ inputs.make-flags }}
       command: p2p-integration
+      ingress-hostname: ${{ matrix.ingress.integration.hostname }}
       subnamespace: integration
       region: ${{ inputs.region }}
       github_env: ${{ matrix.deploy_env }}

@@ -156,6 +156,7 @@ jobs:
     with:
       make-flags: ${{ inputs.make-flags }}
       command: p2p-prod
+      ingress-hostname: ${{ matrix.ingress.prod.hostname }}
       subnamespace: prod
       region: ${{ inputs.region }}
       github_env: ${{ matrix.deploy_env }}

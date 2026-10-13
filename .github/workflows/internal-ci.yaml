@@ -128,6 +128,13 @@ jobs:
           test "$CACHE_HIT" = true
           test "$(cat "$FIXTURE_DIR/revision")" = "$EXPECTED_REVISION"
 
+  test_ingress_contract:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Test managed application ingress deployment contract
+        run: make test-ingress
+
   test_security_ignore_helper:
     runs-on: ubuntu-24.04
     steps:
