@@ -108,7 +108,7 @@ jobs:
       app-name: ${{ inputs.app-name }}
       source: ${{ inputs.source }}
       destination: ${{ inputs.destination }}
-      showcase: ${{ inputs.showcase && github.ref == inputs.main-branch }}
+      showcase: ${{ inputs.showcase && github.event_name != 'pull_request' && github.event_name != 'pull_request_target' && github.ref == inputs.main-branch }}
       source-stage: fastFeedback
       destination-stage: 'extendedTest'
       runner-label: ${{ inputs.runner-label }}
@@ -181,7 +181,7 @@ jobs:
       runner-label: ${{ inputs.runner-label }}
 
   showcase:
-    if: ${{ inputs.showcase && github.ref == inputs.main-branch }}
+    if: ${{ inputs.showcase && github.event_name != 'pull_request' && github.event_name != 'pull_request_target' && github.ref == inputs.main-branch }}
     needs: [resolve-targets, build]
     uses: ./.github/workflows/p2p-execute-command.yaml
     secrets:

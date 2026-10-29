@@ -15,7 +15,7 @@ class ShowcaseTests(unittest.TestCase):
         self.assertIn('type: boolean', definition)
         self.assertIn('default: false', definition)
         job = text.split('  showcase:\n', 1)[1].split('\n  functional-test:', 1)[0]
-        self.assertIn('if: ${{ inputs.showcase && github.ref == inputs.main-branch }}', job)
+        self.assertIn("if: ${{ inputs.showcase && github.event_name != 'pull_request' && github.event_name != 'pull_request_target' && github.ref == inputs.main-branch }}", job)
         self.assertIn('needs: [resolve-targets, build]', job)
         self.assertIn('version: ${{ inputs.version }}', job)
         self.assertIn('subnamespace: showcase', job)
@@ -23,7 +23,23 @@ class ShowcaseTests(unittest.TestCase):
             needs = text.split('  ' + name + ':\n', 1)[1].splitlines()[0]
             self.assertNotIn('showcase', needs)
         self.assertIn('showcase', text.split('  notify-failure:\n', 1)[1].splitlines()[0])
-        self.assertIn('showcase: ${{ inputs.showcase && github.ref == inputs.main-branch }}', text)
+        self.assertIn("showcase: ${{ inputs.showcase && github.event_name != 'pull_request' && github.event_name != 'pull_request_target' && github.ref == inputs.main-branch }}", text)
+
+    def test_pull_request_events_never_allocate_or_deploy_even_with_matching_ref(self):
+        text = (ROOT / '.github/workflows/p2p-workflow-fastfeedback.yaml').read_text()
+        expression = text.split('  showcase:\n    if: ${{ ', 1)[1].split(' }}', 1)[0]
+        expression = (expression.replace('inputs.showcase', 'enabled')
+                      .replace('github.event_name', 'event').replace('github.ref', 'ref')
+                      .replace('inputs.main-branch', 'main').replace('&&', 'and'))
+        for event in ('push', 'workflow_dispatch', 'pull_request', 'pull_request_target'):
+            for enabled in (False, True):
+                for ref, main in (('refs/heads/main', 'refs/heads/main'),
+                                  ('refs/pull/1/merge', 'refs/pull/1/merge'),
+                                  ('refs/heads/feature', 'refs/heads/main')):
+                    with self.subTest(event=event, enabled=enabled, ref=ref, main=main):
+                        actual = eval(expression, {'__builtins__': {}},
+                                      dict(event=event, enabled=enabled, ref=ref, main=main))
+                        self.assertEqual(actual, enabled and event in ('push', 'workflow_dispatch') and ref == main)
 
     def test_resolver_sends_flag_only_when_enabled(self):
         text = (ROOT / '.github/workflows/p2p-resolve-targets.yaml').read_text()
