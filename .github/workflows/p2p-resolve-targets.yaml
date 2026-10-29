@@ -1,6 +1,10 @@
 on:
   workflow_call:
     inputs:
+      showcase:
+        required: false
+        type: boolean
+        default: false
       app-name:
         required: false
         type: string
@@ -42,6 +46,7 @@ jobs:
     env:
       CORECTL_PORTAL_URL: ${{ vars.CORECTL_PORTAL_URL }}
       CORECTL_CONTEXT: ${{ vars.CORECTL_CONTEXT }}
+      SHOWCASE: ${{ inputs.showcase }}
       APP_NAME: ${{ inputs.app-name }}
       SOURCE_STAGE: ${{ inputs.source-stage }}
       DESTINATION_STAGE: ${{ inputs.destination-stage }}
@@ -62,6 +67,9 @@ jobs:
             portal_args=()
             if [[ -n "$CORECTL_PORTAL_URL" ]]; then
               portal_args=(--url "$CORECTL_PORTAL_URL")
+            fi
+            if [[ "$SHOWCASE" == true ]]; then
+              portal_args+=(--showcase)
             fi
             targets="$(corectl --non-interactive --context "$CORECTL_CONTEXT" p2p targets --application "$APP_NAME" --oidc github "${portal_args[@]}" -o json)"
             source="$(jq -c --arg stage "$SOURCE_STAGE" '.[$stage]' <<< "$targets")"

@@ -65,6 +65,7 @@ test-var-print :## Test task
 .PHONY: test-ingress lint-workflows
 test-ingress: ## Validate managed application ingress metadata and deployment preflight
 	python3 .github/scripts/tests/ingress-workflow.test.py
+	python3 .github/scripts/tests/showcase-workflow.test.py
 
 lint-workflows: ## Validate reusable GitHub Actions workflows
 	actionlint

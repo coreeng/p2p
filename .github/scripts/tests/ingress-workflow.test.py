@@ -83,11 +83,11 @@ class IngressWorkflowTests(unittest.TestCase):
         condition = text.split("- name: Validate native application ingress", 1)[1].split("working-directory:", 1)[0]
         self.assertIn("vars.CORECTL_CONTEXT != ''", condition)
         self.assertIn("inputs.dry-run == false", condition)
-        for step in ("functional", "nft", "integration", "extended-test", "prod"):
+        for step in ("showcase", "functional", "nft", "integration", "extended-test", "prod"):
             self.assertIn('"p2p-' + step + '"', condition)
 
     def test_each_deployment_step_forwards_only_its_metadata(self):
-        for workflow, steps in (("fastfeedback", ("functional", "nft", "integration")),
+        for workflow, steps in (("fastfeedback", ("showcase", "functional", "nft", "integration")),
                                 ("extended-test", ("extended-test",)), ("prod", ("prod",))):
             text = (ROOT / f".github/workflows/p2p-workflow-{workflow}.yaml").read_text()
             for step in steps:
