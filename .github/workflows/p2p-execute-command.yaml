@@ -134,7 +134,7 @@ jobs:
           ref: ${{ inputs.dry-run == false && inputs.checkout-version || '' }}
 
       - name: Validate native application ingress
-        if: ${{ inputs.dry-run == false && vars.CORECTL_CONTEXT != '' && contains(fromJSON('["p2p-functional","p2p-nft","p2p-integration","p2p-extended-test","p2p-prod"]'), inputs.command) }}
+        if: ${{ inputs.dry-run == false && vars.CORECTL_CONTEXT != '' && contains(fromJSON('["p2p-showcase","p2p-functional","p2p-nft","p2p-integration","p2p-extended-test","p2p-prod"]'), inputs.command) }}
         working-directory: ${{ inputs.working-directory }}
         shell: bash
         run: |
@@ -385,6 +385,7 @@ jobs:
           else
             P2P_NAMESPACE="${{ env.TENANT_NAME }}-${{ inputs.app-name }}"
           fi
+          export P2P_NAMESPACE_SHOWCASE=${P2P_NAMESPACE}-showcase
           export P2P_NAMESPACE_FUNCTIONAL=${P2P_NAMESPACE}-functional
           export P2P_NAMESPACE_NFT=${P2P_NAMESPACE}-nft
           export P2P_NAMESPACE_INTEGRATION=${P2P_NAMESPACE}-integration

@@ -46,6 +46,7 @@ P2P_NAMESPACE := $(P2P_APP_NAME)
 else
 P2P_NAMESPACE := $(P2P_TENANT_NAME)-$(P2P_APP_NAME)
 endif
+P2P_NAMESPACE_SHOWCASE ?= $(P2P_NAMESPACE)-showcase
 P2P_NAMESPACE_FUNCTIONAL ?= $(P2P_NAMESPACE)-functional
 P2P_NAMESPACE_NFT ?= $(P2P_NAMESPACE)-nft
 P2P_NAMESPACE_INTEGRATION ?= $(P2P_NAMESPACE)-integration
@@ -88,6 +89,13 @@ p2p-images:
 %-app: p2p_image=$(P2P_REGISTRY_FAST_FEEDBACK)/$(if $(filter-out undefined,$(origin 1)),$(1),$(P2P_APP_NAME))
 %-app: p2p_image_tag=$(P2P_REGISTRY_FAST_FEEDBACK)/$(if $(filter-out undefined,$(origin 1)),$(1),$(P2P_APP_NAME)):$(P2P_VERSION)
 %-app: p2p_image_cache=--cache-from=type=gha,scope=$(if $(filter-out undefined,$(origin 1)),$(1),$(P2P_APP_NAME)) --cache-to=type=gha,scope=$(if $(filter-out undefined,$(origin 1)),$(1),$(P2P_APP_NAME)),mode=max
+
+.PHONY: p2p-showcase ## Deploy the built app to Showcase
+%-showcase: p2p_app_url_suffix=-showcase
+%-showcase: p2p_namespace=$(P2P_NAMESPACE_SHOWCASE)
+%-showcase: p2p_registry=$(P2P_REGISTRY_FAST_FEEDBACK)
+%-showcase: p2p_image=$(P2P_REGISTRY_FAST_FEEDBACK)/$(if $(filter-out undefined,$(origin 1)),$(1),$(P2P_APP_NAME))
+%-showcase: p2p_image_tag=$(p2p_image):$(P2P_VERSION)
 
 .PHONY: p2p-functional ## Run functional tests
 %-functional: p2p_app_url_suffix=-functional

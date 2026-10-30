@@ -12,6 +12,11 @@ on:
       slack_webhook_url:
         required: false
     inputs:
+      showcase:
+        description: Deploy the built application to Showcase on the main branch.
+        required: false
+        type: boolean
+        default: false
       dry-run:
         required: false
         type: boolean
@@ -103,6 +108,7 @@ jobs:
       app-name: ${{ inputs.app-name }}
       source: ${{ inputs.source }}
       destination: ${{ inputs.destination }}
+      showcase: ${{ inputs.showcase && github.event_name != 'pull_request' && github.event_name != 'pull_request_target' && github.ref == inputs.main-branch }}
       source-stage: fastFeedback
       destination-stage: 'extendedTest'
       runner-label: ${{ inputs.runner-label }}
@@ -173,6 +179,35 @@ jobs:
       security-scan-enabled: ${{ inputs.security-scan-enabled }}
       fail-on-non-blocking-findings: ${{ inputs.security-scan-fail-on-non-blocking-findings }}
       runner-label: ${{ inputs.runner-label }}
+
+  showcase:
+    if: ${{ inputs.showcase && github.event_name != 'pull_request' && github.event_name != 'pull_request_target' && github.ref == inputs.main-branch }}
+    needs: [resolve-targets, build]
+    uses: ./.github/workflows/p2p-execute-command.yaml
+    secrets:
+      env_vars: ${{ secrets.env_vars }}
+      container_registry_user: ${{ secrets.container_registry_user }}
+      container_registry_pat: ${{ secrets.container_registry_pat }}
+      container_registry_url: ${{ secrets.container_registry_url }}
+    strategy:
+      matrix: ${{ fromJSON(needs.resolve-targets.outputs.source) }}
+      fail-fast: false
+    with:
+      make-flags: ${{ inputs.make-flags }}
+      command: p2p-showcase
+      ingress-hostname: ${{ matrix.ingress.showcase.hostname }}
+      subnamespace: showcase
+      region: ${{ inputs.region }}
+      github_env: ${{ matrix.deploy_env }}
+      app-name: ${{ inputs.app-name }}
+      tenant-name: ${{ inputs.tenant-name }}
+      version: ${{ inputs.version }}
+      checkout-version: ${{ inputs.checkout-version }}
+      dry-run: ${{ inputs.dry-run }}
+      working-directory: ${{ inputs.working-directory }}
+      runner-label: ${{ inputs.runner-label }}
+      skip-subnamespaces-create: ${{ inputs.skip-subnamespaces-create }}
+      artifacts: ${{ inputs.artifacts }}
 
   functional-test:
     needs: [resolve-targets, build]
@@ -284,7 +319,7 @@ jobs:
       runner-label: ${{ inputs.runner-label }}
 
   notify-failure:
-    needs: [resolve-targets, build, security-source-scan, security-image-scan, functional-test, nft-test, integration-test, promote]
+    needs: [resolve-targets, build, security-source-scan, security-image-scan, functional-test, nft-test, integration-test, showcase, promote]
     runs-on: ${{ inputs.runner-label || vars.P2P_RUNNER_LABEL || 'ubuntu-24.04' }}
     timeout-minutes: 5
     if: always() && github.ref == inputs.main-branch && contains(needs.*.result, 'failure')

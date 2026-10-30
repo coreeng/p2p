@@ -109,3 +109,17 @@ See [Environment Configuration](docs/explanation/environment-configuration.md) f
 | [How-to Guides](docs/how-to/) | Solve specific problems: secrets, artifacts, Slack alerts, environments, versioning, security findings |
 | [Reference](docs/reference/) | Complete inputs/outputs/secrets for every workflow |
 | [Explanation](docs/explanation/) | Concepts: pipeline model, versioning, environments, make targets, security scanning |
+
+### Showcase after build
+
+Reusable Fast Feedback callers may pass the boolean `showcase: true`. The default
+is false. On the configured main branch, the job deploys the current run's
+successfully built version through `make p2p-showcase`, using the FF cluster and
+registry, a `showcase` subnamespace and its own ingress. PR runs never deploy it.
+Functional, NFT and security checks continue independently; Showcase is not an
+integration or promotion dependency, but a failure fails the overall FF run.
+The environment remains running until another flagged run updates it.
+
+Applications opting in must provide a deploy-only `p2p-showcase` Make target.
+Managed target resolution requires corectl and Portal versions supporting
+`p2p targets --showcase`; unflagged calls omit this argument for compatibility.
