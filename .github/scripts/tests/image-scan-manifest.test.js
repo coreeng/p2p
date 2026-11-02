@@ -406,6 +406,46 @@ async function runManifestScript({ stage, vulnLines = [], secretLines = [], vuln
   );
   assert.strictEqual(mixedEmptyImages.outputs['scan-target-count'], '1');
 
+  const ordinaryRef = 'example.invalid/ordinary:synthetic';
+  const placeholderRef = 'example.invalid/placeholder:synthetic';
+  const nullLayerImage = await runPullScript(
+    [ordinaryRef, placeholderRef],
+    {
+      [ordinaryRef]: {
+        formatted: {
+          manifest: { digest: 'sha256:ordinary' },
+          image: { os: 'linux', architecture: 'amd64' },
+        },
+        raw: {
+          schemaVersion: 2,
+          config: { mediaType: 'application/vnd.oci.image.config.v1+json' },
+          layers: [{ mediaType: 'application/vnd.oci.image.layer.v1.tar+gzip' }],
+        },
+      },
+      [placeholderRef]: {
+        formatted: {
+          manifest: { digest: 'sha256:placeholder' },
+          image: { os: 'linux', architecture: 'amd64' },
+        },
+        raw: {
+          schemaVersion: 2,
+          config: { mediaType: 'application/vnd.oci.image.config.v1+json' },
+          layers: null,
+        },
+      },
+    },
+  );
+  assert.deepStrictEqual(nullLayerImage.failures, []);
+  assert.deepStrictEqual(nullLayerImage.pulls, [['pull', '--platform', 'linux/amd64', ordinaryRef]]);
+  assert.deepStrictEqual(nullLayerImage.warnings, [
+    `Skipping ${placeholderRef} (linux/amd64) @ sha256:placeholder; it is an empty container image.`,
+  ]);
+  assert.strictEqual(
+    fs.readFileSync(nullLayerImage.outputs['list-path'], 'utf8'),
+    `${ordinaryRef}\tlinux/amd64\tsha256:ordinary\n`,
+  );
+  assert.strictEqual(nullLayerImage.outputs['scan-target-count'], '1');
+
   const allEmptyImages = await runPullScript(
     ['europe-west2-docker.pkg.dev/project-a/tenant/tenant-a/prod/empty:1.2.3'],
     {
