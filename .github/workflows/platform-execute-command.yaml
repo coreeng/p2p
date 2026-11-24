@@ -42,7 +42,7 @@ on:
 jobs:
   core-platform:
     name: ${{ inputs.name }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     environment: ${{ inputs.environment }}
     concurrency:
       group: ${{ inputs.environment }}-${{ github.ref }}
