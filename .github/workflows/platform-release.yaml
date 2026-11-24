@@ -3,6 +3,10 @@ name: Release
 on:
   workflow_call:
     inputs:
+      runner-label:
+        description: 'Runner for the release image build.'
+        type: string
+        default: ubuntu-24.04
       make-flags:
         description: 'Make options; falls back to P2P_MAKEFLAGS when empty.'
         required: false
@@ -31,13 +35,14 @@ on:
 
 jobs:
   generate:
-    runs-on: ubuntu-24.04
+    runs-on: ${{ inputs.runner-label }}
 
     permissions:
       contents: read
       packages: write
 
     env:
+      BLACKSMITH: ${{ startsWith(inputs.runner-label, 'blacksmith-') }}
       # Registry references are fully qualified; ignore runner mirrors and legacy config.
       CONTAINERS_REGISTRIES_CONF: /dev/null
       MAKEFLAGS: ${{ inputs.make-flags || vars.P2P_MAKEFLAGS }}
@@ -64,7 +69,14 @@ jobs:
 
       - id: docker-setup-buildx
         name: Setup Buildx
+        if: env.BLACKSMITH == 'false'
         uses: docker/setup-buildx-action@v4
+
+      - name: Setup Blacksmith Docker builder
+        if: env.BLACKSMITH == 'true'
+        uses: useblacksmith/setup-docker-builder@v2
+        with:
+          cache-key: Dockerfile
 
       - id: docker-login
         name: Login to the registry
@@ -89,6 +101,7 @@ jobs:
 
       - id: go-build-cache
         name: Go build cache
+        if: env.BLACKSMITH == 'false'
         uses: actions/cache@v6
         with:
           path: go-build-cache
@@ -96,6 +109,7 @@ jobs:
 
       - id: go-build-cache-inject
         name: Go build cache inject into docker
+        if: env.BLACKSMITH == 'false'
         uses: reproducible-containers/buildkit-cache-dance@v3
         with:
           cache-map: |
@@ -114,8 +128,8 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: ${{ env.BLACKSMITH == 'false' && 'type=gha' || '' }}
+          cache-to: ${{ env.BLACKSMITH == 'false' && 'type=gha,mode=max' || '' }}
           file: Dockerfile
           push: true
           build-args: |
